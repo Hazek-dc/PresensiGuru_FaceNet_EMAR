@@ -1,0 +1,1 @@
+"""Biometric API application package."""

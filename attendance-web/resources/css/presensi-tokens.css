@@ -1,0 +1,133 @@
+﻿/* ==========================================================================
+   Design Tokens — UI Presensi Biometrik (FaceNet + EMAR)
+   Skripsi: Qalwani Anugerah (NPM 221220048) — SMK Al-Madani Pontianak
+   ========================================================================== */
+
+:root,
+:root[data-theme="dark"] {
+    /* Semantic Colors — Dark Mode (Default) */
+    --bg: #030712;
+    --surface: #0b1329;
+    --surface-2: #111d3e;
+    --surface-container: #16244d;
+    --surface-glass: rgba(11, 19, 41, 0.85);
+    --border: rgba(255, 255, 255, 0.1);
+    --border-muted: rgba(255, 255, 255, 0.06);
+    --border-hover: rgba(255, 255, 255, 0.18);
+
+    --text: #f3f4f6;
+    --text-muted: #9ca3af;
+    --text-dim: #6b7280;
+
+    /* Biometric Status Tokens */
+    --brand: #06b6d4;          /* Sian Biometrik — Status Terkunci / Tracking */
+    --brand-bg: rgba(6, 182, 212, 0.12);
+    --brand-border: rgba(6, 182, 212, 0.35);
+
+    --accent: #a855f7;         /* Ungu — Konteks Penelitian & Uji Liveness */
+    --accent-bg: rgba(168, 85, 247, 0.12);
+    --accent-border: rgba(168, 85, 247, 0.35);
+
+    --ok: #10b981;             /* Hijau / Emerald — Diterima & Liveness Lolos */
+    --ok-bg: rgba(16, 185, 129, 0.12);
+    --ok-border: rgba(16, 185, 129, 0.35);
+
+    --warn: #f59e0b;           /* Kuning / Amber — Koreksi Posisi / Menunggu */
+    --warn-bg: rgba(245, 158, 11, 0.12);
+    --warn-border: rgba(245, 158, 11, 0.35);
+
+    --danger: #ef4444;         /* Merah — Ditolak / Spoof / Galat */
+    --danger-bg: rgba(239, 68, 68, 0.12);
+    --danger-border: rgba(239, 68, 68, 0.35);
+
+    /* Shadows */
+    --shadow-1: 0 4px 6px -1px rgba(0, 0, 0, 0.3), 0 2px 4px -1px rgba(0, 0, 0, 0.2);
+    --shadow-2: 0 10px 25px -5px rgba(0, 0, 0, 0.5), 0 8px 10px -6px rgba(0, 0, 0, 0.4);
+    --shadow-brand: 0 0 25px -3px rgba(6, 182, 212, 0.3);
+    --shadow-ok: 0 0 25px -3px rgba(16, 185, 129, 0.3);
+    --shadow-danger: 0 0 25px -3px rgba(239, 68, 68, 0.3);
+}
+
+:root[data-theme="light"] {
+    /* Semantic Colors — Light Mode */
+    --bg: #f8fafc;
+    --surface: #ffffff;
+    --surface-2: #f1f5f9;
+    --surface-container: #e2e8f0;
+    --surface-glass: rgba(255, 255, 255, 0.9);
+    --border: #cbd5e1;
+    --border-muted: #e2e8f0;
+    --border-hover: #94a3b8;
+
+    --text: #0f172a;
+    --text-muted: #475569;
+    --text-dim: #64748b;
+
+    /* Biometric Status Tokens */
+    --brand: #0891b2;
+    --brand-bg: rgba(8, 145, 178, 0.1);
+    --brand-border: rgba(8, 145, 178, 0.3);
+
+    --accent: #9333ea;
+    --accent-bg: rgba(147, 51, 234, 0.1);
+    --accent-border: rgba(147, 51, 234, 0.3);
+
+    --ok: #059669;
+    --ok-bg: rgba(5, 150, 105, 0.1);
+    --ok-border: rgba(5, 150, 105, 0.3);
+
+    --warn: #d97706;
+    --warn-bg: rgba(217, 119, 6, 0.1);
+    --warn-border: rgba(217, 119, 6, 0.3);
+
+    --danger: #dc2626;
+    --danger-bg: rgba(220, 38, 38, 0.1);
+    --danger-border: rgba(220, 38, 38, 0.3);
+
+    /* Shadows */
+    --shadow-1: 0 2px 4px rgba(0, 0, 0, 0.05), 0 1px 2px rgba(0, 0, 0, 0.03);
+    --shadow-2: 0 10px 20px -5px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+    --shadow-brand: 0 0 20px -3px rgba(8, 145, 178, 0.2);
+    --shadow-ok: 0 0 20px -3px rgba(5, 150, 105, 0.2);
+    --shadow-danger: 0 0 20px -3px rgba(220, 38, 38, 0.2);
+}
+
+:root {
+    /* Spacing Scale */
+    --sp-1: 0.25rem;   /* 4px */
+    --sp-2: 0.5rem;    /* 8px */
+    --sp-3: 0.75rem;   /* 12px */
+    --sp-4: 1rem;      /* 16px */
+    --sp-5: 1.25rem;   /* 20px */
+    --sp-6: 1.5rem;    /* 24px */
+    --sp-7: 2rem;      /* 32px */
+    --sp-8: 2.5rem;    /* 40px */
+
+    /* Border Radii */
+    --r-sm: 0.5rem;    /* 8px */
+    --r-md: 0.75rem;   /* 12px */
+    --r-lg: 1rem;      /* 16px */
+    --r-xl: 1.5rem;    /* 24px */
+    --r-2xl: 2rem;     /* 32px */
+    --r-full: 9999px;
+
+    /* Animation Transitions */
+    --dur-fast: 120ms;
+    --dur: 220ms;
+    --dur-slow: 350ms;
+    --ease: cubic-bezier(0.2, 0.8, 0.2, 1);
+
+    /* Fluid Typography */
+    --font-size-title: clamp(1rem, 2.5vw, 1.25rem);
+    --font-size-hero: clamp(1.25rem, 3.5vw, 1.75rem);
+    --font-size-body: clamp(0.8125rem, 1.5vw, 0.9375rem);
+    --font-size-sm: clamp(0.6875rem, 1.2vw, 0.8125rem);
+}
+
+@media (prefers-reduced-motion: reduce) {
+    :root {
+        --dur-fast: 0ms;
+        --dur: 0ms;
+        --dur-slow: 0ms;
+    }
+}

@@ -1,0 +1,98 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Biometric Presentation Manifest",
+  "description": "Schema for tracking biometric samples in the FaceNet-EMAR project.",
+  "type": "object",
+  "properties": {
+    "sample_id": {
+      "type": "string",
+      "description": "Unique identifier for this specific presentation sample."
+    },
+    "subject_id": {
+      "type": "string",
+      "description": "True identity of the person presenting. Must not be a real name or NIP."
+    },
+    "claimed_subject_id": {
+      "type": "string",
+      "description": "The identity claimed by the presenter."
+    },
+    "consent_version": {
+      "type": "string",
+      "description": "Version of the consent form signed by the subject."
+    },
+    "consent_status": {
+      "type": "string",
+      "enum": ["active", "revoked", "pending"],
+      "description": "Current status of the subject's consent."
+    },
+    "session_id": {
+      "type": "string",
+      "description": "Identifier for the data collection session to track environment grouping."
+    },
+    "source_media_id": {
+      "type": "string",
+      "description": "Filename or ID of the raw media."
+    },
+    "source_hash": {
+      "type": "string",
+      "description": "SHA-256 hash of the raw media file for reproducibility."
+    },
+    "sample_type": {
+      "type": "string",
+      "enum": ["video", "image"],
+      "description": "Type of media captured."
+    },
+    "pai_species": {
+      "type": "string",
+      "enum": ["NONE", "PRINT", "SCREEN", "REPLAY", "3D_MASK"],
+      "description": "Presentation Attack Instrument species (NONE for bona fide)."
+    },
+    "lux": {
+      "type": ["number", "null"],
+      "description": "Illuminance in lux during capture (if recorded)."
+    },
+    "distance_cm": {
+      "type": ["number", "null"],
+      "description": "Estimated distance from camera in cm."
+    },
+    "device_id": {
+      "type": "string",
+      "description": "Identifier for the capture device used."
+    },
+    "split": {
+      "type": "string",
+      "enum": ["DEVELOPMENT", "CALIBRATION", "TEST", "EXCLUDED"],
+      "description": "Data split assignment."
+    },
+    "enrollment_role": {
+      "type": "string",
+      "enum": ["gallery", "probe", "none"],
+      "description": "Whether this sample is used to create the gallery reference or acts as a probe."
+    },
+    "quality_status": {
+      "type": "string",
+      "enum": ["OK", "NO_FACE", "MULTI_FACE", "BLURRY", "DARK"],
+      "description": "Manual or automated quality assessment prior to evaluation."
+    },
+    "exclusion_reason": {
+      "type": ["string", "null"],
+      "description": "Reason for exclusion (if split is EXCLUDED)."
+    }
+  },
+  "required": [
+    "sample_id",
+    "subject_id",
+    "claimed_subject_id",
+    "consent_version",
+    "consent_status",
+    "session_id",
+    "source_media_id",
+    "source_hash",
+    "sample_type",
+    "pai_species",
+    "split",
+    "enrollment_role",
+    "quality_status"
+  ],
+  "additionalProperties": false
+}

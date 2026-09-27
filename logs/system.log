@@ -1,0 +1,1016 @@
+2026-07-16 00:59:09,060 [INFO] FaceEMARSystem: Menginisialisasi FaceEMARSystem...
+2026-07-16 00:59:09,060 [INFO] FaceEMARSystem: Menginisialisasi FaceNet pada device: cpu
+2026-07-16 00:59:09,140 [INFO] FaceEMARSystem: MTCNN diinisialisasi (image_size=160, margin=20)
+2026-07-16 00:59:21,624 [INFO] FaceEMARSystem: InceptionResnetV1 (VGGFace2) dimuat ke device
+2026-07-16 00:59:21,625 [INFO] FaceEMARSystem: Galeri kosong — mulai enrollment baru
+2026-07-16 00:59:22,813 [INFO] FaceEMARSystem: Dlib predictor dimuat: models/shape_predictor_68_face_landmarks.dat
+2026-07-16 00:59:22,842 [INFO] FaceEMARSystem: Database siap: logs\attendance.db
+2026-07-16 00:59:22,844 [INFO] FaceEMARSystem: FaceEMARSystem siap.
+2026-07-16 00:59:26,523 [INFO] FaceEMARSystem: Enrollment QALWANI001: tekan SPASI untuk capture, 'q' untuk selesai
+2026-07-16 00:59:51,111 [INFO] FaceEMARSystem: Frame 1/5 di-capture
+2026-07-16 00:59:53,254 [INFO] FaceEMARSystem: Frame 2/5 di-capture
+2026-07-16 00:59:53,796 [INFO] FaceEMARSystem: Frame 3/5 di-capture
+2026-07-16 00:59:54,053 [INFO] FaceEMARSystem: Frame 4/5 di-capture
+2026-07-16 00:59:54,230 [INFO] FaceEMARSystem: Frame 5/5 di-capture
+2026-07-16 00:59:55,179 [INFO] FaceEMARSystem: Galeri disimpan: 1 subjek
+2026-07-16 00:59:55,179 [INFO] FaceEMARSystem: Enrollment berhasil: QALWANI001 (Qalwani Anugerah) — 5 frames
+2026-07-16 01:00:42,149 [INFO] FaceEMARSystem: Menginisialisasi FaceEMARSystem...
+2026-07-16 01:00:42,149 [INFO] FaceEMARSystem: Menginisialisasi FaceNet pada device: cpu
+2026-07-16 01:00:42,173 [INFO] FaceEMARSystem: MTCNN diinisialisasi (image_size=160, margin=20)
+2026-07-16 01:00:42,550 [INFO] FaceEMARSystem: InceptionResnetV1 (VGGFace2) dimuat ke device
+2026-07-16 01:00:42,550 [INFO] FaceEMARSystem: Galeri dimuat: 1 subjek
+2026-07-16 01:00:43,644 [INFO] FaceEMARSystem: Dlib predictor dimuat: models/shape_predictor_68_face_landmarks.dat
+2026-07-16 01:00:43,646 [INFO] FaceEMARSystem: Database siap: logs\attendance.db
+2026-07-16 01:00:43,646 [INFO] FaceEMARSystem: FaceEMARSystem siap.
+2026-07-16 01:00:47,126 [INFO] FaceEMARSystem: Loop real-time dimulai — Skenario: S3, Subjek: QALWANI001
+2026-07-20 16:05:06,602 [INFO] FaceEMARSystem: Menginisialisasi FaceEMARSystem...
+2026-07-20 16:05:06,602 [INFO] FaceEMARSystem: Menginisialisasi FaceNet pada device: cpu
+2026-07-20 16:05:06,685 [INFO] FaceEMARSystem: MTCNN diinisialisasi (image_size=160, margin=20)
+2026-07-20 16:05:07,110 [INFO] FaceEMARSystem: InceptionResnetV1 (VGGFace2) dimuat ke device
+2026-07-20 16:05:07,127 [INFO] FaceEMARSystem: Galeri dimuat: 1 subjek
+2026-07-20 16:08:46,189 [INFO] FaceEMARSystem: Menginisialisasi FaceEMARSystem...
+2026-07-20 16:08:46,190 [INFO] FaceEMARSystem: Menginisialisasi FaceNet pada device: cpu
+2026-07-20 16:08:46,243 [INFO] FaceEMARSystem: MTCNN diinisialisasi (image_size=160, margin=20)
+2026-07-20 16:08:46,692 [INFO] FaceEMARSystem: InceptionResnetV1 (VGGFace2) dimuat ke device
+2026-07-20 16:08:46,694 [INFO] FaceEMARSystem: Galeri dimuat: 1 subjek
+2026-07-20 16:08:52,054 [INFO] FaceEMARSystem: MediaPipe FaceLandmarker diinisialisasi (F:\Face Verification Presensi\presensi-facenet-emar\face_landmarker.task)
+2026-07-20 16:08:52,071 [INFO] FaceEMARSystem: Database siap: logs\attendance.db
+2026-07-20 16:08:52,073 [INFO] FaceEMARSystem: FaceEMARSystem siap.
+2026-07-20 16:08:52,076 [INFO] FaceEMARSystem: Evaluasi dataset: 261 sampel dari F:\Face Verification Presensi\presensi-facenet-emar\dataset\MANIFEST_UJI.csv
+2026-07-20 16:08:53,116 [WARNING] FaceEMARSystem: verify(NURHOLIS): subjek tidak ditemukan di galeri
+2026-07-20 16:08:53,980 [WARNING] FaceEMARSystem: verify(V2): subjek tidak ditemukan di galeri
+2026-07-20 16:08:54,800 [WARNING] FaceEMARSystem: verify(V3): subjek tidak ditemukan di galeri
+2026-07-20 16:08:55,584 [WARNING] FaceEMARSystem: verify(FIKIWIDIYANTI): subjek tidak ditemukan di galeri
+2026-07-20 16:08:59,844 [WARNING] FaceEMARSystem: verify(MAULUDIN): subjek tidak ditemukan di galeri
+2026-07-20 16:09:00,595 [WARNING] FaceEMARSystem: verify(MERLIYANTI): subjek tidak ditemukan di galeri
+2026-07-20 16:09:01,391 [WARNING] FaceEMARSystem: verify(KARMILA): subjek tidak ditemukan di galeri
+2026-07-20 16:09:06,524 [WARNING] FaceEMARSystem: verify(REYNALDISURYA): subjek tidak ditemukan di galeri
+2026-07-20 16:09:07,359 [WARNING] FaceEMARSystem: verify(TAUFIKHIDAYAT): subjek tidak ditemukan di galeri
+2026-07-20 16:09:09,949 [WARNING] FaceEMARSystem: verify(WERYSAPUTRA): subjek tidak ditemukan di galeri
+2026-07-20 16:09:13,303 [WARNING] FaceEMARSystem: verify(V2): subjek tidak ditemukan di galeri
+2026-07-20 16:09:17,561 [WARNING] FaceEMARSystem: verify(SUSILISNASARI): subjek tidak ditemukan di galeri
+2026-07-20 16:09:21,490 [WARNING] FaceEMARSystem: verify(PONCOPRASETIO): subjek tidak ditemukan di galeri
+2026-07-20 16:09:23,399 [WARNING] FaceEMARSystem: verify(SINTAYULISMA): subjek tidak ditemukan di galeri
+2026-07-20 16:09:33,834 [INFO] FaceEMARSystem: Menginisialisasi FaceNet pada device: cpu
+2026-07-20 16:09:33,880 [INFO] FaceEMARSystem: MTCNN diinisialisasi (image_size=160, margin=20)
+2026-07-20 16:09:34,598 [INFO] FaceEMARSystem: InceptionResnetV1 (VGGFace2) dimuat ke device
+2026-07-20 16:09:34,600 [INFO] FaceEMARSystem: Galeri dimuat: 1 subjek
+2026-07-20 16:09:37,015 [WARNING] FaceEMARSystem: verify(QALWANI): subjek tidak ditemukan di galeri
+2026-07-20 16:09:38,036 [INFO] FaceEMARSystem: Galeri disimpan: 2 subjek
+2026-07-20 16:09:38,036 [INFO] FaceEMARSystem: Enrollment berhasil: REYNALDISURYA (Reynaldi surya.S) — 1 frames
+2026-07-20 16:09:41,243 [INFO] FaceEMARSystem: Galeri disimpan: 3 subjek
+2026-07-20 16:09:41,243 [INFO] FaceEMARSystem: Enrollment berhasil: REYNALDISURYAS (Reynaldi surya.S) — 1 frames
+2026-07-20 16:09:44,344 [INFO] FaceEMARSystem: Galeri disimpan: 4 subjek
+2026-07-20 16:09:44,345 [INFO] FaceEMARSystem: Enrollment berhasil: S07 (Reynaldi surya.S) — 1 frames
+2026-07-20 16:09:45,944 [WARNING] FaceEMARSystem: verify(090104 - ARIE LAZIDO): subjek tidak ditemukan di galeri
+2026-07-20 16:09:46,016 [INFO] FaceEMARSystem: [S1|all] APCER=0.0000, BPCER=1.0000, ACER=0.5000, Acc=0.0625, F1=0.0000
+2026-07-20 16:09:46,027 [INFO] FaceEMARSystem: [S1|normal_60cm] APCER=0.0000, BPCER=1.0000, ACER=0.5000, Acc=0.0625, F1=0.0000
+2026-07-20 16:09:46,044 [INFO] FaceEMARSystem: [S2|all] APCER=0.0000, BPCER=1.0000, ACER=0.5000, Acc=0.0625, F1=0.0000
+2026-07-20 16:09:46,063 [INFO] FaceEMARSystem: [S2|normal_60cm] APCER=0.0000, BPCER=1.0000, ACER=0.5000, Acc=0.0625, F1=0.0000
+2026-07-20 16:09:46,079 [INFO] FaceEMARSystem: [S3|all] APCER=0.0000, BPCER=1.0000, ACER=0.5000, Acc=0.0625, F1=0.0000
+2026-07-20 16:09:46,100 [INFO] FaceEMARSystem: [S3|normal_60cm] APCER=0.0000, BPCER=1.0000, ACER=0.5000, Acc=0.0625, F1=0.0000
+2026-07-20 16:09:46,102 [INFO] FaceEMARSystem: Laporan evaluasi disimpan: results\evaluation_report.txt
+2026-07-20 16:09:47,271 [INFO] FaceEMARSystem: Galeri disimpan: 5 subjek
+2026-07-20 16:09:47,271 [INFO] FaceEMARSystem: Enrollment berhasil: S03 (Mauludin Mauludin) — 1 frames
+2026-07-20 16:09:49,763 [INFO] FaceEMARSystem: Galeri disimpan: 6 subjek
+2026-07-20 16:09:49,763 [INFO] FaceEMARSystem: Enrollment berhasil: MAULUDIN (Mauludin Mauludin) — 1 frames
+2026-07-20 16:09:52,490 [INFO] FaceEMARSystem: Galeri disimpan: 7 subjek
+2026-07-20 16:09:52,490 [INFO] FaceEMARSystem: Enrollment berhasil: MAULUDINMAULUDIN (Mauludin Mauludin) — 1 frames
+2026-07-20 16:09:53,187 [INFO] FaceEMARSystem: Galeri disimpan: 7 subjek
+2026-07-20 16:09:53,187 [INFO] FaceEMARSystem: Enrollment berhasil: QALWANI001 (nur holis) — 1 frames
+2026-07-20 16:09:53,809 [INFO] FaceEMARSystem: Galeri disimpan: 8 subjek
+2026-07-20 16:09:53,810 [INFO] FaceEMARSystem: Enrollment berhasil: NURHOLIS (nur holis) — 1 frames
+2026-07-20 16:09:54,331 [INFO] FaceEMARSystem: Galeri disimpan: 9 subjek
+2026-07-20 16:09:54,331 [INFO] FaceEMARSystem: Enrollment berhasil: V1 (nur holis) — 1 frames
+2026-07-20 16:09:55,392 [INFO] FaceEMARSystem: Galeri disimpan: 10 subjek
+2026-07-20 16:09:55,392 [INFO] FaceEMARSystem: Enrollment berhasil: S01 (nur holis) — 1 frames
+2026-07-20 16:09:56,058 [INFO] FaceEMARSystem: Galeri disimpan: 11 subjek
+2026-07-20 16:09:56,058 [INFO] FaceEMARSystem: Enrollment berhasil: V3 (nur holis) — 1 frames
+2026-07-20 16:09:56,633 [INFO] FaceEMARSystem: Galeri disimpan: 12 subjek
+2026-07-20 16:09:56,633 [INFO] FaceEMARSystem: Enrollment berhasil: V2 (nur holis) — 1 frames
+2026-07-20 16:09:57,253 [INFO] FaceEMARSystem: Galeri disimpan: 12 subjek
+2026-07-20 16:09:57,253 [INFO] FaceEMARSystem: Enrollment berhasil: QALWANI001 (nur holis) — 1 frames
+2026-07-20 16:09:57,901 [INFO] FaceEMARSystem: Galeri disimpan: 12 subjek
+2026-07-20 16:09:57,902 [INFO] FaceEMARSystem: Enrollment berhasil: NURHOLIS (nur holis) — 1 frames
+2026-07-20 16:09:58,768 [INFO] FaceEMARSystem: Galeri disimpan: 12 subjek
+2026-07-20 16:09:58,769 [INFO] FaceEMARSystem: Enrollment berhasil: V1 (nur holis) — 1 frames
+2026-07-20 16:09:59,722 [INFO] FaceEMARSystem: Galeri disimpan: 12 subjek
+2026-07-20 16:09:59,722 [INFO] FaceEMARSystem: Enrollment berhasil: S01 (nur holis) — 1 frames
+2026-07-20 16:10:00,517 [INFO] FaceEMARSystem: Galeri disimpan: 12 subjek
+2026-07-20 16:10:00,518 [INFO] FaceEMARSystem: Enrollment berhasil: V3 (nur holis) — 1 frames
+2026-07-20 16:10:01,199 [INFO] FaceEMARSystem: Galeri disimpan: 12 subjek
+2026-07-20 16:10:01,200 [INFO] FaceEMARSystem: Enrollment berhasil: V2 (nur holis) — 1 frames
+2026-07-20 16:10:02,876 [INFO] FaceEMARSystem: Galeri disimpan: 13 subjek
+2026-07-20 16:10:02,876 [INFO] FaceEMARSystem: Enrollment berhasil: KARMILAMILLA (Karmila Milla) — 1 frames
+2026-07-20 16:10:04,626 [INFO] FaceEMARSystem: Galeri disimpan: 14 subjek
+2026-07-20 16:10:04,626 [INFO] FaceEMARSystem: Enrollment berhasil: S06 (Karmila Milla) — 1 frames
+2026-07-20 16:10:06,359 [INFO] FaceEMARSystem: Galeri disimpan: 15 subjek
+2026-07-20 16:10:06,359 [INFO] FaceEMARSystem: Enrollment berhasil: KARMILA (Karmila Milla) — 1 frames
+2026-07-20 16:10:07,320 [INFO] FaceEMARSystem: Galeri disimpan: 16 subjek
+2026-07-20 16:10:07,320 [INFO] FaceEMARSystem: Enrollment berhasil: WERYSAPUTRA (Wery Saputra) — 1 frames
+2026-07-20 16:10:08,309 [INFO] FaceEMARSystem: Galeri disimpan: 17 subjek
+2026-07-20 16:10:08,310 [INFO] FaceEMARSystem: Enrollment berhasil: S09 (Wery Saputra) — 1 frames
+2026-07-20 16:10:09,003 [INFO] FaceEMARSystem: Galeri disimpan: 17 subjek
+2026-07-20 16:10:09,003 [INFO] FaceEMARSystem: Enrollment berhasil: WERYSAPUTRA (Wery Saputra) — 1 frames
+2026-07-20 16:10:09,798 [INFO] FaceEMARSystem: Galeri disimpan: 17 subjek
+2026-07-20 16:10:09,798 [INFO] FaceEMARSystem: Enrollment berhasil: S09 (Wery Saputra) — 1 frames
+2026-07-20 16:10:11,070 [INFO] FaceEMARSystem: Galeri disimpan: 18 subjek
+2026-07-20 16:10:11,071 [INFO] FaceEMARSystem: Enrollment berhasil: S02 (Viky Widiyanti) — 1 frames
+2026-07-20 16:10:12,026 [INFO] FaceEMARSystem: Galeri disimpan: 19 subjek
+2026-07-20 16:10:12,026 [INFO] FaceEMARSystem: Enrollment berhasil: VIKYWIDIYANTI (Viky Widiyanti) — 1 frames
+2026-07-20 16:10:12,923 [INFO] FaceEMARSystem: Galeri disimpan: 20 subjek
+2026-07-20 16:10:12,924 [INFO] FaceEMARSystem: Enrollment berhasil: FIKIWIDIYANTI (Viky Widiyanti) — 1 frames
+2026-07-20 16:10:13,093 [INFO] FaceEMARSystem: Galeri disimpan: 20 subjek
+2026-07-20 16:10:13,093 [INFO] FaceEMARSystem: Enrollment berhasil: QALWANI001 (nur holis) — 1 frames
+2026-07-20 16:10:13,293 [INFO] FaceEMARSystem: Galeri disimpan: 20 subjek
+2026-07-20 16:10:13,293 [INFO] FaceEMARSystem: Enrollment berhasil: NURHOLIS (nur holis) — 1 frames
+2026-07-20 16:10:13,419 [INFO] FaceEMARSystem: Galeri disimpan: 20 subjek
+2026-07-20 16:10:13,419 [INFO] FaceEMARSystem: Enrollment berhasil: V1 (nur holis) — 1 frames
+2026-07-20 16:10:13,577 [INFO] FaceEMARSystem: Galeri disimpan: 20 subjek
+2026-07-20 16:10:13,577 [INFO] FaceEMARSystem: Enrollment berhasil: S01 (nur holis) — 1 frames
+2026-07-20 16:10:13,707 [INFO] FaceEMARSystem: Galeri disimpan: 20 subjek
+2026-07-20 16:10:13,707 [INFO] FaceEMARSystem: Enrollment berhasil: V3 (nur holis) — 1 frames
+2026-07-20 16:10:13,911 [INFO] FaceEMARSystem: Galeri disimpan: 20 subjek
+2026-07-20 16:10:13,912 [INFO] FaceEMARSystem: Enrollment berhasil: V2 (nur holis) — 1 frames
+2026-07-20 16:10:14,588 [INFO] FaceEMARSystem: Galeri disimpan: 21 subjek
+2026-07-20 16:10:14,588 [INFO] FaceEMARSystem: Enrollment berhasil: YULISMASHINTA (Yulisma Shinta) — 1 frames
+2026-07-20 16:10:15,150 [INFO] FaceEMARSystem: Galeri disimpan: 22 subjek
+2026-07-20 16:10:15,150 [INFO] FaceEMARSystem: Enrollment berhasil: S13 (Yulisma Shinta) — 1 frames
+2026-07-20 16:10:15,708 [INFO] FaceEMARSystem: Galeri disimpan: 23 subjek
+2026-07-20 16:10:15,708 [INFO] FaceEMARSystem: Enrollment berhasil: SINTAYULISMA (Yulisma Shinta) — 1 frames
+2026-07-20 16:10:16,867 [INFO] FaceEMARSystem: Galeri disimpan: 24 subjek
+2026-07-20 16:10:16,867 [INFO] FaceEMARSystem: Enrollment berhasil: ARIELAZIDO (Arie Lazido) — 1 frames
+2026-07-20 16:10:19,216 [INFO] FaceEMARSystem: Galeri disimpan: 25 subjek
+2026-07-20 16:10:19,216 [INFO] FaceEMARSystem: Enrollment berhasil: MERLIYANTI (Merli Yanti) — 1 frames
+2026-07-20 16:10:21,013 [INFO] FaceEMARSystem: Galeri disimpan: 26 subjek
+2026-07-20 16:10:21,013 [INFO] FaceEMARSystem: Enrollment berhasil: S05 (Merli Yanti) — 1 frames
+2026-07-20 16:10:23,783 [INFO] FaceEMARSystem: Menginisialisasi FaceEMARSystem...
+2026-07-20 16:10:23,783 [INFO] FaceEMARSystem: Menginisialisasi FaceNet pada device: cpu
+2026-07-20 16:10:23,879 [INFO] FaceEMARSystem: MTCNN diinisialisasi (image_size=160, margin=20)
+2026-07-20 16:10:24,025 [INFO] FaceEMARSystem: Galeri disimpan: 27 subjek
+2026-07-20 16:10:24,025 [INFO] FaceEMARSystem: Enrollment berhasil: S11 (Susi Lisnasari) — 1 frames
+2026-07-20 16:10:24,961 [INFO] FaceEMARSystem: InceptionResnetV1 (VGGFace2) dimuat ke device
+2026-07-20 16:10:25,024 [INFO] FaceEMARSystem: Galeri dimuat: 27 subjek
+2026-07-20 16:10:27,245 [INFO] FaceEMARSystem: Galeri disimpan: 28 subjek
+2026-07-20 16:10:27,246 [INFO] FaceEMARSystem: Enrollment berhasil: SUSILISNASARI (Susi Lisnasari) — 1 frames
+2026-07-20 16:10:29,921 [INFO] FaceEMARSystem: Galeri disimpan: 29 subjek
+2026-07-20 16:10:29,922 [INFO] FaceEMARSystem: Enrollment berhasil: PONCOPRASETIO (ponco prastio) — 1 frames
+2026-07-20 16:10:31,616 [INFO] FaceEMARSystem: Galeri disimpan: 30 subjek
+2026-07-20 16:10:31,616 [INFO] FaceEMARSystem: Enrollment berhasil: PONCOPRASTIO (ponco prastio) — 1 frames
+2026-07-20 16:10:33,508 [INFO] FaceEMARSystem: Galeri disimpan: 31 subjek
+2026-07-20 16:10:33,509 [INFO] FaceEMARSystem: Enrollment berhasil: S12 (ponco prastio) — 1 frames
+2026-07-20 16:10:34,928 [INFO] FaceEMARSystem: Galeri disimpan: 31 subjek
+2026-07-20 16:10:34,929 [INFO] FaceEMARSystem: Enrollment berhasil: PONCOPRASETIO (ponco prastio) — 1 frames
+2026-07-20 16:10:36,306 [INFO] FaceEMARSystem: Galeri disimpan: 31 subjek
+2026-07-20 16:10:36,306 [INFO] FaceEMARSystem: Enrollment berhasil: PONCOPRASTIO (ponco prastio) — 1 frames
+2026-07-20 16:10:37,242 [INFO] FaceEMARSystem: MediaPipe FaceLandmarker diinisialisasi (F:\Face Verification Presensi\presensi-facenet-emar\face_landmarker.task)
+2026-07-20 16:10:37,261 [INFO] FaceEMARSystem: Database siap: logs\attendance.db
+2026-07-20 16:10:37,264 [INFO] FaceEMARSystem: FaceEMARSystem siap.
+2026-07-20 16:10:37,268 [INFO] FaceEMARSystem: Evaluasi dataset: 261 sampel dari F:\Face Verification Presensi\presensi-facenet-emar\dataset\MANIFEST_UJI.csv
+2026-07-20 16:10:38,006 [INFO] FaceEMARSystem: Galeri disimpan: 31 subjek
+2026-07-20 16:10:38,007 [INFO] FaceEMARSystem: Enrollment berhasil: S12 (ponco prastio) — 1 frames
+2026-07-20 16:10:40,013 [INFO] FaceEMARSystem: Galeri disimpan: 31 subjek
+2026-07-20 16:10:40,014 [INFO] FaceEMARSystem: Enrollment berhasil: PONCOPRASETIO (ponco prastio) — 1 frames
+2026-07-20 16:10:41,905 [INFO] FaceEMARSystem: Galeri disimpan: 31 subjek
+2026-07-20 16:10:41,906 [INFO] FaceEMARSystem: Enrollment berhasil: PONCOPRASTIO (ponco prastio) — 1 frames
+2026-07-20 16:10:43,709 [INFO] FaceEMARSystem: Galeri disimpan: 31 subjek
+2026-07-20 16:10:43,709 [INFO] FaceEMARSystem: Enrollment berhasil: S12 (ponco prastio) — 1 frames
+2026-07-20 16:10:44,101 [INFO] FaceEMARSystem: Galeri disimpan: 32 subjek
+2026-07-20 16:10:44,101 [INFO] FaceEMARSystem: Enrollment berhasil: S08 (Taufik Hidayat) — 1 frames
+2026-07-20 16:10:44,400 [INFO] FaceEMARSystem: Galeri disimpan: 33 subjek
+2026-07-20 16:10:44,400 [INFO] FaceEMARSystem: Enrollment berhasil: TAUFIKHIDAYAT (Taufik Hidayat) — 1 frames
+2026-07-20 16:10:44,402 [INFO] FaceEMARSystem: Galeri disimpan: 33 subjek
+2026-07-20 16:10:59,099 [WARNING] FaceEMARSystem: verify(TAUFIKHIDAYAT): subjek tidak ditemukan di galeri
+2026-07-20 16:11:11,687 [WARNING] FaceEMARSystem: verify(SUSILISNASARI): subjek tidak ditemukan di galeri
+2026-07-20 16:11:15,643 [WARNING] FaceEMARSystem: verify(PONCOPRASETIO): subjek tidak ditemukan di galeri
+2026-07-20 16:11:19,278 [INFO] FaceEMARSystem: Menginisialisasi FaceEMARSystem...
+2026-07-20 16:11:19,279 [INFO] FaceEMARSystem: Menginisialisasi FaceNet pada device: cpu
+2026-07-20 16:11:19,318 [INFO] FaceEMARSystem: MTCNN diinisialisasi (image_size=160, margin=20)
+2026-07-20 16:11:19,980 [INFO] FaceEMARSystem: InceptionResnetV1 (VGGFace2) dimuat ke device
+2026-07-20 16:11:20,047 [INFO] FaceEMARSystem: Galeri dimuat: 33 subjek
+2026-07-20 16:11:27,360 [INFO] FaceEMARSystem: MediaPipe FaceLandmarker diinisialisasi (F:\Face Verification Presensi\presensi-facenet-emar\face_landmarker.task)
+2026-07-20 16:11:27,365 [INFO] FaceEMARSystem: Database siap: logs\attendance.db
+2026-07-20 16:11:27,366 [INFO] FaceEMARSystem: FaceEMARSystem siap.
+2026-07-20 16:11:27,370 [INFO] FaceEMARSystem: Evaluasi dataset: 261 sampel dari F:\Face Verification Presensi\presensi-facenet-emar\dataset\MANIFEST_UJI.csv
+2026-07-20 16:11:30,246 [WARNING] FaceEMARSystem: verify(QALWANI): subjek tidak ditemukan di galeri
+2026-07-20 16:11:36,718 [WARNING] FaceEMARSystem: verify(090104 - ARIE LAZIDO): subjek tidak ditemukan di galeri
+2026-07-20 16:11:36,805 [INFO] FaceEMARSystem: [S1|all] APCER=0.0000, BPCER=0.2667, ACER=0.1333, Acc=0.7500, F1=0.8462
+2026-07-20 16:11:36,817 [INFO] FaceEMARSystem: [S1|normal_60cm] APCER=0.0000, BPCER=0.2667, ACER=0.1333, Acc=0.7500, F1=0.8462
+2026-07-20 16:11:36,829 [INFO] FaceEMARSystem: [S2|all] APCER=0.0000, BPCER=0.6667, ACER=0.3333, Acc=0.3750, F1=0.5000
+2026-07-20 16:11:36,844 [INFO] FaceEMARSystem: [S2|normal_60cm] APCER=0.0000, BPCER=0.6667, ACER=0.3333, Acc=0.3750, F1=0.5000
+2026-07-20 16:11:36,857 [INFO] FaceEMARSystem: [S3|all] APCER=0.0000, BPCER=0.8667, ACER=0.4333, Acc=0.1875, F1=0.2353
+2026-07-20 16:11:36,868 [INFO] FaceEMARSystem: [S3|normal_60cm] APCER=0.0000, BPCER=0.8667, ACER=0.4333, Acc=0.1875, F1=0.2353
+2026-07-20 16:11:36,871 [INFO] FaceEMARSystem: Laporan evaluasi disimpan: results\evaluation_report.txt
+2026-07-20 16:12:11,479 [WARNING] FaceEMARSystem: verify(QALWANI): subjek tidak ditemukan di galeri
+2026-07-20 16:12:16,150 [WARNING] FaceEMARSystem: verify(090104 - ARIE LAZIDO): subjek tidak ditemukan di galeri
+2026-07-20 16:12:16,197 [INFO] FaceEMARSystem: [S1|all] APCER=0.0000, BPCER=0.0667, ACER=0.0333, Acc=0.9375, F1=0.9655
+2026-07-20 16:12:16,209 [INFO] FaceEMARSystem: [S1|normal_60cm] APCER=0.0000, BPCER=0.0667, ACER=0.0333, Acc=0.9375, F1=0.9655
+2026-07-20 16:12:16,222 [INFO] FaceEMARSystem: [S2|all] APCER=0.0000, BPCER=0.5333, ACER=0.2667, Acc=0.5000, F1=0.6364
+2026-07-20 16:12:16,234 [INFO] FaceEMARSystem: [S2|normal_60cm] APCER=0.0000, BPCER=0.5333, ACER=0.2667, Acc=0.5000, F1=0.6364
+2026-07-20 16:12:16,248 [INFO] FaceEMARSystem: [S3|all] APCER=0.0000, BPCER=0.8000, ACER=0.4000, Acc=0.2500, F1=0.3333
+2026-07-20 16:12:16,259 [INFO] FaceEMARSystem: [S3|normal_60cm] APCER=0.0000, BPCER=0.8000, ACER=0.4000, Acc=0.2500, F1=0.3333
+2026-07-20 16:12:16,261 [INFO] FaceEMARSystem: Laporan evaluasi disimpan: results\evaluation_report.txt
+2026-07-20 16:12:16,656 [INFO] FaceEMARSystem: Menginisialisasi FaceEMARSystem...
+2026-07-20 16:12:16,656 [INFO] FaceEMARSystem: Menginisialisasi FaceNet pada device: cpu
+2026-07-20 16:12:16,683 [INFO] FaceEMARSystem: MTCNN diinisialisasi (image_size=160, margin=20)
+2026-07-20 16:12:17,171 [INFO] FaceEMARSystem: InceptionResnetV1 (VGGFace2) dimuat ke device
+2026-07-20 16:12:17,173 [INFO] FaceEMARSystem: Galeri dimuat: 33 subjek
+2026-07-20 16:12:21,504 [INFO] FaceEMARSystem: MediaPipe FaceLandmarker diinisialisasi (F:\Face Verification Presensi\presensi-facenet-emar\face_landmarker.task)
+2026-07-20 16:12:21,506 [INFO] FaceEMARSystem: Database siap: logs\attendance.db
+2026-07-20 16:12:21,507 [INFO] FaceEMARSystem: FaceEMARSystem siap.
+2026-07-20 16:12:40,642 [INFO] FaceEMARSystem: Menginisialisasi FaceEMARSystem...
+2026-07-20 16:12:40,643 [INFO] FaceEMARSystem: Menginisialisasi FaceNet pada device: cpu
+2026-07-20 16:12:40,663 [INFO] FaceEMARSystem: MTCNN diinisialisasi (image_size=160, margin=20)
+2026-07-20 16:12:40,982 [INFO] FaceEMARSystem: InceptionResnetV1 (VGGFace2) dimuat ke device
+2026-07-20 16:12:40,983 [INFO] FaceEMARSystem: Galeri dimuat: 33 subjek
+2026-07-20 16:12:44,663 [INFO] FaceEMARSystem: MediaPipe FaceLandmarker diinisialisasi (F:\Face Verification Presensi\presensi-facenet-emar\face_landmarker.task)
+2026-07-20 16:12:44,665 [INFO] FaceEMARSystem: Database siap: logs\attendance.db
+2026-07-20 16:12:44,666 [INFO] FaceEMARSystem: FaceEMARSystem siap.
+2026-07-20 16:12:44,695 [INFO] FaceEMARSystem: [alpha=0.05|tuning] APCER=0.0000, BPCER=0.8000, ACER=0.4000, Acc=0.2500, F1=0.3333
+2026-07-20 16:12:44,703 [INFO] FaceEMARSystem: [alpha=0.1|tuning] APCER=0.0000, BPCER=0.8000, ACER=0.4000, Acc=0.2500, F1=0.3333
+2026-07-20 16:12:44,710 [INFO] FaceEMARSystem: [alpha=0.15|tuning] APCER=0.0000, BPCER=0.8000, ACER=0.4000, Acc=0.2500, F1=0.3333
+2026-07-20 16:12:44,718 [INFO] FaceEMARSystem: [alpha=0.2|tuning] APCER=0.0000, BPCER=0.8000, ACER=0.4000, Acc=0.2500, F1=0.3333
+2026-07-20 16:12:44,725 [INFO] FaceEMARSystem: [alpha=0.25|tuning] APCER=0.0000, BPCER=0.8000, ACER=0.4000, Acc=0.2500, F1=0.3333
+2026-07-20 16:12:44,732 [INFO] FaceEMARSystem: [alpha=0.3|tuning] APCER=0.0000, BPCER=0.8000, ACER=0.4000, Acc=0.2500, F1=0.3333
+2026-07-20 16:12:44,740 [INFO] FaceEMARSystem: [alpha=0.35|tuning] APCER=0.0000, BPCER=0.8000, ACER=0.4000, Acc=0.2500, F1=0.3333
+2026-07-20 16:12:44,747 [INFO] FaceEMARSystem: [alpha=0.4|tuning] APCER=0.0000, BPCER=0.8000, ACER=0.4000, Acc=0.2500, F1=0.3333
+2026-07-20 16:12:44,756 [INFO] FaceEMARSystem: [alpha=0.45|tuning] APCER=0.0000, BPCER=0.8000, ACER=0.4000, Acc=0.2500, F1=0.3333
+2026-07-20 16:12:44,763 [INFO] FaceEMARSystem: [alpha=0.5|tuning] APCER=0.0000, BPCER=0.8000, ACER=0.4000, Acc=0.2500, F1=0.3333
+2026-07-20 16:12:44,771 [INFO] FaceEMARSystem: [alpha=0.55|tuning] APCER=0.0000, BPCER=0.8000, ACER=0.4000, Acc=0.2500, F1=0.3333
+2026-07-20 16:12:44,778 [INFO] FaceEMARSystem: [alpha=0.6|tuning] APCER=0.0000, BPCER=0.8000, ACER=0.4000, Acc=0.2500, F1=0.3333
+2026-07-20 16:12:44,785 [INFO] FaceEMARSystem: [alpha=0.65|tuning] APCER=0.0000, BPCER=0.8000, ACER=0.4000, Acc=0.2500, F1=0.3333
+2026-07-20 16:12:44,792 [INFO] FaceEMARSystem: [alpha=0.7|tuning] APCER=0.0000, BPCER=0.7333, ACER=0.3667, Acc=0.3125, F1=0.4211
+2026-07-20 16:12:44,799 [INFO] FaceEMARSystem: [alpha=0.75|tuning] APCER=0.0000, BPCER=0.6667, ACER=0.3333, Acc=0.3750, F1=0.5000
+2026-07-20 16:12:44,807 [INFO] FaceEMARSystem: [alpha=0.8|tuning] APCER=0.0000, BPCER=0.6667, ACER=0.3333, Acc=0.3750, F1=0.5000
+2026-07-20 16:12:44,814 [INFO] FaceEMARSystem: [alpha=0.85|tuning] APCER=0.0000, BPCER=0.6000, ACER=0.3000, Acc=0.4375, F1=0.5714
+2026-07-20 16:12:44,821 [INFO] FaceEMARSystem: [alpha=0.9|tuning] APCER=0.0000, BPCER=0.6000, ACER=0.3000, Acc=0.4375, F1=0.5714
+2026-07-20 16:12:44,829 [INFO] FaceEMARSystem: [alpha=0.95|tuning] APCER=0.0000, BPCER=0.5333, ACER=0.2667, Acc=0.5000, F1=0.6364
+2026-07-20 16:15:26,912 [INFO] FaceEMARSystem: Menginisialisasi FaceEMARSystem...
+2026-07-20 16:15:26,913 [INFO] FaceEMARSystem: Menginisialisasi FaceNet pada device: cpu
+2026-07-20 16:15:26,968 [INFO] FaceEMARSystem: MTCNN diinisialisasi (image_size=160, margin=20)
+2026-07-20 16:15:27,421 [INFO] FaceEMARSystem: InceptionResnetV1 (VGGFace2) dimuat ke device
+2026-07-20 16:15:27,423 [INFO] FaceEMARSystem: Galeri dimuat: 33 subjek
+2026-07-20 16:15:28,955 [INFO] FaceEMARSystem: dlib 68-Landmark Predictor diinisialisasi (F:\Face Verification Presensi\presensi-facenet-emar\models\shape_predictor_68_face_landmarks.dat)
+2026-07-20 16:15:28,964 [INFO] FaceEMARSystem: Database siap: logs\attendance.db
+2026-07-20 16:15:28,965 [INFO] FaceEMARSystem: FaceEMARSystem siap.
+2026-07-20 16:15:28,967 [INFO] FaceEMARSystem: Evaluasi dataset: 261 sampel dari F:\Face Verification Presensi\presensi-facenet-emar\dataset\MANIFEST_UJI.csv
+2026-07-20 16:16:25,307 [INFO] FaceEMARSystem: Menginisialisasi FaceEMARSystem...
+2026-07-20 16:16:25,308 [INFO] FaceEMARSystem: Menginisialisasi FaceNet pada device: cpu
+2026-07-20 16:16:25,337 [INFO] FaceEMARSystem: MTCNN diinisialisasi (image_size=160, margin=20)
+2026-07-20 16:16:25,830 [INFO] FaceEMARSystem: InceptionResnetV1 (VGGFace2) dimuat ke device
+2026-07-20 16:16:25,831 [INFO] FaceEMARSystem: Galeri dimuat: 33 subjek
+2026-07-20 16:16:27,303 [INFO] FaceEMARSystem: dlib 68-Landmark Predictor diinisialisasi (F:\Face Verification Presensi\presensi-facenet-emar\models\shape_predictor_68_face_landmarks.dat)
+2026-07-20 16:16:27,307 [INFO] FaceEMARSystem: Database siap: logs\attendance.db
+2026-07-20 16:16:27,307 [INFO] FaceEMARSystem: FaceEMARSystem siap.
+2026-07-20 16:16:27,310 [INFO] FaceEMARSystem: Evaluasi dataset: 261 sampel dari F:\Face Verification Presensi\presensi-facenet-emar\dataset\MANIFEST_UJI.csv
+2026-07-20 16:17:01,542 [WARNING] FaceEMARSystem: verify(QALWANI): subjek tidak ditemukan di galeri
+2026-07-20 16:17:12,523 [WARNING] FaceEMARSystem: verify(090104 - ARIE LAZIDO): subjek tidak ditemukan di galeri
+2026-07-20 16:17:12,564 [INFO] FaceEMARSystem: [S1|all] APCER=0.0000, BPCER=0.0667, ACER=0.0333, Acc=0.9375, F1=0.9655
+2026-07-20 16:17:12,573 [INFO] FaceEMARSystem: [S1|normal_60cm] APCER=0.0000, BPCER=0.0667, ACER=0.0333, Acc=0.9375, F1=0.9655
+2026-07-20 16:17:12,580 [INFO] FaceEMARSystem: [S2|all] APCER=0.0000, BPCER=0.5333, ACER=0.2667, Acc=0.5000, F1=0.6364
+2026-07-20 16:17:12,587 [INFO] FaceEMARSystem: [S2|normal_60cm] APCER=0.0000, BPCER=0.5333, ACER=0.2667, Acc=0.5000, F1=0.6364
+2026-07-20 16:17:12,595 [INFO] FaceEMARSystem: [S3|all] APCER=0.0000, BPCER=0.7333, ACER=0.3667, Acc=0.3125, F1=0.4211
+2026-07-20 16:17:12,606 [INFO] FaceEMARSystem: [S3|normal_60cm] APCER=0.0000, BPCER=0.7333, ACER=0.3667, Acc=0.3125, F1=0.4211
+2026-07-20 16:17:12,606 [INFO] FaceEMARSystem: Laporan evaluasi disimpan: results\evaluation_report.txt
+2026-07-20 16:18:00,243 [WARNING] FaceEMARSystem: verify(QALWANI): subjek tidak ditemukan di galeri
+2026-07-20 16:18:10,278 [WARNING] FaceEMARSystem: verify(090104 - ARIE LAZIDO): subjek tidak ditemukan di galeri
+2026-07-20 16:18:10,314 [INFO] FaceEMARSystem: [S1|all] APCER=0.0000, BPCER=0.0667, ACER=0.0333, Acc=0.9375, F1=0.9655
+2026-07-20 16:18:10,322 [INFO] FaceEMARSystem: [S1|normal_60cm] APCER=0.0000, BPCER=0.0667, ACER=0.0333, Acc=0.9375, F1=0.9655
+2026-07-20 16:18:10,329 [INFO] FaceEMARSystem: [S2|all] APCER=0.0000, BPCER=0.5333, ACER=0.2667, Acc=0.5000, F1=0.6364
+2026-07-20 16:18:10,335 [INFO] FaceEMARSystem: [S2|normal_60cm] APCER=0.0000, BPCER=0.5333, ACER=0.2667, Acc=0.5000, F1=0.6364
+2026-07-20 16:18:10,343 [INFO] FaceEMARSystem: [S3|all] APCER=0.0000, BPCER=0.7333, ACER=0.3667, Acc=0.3125, F1=0.4211
+2026-07-20 16:18:10,352 [INFO] FaceEMARSystem: [S3|normal_60cm] APCER=0.0000, BPCER=0.7333, ACER=0.3667, Acc=0.3125, F1=0.4211
+2026-07-20 16:18:10,353 [INFO] FaceEMARSystem: Laporan evaluasi disimpan: results\evaluation_report.txt
+2026-07-20 16:19:59,298 [INFO] FaceEMARSystem: Menginisialisasi FaceEMARSystem...
+2026-07-20 16:19:59,298 [INFO] FaceEMARSystem: Menginisialisasi FaceNet pada device: cpu
+2026-07-20 16:19:59,342 [INFO] FaceEMARSystem: MTCNN diinisialisasi (image_size=160, margin=20)
+2026-07-20 16:19:59,735 [INFO] FaceEMARSystem: InceptionResnetV1 (VGGFace2) dimuat ke device
+2026-07-20 16:19:59,736 [INFO] FaceEMARSystem: Galeri dimuat: 33 subjek
+2026-07-20 16:20:00,986 [INFO] FaceEMARSystem: dlib 68-Landmark Predictor diinisialisasi (F:\Face Verification Presensi\presensi-facenet-emar\models\shape_predictor_68_face_landmarks.dat)
+2026-07-20 16:20:00,995 [INFO] FaceEMARSystem: Database siap: logs\attendance.db
+2026-07-20 16:20:00,996 [INFO] FaceEMARSystem: FaceEMARSystem siap.
+2026-07-20 16:20:00,998 [INFO] FaceEMARSystem: Evaluasi dataset: 261 sampel dari F:\Face Verification Presensi\presensi-facenet-emar\dataset\MANIFEST_UJI.csv
+2026-07-20 16:21:19,441 [WARNING] FaceEMARSystem: verify(QALWANI): subjek tidak ditemukan di galeri
+2026-07-20 16:21:28,176 [WARNING] FaceEMARSystem: verify(090104 - ARIE LAZIDO): subjek tidak ditemukan di galeri
+2026-07-20 16:21:28,209 [INFO] FaceEMARSystem: [S1|all] APCER=0.0000, BPCER=0.0667, ACER=0.0333, Acc=0.9375, F1=0.9655
+2026-07-20 16:21:28,217 [INFO] FaceEMARSystem: [S1|normal_60cm] APCER=0.0000, BPCER=0.0667, ACER=0.0333, Acc=0.9375, F1=0.9655
+2026-07-20 16:21:28,225 [INFO] FaceEMARSystem: [S2|all] APCER=0.0000, BPCER=0.5333, ACER=0.2667, Acc=0.5000, F1=0.6364
+2026-07-20 16:21:28,233 [INFO] FaceEMARSystem: [S2|normal_60cm] APCER=0.0000, BPCER=0.5333, ACER=0.2667, Acc=0.5000, F1=0.6364
+2026-07-20 16:21:28,243 [INFO] FaceEMARSystem: [S3|all] APCER=0.0000, BPCER=0.7333, ACER=0.3667, Acc=0.3125, F1=0.4211
+2026-07-20 16:21:28,251 [INFO] FaceEMARSystem: [S3|normal_60cm] APCER=0.0000, BPCER=0.7333, ACER=0.3667, Acc=0.3125, F1=0.4211
+2026-07-20 16:21:28,251 [INFO] FaceEMARSystem: Laporan evaluasi disimpan: results\evaluation_report.txt
+2026-07-20 20:09:03,735 [INFO] FaceEMARSystem: Menginisialisasi FaceEMARSystem...
+2026-07-20 20:09:03,737 [INFO] FaceEMARSystem: Menginisialisasi FaceNet pada device: cpu
+2026-07-20 20:09:03,860 [INFO] FaceEMARSystem: MTCNN diinisialisasi (image_size=160, margin=20)
+2026-07-20 20:09:04,387 [INFO] FaceEMARSystem: InceptionResnetV1 (VGGFace2) dimuat ke device
+2026-07-20 20:09:04,420 [INFO] FaceEMARSystem: Galeri dimuat: 33 subjek
+2026-07-20 20:09:06,097 [INFO] FaceEMARSystem: dlib 68-Landmark Predictor diinisialisasi (F:\Face Verification Presensi\presensi-facenet-emar\models\shape_predictor_68_face_landmarks.dat)
+2026-07-20 20:09:06,109 [INFO] FaceEMARSystem: Database siap: logs\attendance.db
+2026-07-20 20:09:06,110 [INFO] FaceEMARSystem: FaceEMARSystem siap.
+2026-07-20 20:09:06,111 [INFO] FaceEMARSystem: Evaluasi dataset: 33 sampel dari F:\Face Verification Presensi\presensi-facenet-emar\dataset\MANIFEST_UJI.csv
+2026-07-20 20:09:08,653 [INFO] FaceEMARSystem: Galeri disimpan: 1 subjek
+2026-07-20 20:09:08,653 [INFO] FaceEMARSystem: Enrollment berhasil: S07 (S07) — 1 frames
+2026-07-20 20:09:10,365 [INFO] FaceEMARSystem: Galeri disimpan: 2 subjek
+2026-07-20 20:09:10,365 [INFO] FaceEMARSystem: Enrollment berhasil: S03 (S03) — 1 frames
+2026-07-20 20:09:11,070 [INFO] FaceEMARSystem: Galeri disimpan: 3 subjek
+2026-07-20 20:09:11,070 [INFO] FaceEMARSystem: Enrollment berhasil: S01 (S01) — 1 frames
+2026-07-20 20:09:11,615 [INFO] FaceEMARSystem: Galeri disimpan: 3 subjek
+2026-07-20 20:09:11,615 [INFO] FaceEMARSystem: Enrollment berhasil: S01 (S01) — 1 frames
+2026-07-20 20:09:12,980 [INFO] FaceEMARSystem: Galeri disimpan: 4 subjek
+2026-07-20 20:09:12,980 [INFO] FaceEMARSystem: Enrollment berhasil: S06 (S06) — 1 frames
+2026-07-20 20:09:14,004 [INFO] FaceEMARSystem: Galeri disimpan: 5 subjek
+2026-07-20 20:09:14,005 [INFO] FaceEMARSystem: Enrollment berhasil: S09 (S09) — 1 frames
+2026-07-20 20:09:14,683 [INFO] FaceEMARSystem: Galeri disimpan: 5 subjek
+2026-07-20 20:09:14,684 [INFO] FaceEMARSystem: Enrollment berhasil: S09 (S09) — 1 frames
+2026-07-20 20:09:15,689 [INFO] FaceEMARSystem: Galeri disimpan: 6 subjek
+2026-07-20 20:09:15,689 [INFO] FaceEMARSystem: Enrollment berhasil: S02 (S02) — 1 frames
+2026-07-20 20:09:15,880 [INFO] FaceEMARSystem: Galeri disimpan: 6 subjek
+2026-07-20 20:09:15,880 [INFO] FaceEMARSystem: Enrollment berhasil: S01 (S01) — 1 frames
+2026-07-20 20:09:16,555 [INFO] FaceEMARSystem: Galeri disimpan: 7 subjek
+2026-07-20 20:09:16,556 [INFO] FaceEMARSystem: Enrollment berhasil: S13 (S13) — 1 frames
+2026-07-20 20:09:17,379 [INFO] FaceEMARSystem: Galeri disimpan: 8 subjek
+2026-07-20 20:09:17,380 [INFO] FaceEMARSystem: Enrollment berhasil: S14 (S14) — 1 frames
+2026-07-20 20:09:19,063 [INFO] FaceEMARSystem: Galeri disimpan: 9 subjek
+2026-07-20 20:09:19,064 [INFO] FaceEMARSystem: Enrollment berhasil: S05 (S05) — 1 frames
+2026-07-20 20:09:21,550 [INFO] FaceEMARSystem: Galeri disimpan: 10 subjek
+2026-07-20 20:09:21,550 [INFO] FaceEMARSystem: Enrollment berhasil: S11 (S11) — 1 frames
+2026-07-20 20:09:23,215 [INFO] FaceEMARSystem: Galeri disimpan: 11 subjek
+2026-07-20 20:09:23,216 [INFO] FaceEMARSystem: Enrollment berhasil: S12 (S12) — 1 frames
+2026-07-20 20:09:24,726 [INFO] FaceEMARSystem: Galeri disimpan: 11 subjek
+2026-07-20 20:09:24,727 [INFO] FaceEMARSystem: Enrollment berhasil: S12 (S12) — 1 frames
+2026-07-20 20:09:26,235 [INFO] FaceEMARSystem: Galeri disimpan: 11 subjek
+2026-07-20 20:09:26,235 [INFO] FaceEMARSystem: Enrollment berhasil: S12 (S12) — 1 frames
+2026-07-20 20:09:26,593 [INFO] FaceEMARSystem: Galeri disimpan: 12 subjek
+2026-07-20 20:09:26,593 [INFO] FaceEMARSystem: Enrollment berhasil: S08 (S08) — 1 frames
+2026-07-20 20:09:26,593 [INFO] FaceEMARSystem: Galeri dievaluasi dengan 17 template enrollment.
+2026-07-20 20:11:12,228 [INFO] FaceEMARSystem: Evaluasi probe selesai: 16 trial dieksekusi.
+2026-07-20 20:11:12,382 [INFO] FaceEMARSystem: [S1|all] APCER=0.0000, BPCER=0.0000, ACER=0.0000, Acc=1.0000, F1=1.0000
+2026-07-20 20:11:12,395 [INFO] FaceEMARSystem: [S1|normal_60cm] APCER=0.0000, BPCER=0.0000, ACER=0.0000, Acc=1.0000, F1=1.0000
+2026-07-20 20:11:12,405 [INFO] FaceEMARSystem: [S2|all] APCER=0.0000, BPCER=0.5333, ACER=0.2667, Acc=0.5000, F1=0.6364
+2026-07-20 20:11:12,416 [INFO] FaceEMARSystem: [S2|normal_60cm] APCER=0.0000, BPCER=0.5333, ACER=0.2667, Acc=0.5000, F1=0.6364
+2026-07-20 20:11:12,427 [INFO] FaceEMARSystem: [S3|all] APCER=0.0000, BPCER=0.7333, ACER=0.3667, Acc=0.3125, F1=0.4211
+2026-07-20 20:11:12,436 [INFO] FaceEMARSystem: [S3|normal_60cm] APCER=0.0000, BPCER=0.7333, ACER=0.3667, Acc=0.3125, F1=0.4211
+2026-07-20 20:11:12,438 [INFO] FaceEMARSystem: Laporan evaluasi disimpan: results\evaluation_report.txt
+2026-07-20 23:41:11,900 [INFO] FaceEMARSystem: Menginisialisasi FaceEMARSystem...
+2026-07-20 23:41:11,901 [INFO] FaceEMARSystem: Menginisialisasi FaceNet pada device: cpu
+2026-07-20 23:41:11,951 [INFO] FaceEMARSystem: MTCNN diinisialisasi (image_size=160, margin=20)
+2026-07-20 23:41:12,391 [INFO] FaceEMARSystem: InceptionResnetV1 (VGGFace2) dimuat ke device
+2026-07-20 23:41:12,413 [INFO] FaceEMARSystem: Galeri dimuat: 12 subjek
+2026-07-20 23:41:13,791 [INFO] FaceEMARSystem: dlib 68-Landmark Predictor diinisialisasi (F:\Face Verification Presensi\presensi-facenet-emar\models\shape_predictor_68_face_landmarks.dat)
+2026-07-20 23:41:13,801 [INFO] FaceEMARSystem: Database siap: logs\attendance.db
+2026-07-20 23:41:13,802 [INFO] FaceEMARSystem: FaceEMARSystem siap.
+2026-07-20 23:41:14,125 [INFO] FaceEMARSystem: Enrollment S01: tekan SPASI untuk capture, 'q' untuk selesai
+2026-07-20 23:45:04,018 [INFO] FaceEMARSystem: Menginisialisasi FaceEMARSystem...
+2026-07-20 23:45:04,018 [INFO] FaceEMARSystem: Menginisialisasi FaceNet pada device: cpu
+2026-07-20 23:45:04,064 [INFO] FaceEMARSystem: MTCNN diinisialisasi (image_size=160, margin=20)
+2026-07-20 23:45:04,513 [INFO] FaceEMARSystem: InceptionResnetV1 (VGGFace2) dimuat ke device
+2026-07-20 23:45:04,514 [INFO] FaceEMARSystem: Galeri dimuat: 12 subjek
+2026-07-20 23:45:05,809 [INFO] FaceEMARSystem: dlib 68-Landmark Predictor diinisialisasi (F:\Face Verification Presensi\presensi-facenet-emar\models\shape_predictor_68_face_landmarks.dat)
+2026-07-20 23:45:05,819 [INFO] FaceEMARSystem: Database siap: logs\attendance.db
+2026-07-20 23:45:05,821 [INFO] FaceEMARSystem: FaceEMARSystem siap.
+2026-07-20 23:45:06,334 [INFO] FaceEMARSystem: Enrollment S01: tekan SPASI untuk capture, 'q' untuk selesai
+2026-07-20 23:47:09,380 [INFO] FaceEMARSystem: Menginisialisasi FaceEMARSystem...
+2026-07-20 23:47:09,381 [INFO] FaceEMARSystem: Menginisialisasi FaceNet pada device: cpu
+2026-07-20 23:47:09,406 [INFO] FaceEMARSystem: MTCNN diinisialisasi (image_size=160, margin=20)
+2026-07-20 23:47:09,845 [INFO] FaceEMARSystem: InceptionResnetV1 (VGGFace2) dimuat ke device
+2026-07-20 23:47:09,847 [INFO] FaceEMARSystem: Galeri dimuat: 12 subjek
+2026-07-20 23:47:11,137 [INFO] FaceEMARSystem: dlib 68-Landmark Predictor diinisialisasi (F:\Face Verification Presensi\presensi-facenet-emar\models\shape_predictor_68_face_landmarks.dat)
+2026-07-20 23:47:11,146 [INFO] FaceEMARSystem: Database siap: logs\attendance.db
+2026-07-20 23:47:11,148 [INFO] FaceEMARSystem: FaceEMARSystem siap.
+2026-07-20 23:47:11,964 [INFO] FaceEMARSystem: Enrollment S01: tekan SPASI untuk capture, 'q' untuk selesai
+2026-07-20 23:47:45,594 [INFO] FaceEMARSystem: Menginisialisasi FaceEMARSystem...
+2026-07-20 23:47:45,594 [INFO] FaceEMARSystem: Menginisialisasi FaceNet pada device: cpu
+2026-07-20 23:47:45,619 [INFO] FaceEMARSystem: MTCNN diinisialisasi (image_size=160, margin=20)
+2026-07-20 23:47:46,048 [INFO] FaceEMARSystem: InceptionResnetV1 (VGGFace2) dimuat ke device
+2026-07-20 23:47:46,049 [INFO] FaceEMARSystem: Galeri dimuat: 12 subjek
+2026-07-20 23:47:47,303 [INFO] FaceEMARSystem: dlib 68-Landmark Predictor diinisialisasi (F:\Face Verification Presensi\presensi-facenet-emar\models\shape_predictor_68_face_landmarks.dat)
+2026-07-20 23:47:47,304 [INFO] FaceEMARSystem: Database siap: logs\attendance.db
+2026-07-20 23:47:47,305 [INFO] FaceEMARSystem: FaceEMARSystem siap.
+2026-07-20 23:47:57,745 [INFO] FaceEMARSystem: Enrollment S01: tekan SPASI untuk capture, 'q' untuk selesai
+2026-07-20 23:49:38,587 [INFO] FaceEMARSystem: Frame 1/5 di-capture
+2026-07-20 23:50:15,441 [INFO] FaceEMARSystem: Galeri disimpan: 12 subjek
+2026-07-20 23:50:15,441 [INFO] FaceEMARSystem: Enrollment berhasil: S01 (Nama Guru) — 1 frames
+2026-07-21 09:38:30,846 [INFO] FaceEMARSystem: Menginisialisasi FaceEMARSystem...
+2026-07-21 09:38:30,847 [INFO] FaceEMARSystem: Menginisialisasi FaceNet pada device: cpu
+2026-07-21 09:38:30,930 [INFO] FaceEMARSystem: MTCNN diinisialisasi (image_size=160, margin=20)
+2026-07-21 09:38:31,368 [INFO] FaceEMARSystem: InceptionResnetV1 (VGGFace2) dimuat ke device
+2026-07-21 09:38:31,368 [INFO] FaceEMARSystem: Galeri kosong — mulai enrollment baru
+2026-07-21 09:38:32,630 [INFO] FaceEMARSystem: dlib 68-Landmark Predictor diinisialisasi (F:\Face Verification Presensi\presensi-facenet-emar\models\shape_predictor_68_face_landmarks.dat)
+2026-07-21 09:38:32,642 [INFO] FaceEMARSystem: Database siap: logs\attendance.db
+2026-07-21 09:38:32,643 [INFO] FaceEMARSystem: FaceEMARSystem siap.
+2026-07-21 09:38:32,648 [INFO] FaceEMARSystem: Flask API berjalan di http://127.0.0.1:5000
+2026-07-21 09:38:32,687 [INFO] werkzeug: [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on http://127.0.0.1:5000
+2026-07-21 09:38:32,687 [INFO] werkzeug: [33mPress CTRL+C to quit[0m
+2026-07-21 09:47:16,619 [INFO] FaceEMARSystem: Menginisialisasi FaceEMARSystem...
+2026-07-21 09:47:16,620 [INFO] FaceEMARSystem: Menginisialisasi FaceNet pada device: cpu
+2026-07-21 09:47:16,647 [INFO] FaceEMARSystem: MTCNN diinisialisasi (image_size=160, margin=20)
+2026-07-21 09:47:17,076 [INFO] FaceEMARSystem: InceptionResnetV1 (VGGFace2) dimuat ke device
+2026-07-21 09:47:17,076 [INFO] FaceEMARSystem: Galeri kosong — mulai enrollment baru
+2026-07-21 09:47:18,415 [INFO] FaceEMARSystem: dlib 68-Landmark Predictor diinisialisasi (F:\Face Verification Presensi\presensi-facenet-emar\models\shape_predictor_68_face_landmarks.dat)
+2026-07-21 09:47:18,416 [INFO] FaceEMARSystem: Database siap: logs\attendance.db
+2026-07-21 09:47:18,417 [INFO] FaceEMARSystem: FaceEMARSystem siap.
+2026-07-21 09:47:18,421 [INFO] FaceEMARSystem: Flask API berjalan di http://127.0.0.1:5000
+2026-07-21 09:47:18,430 [INFO] werkzeug: [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on http://127.0.0.1:5000
+2026-07-21 09:47:18,430 [INFO] werkzeug: [33mPress CTRL+C to quit[0m
+2026-07-23 20:35:51,037 [INFO] FaceEMARSystem: Menginisialisasi FaceEMARSystem...
+2026-07-23 20:35:51,038 [INFO] FaceEMARSystem: Menginisialisasi FaceNet pada device: cpu
+2026-07-23 20:35:51,113 [INFO] FaceEMARSystem: MTCNN diinisialisasi (image_size=160, margin=20)
+2026-07-23 20:35:51,518 [INFO] FaceEMARSystem: InceptionResnetV1 (VGGFace2) dimuat ke device
+2026-07-23 20:35:51,518 [INFO] FaceEMARSystem: Galeri kosong — mulai enrollment baru
+2026-07-23 20:35:52,776 [INFO] FaceEMARSystem: dlib 68-Landmark Predictor diinisialisasi (F:\Face Verification Presensi\presensi-facenet-emar\models\shape_predictor_68_face_landmarks.dat)
+2026-07-23 20:35:52,787 [INFO] FaceEMARSystem: Database siap: logs\attendance.db
+2026-07-23 20:35:52,788 [INFO] FaceEMARSystem: FaceEMARSystem siap.
+2026-07-23 20:35:52,793 [INFO] FaceEMARSystem: Flask API berjalan di http://127.0.0.1:5000
+2026-07-23 20:35:52,828 [INFO] werkzeug: [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on http://127.0.0.1:5000
+2026-07-23 20:35:52,828 [INFO] werkzeug: [33mPress CTRL+C to quit[0m
+2026-07-23 21:22:02,535 [WARNING] FaceEMARSystem: verify(2): subjek tidak ditemukan di galeri
+2026-07-23 21:22:02,565 [INFO] werkzeug: 127.0.0.1 - - [23/Jul/2026 21:22:02] "POST /verify HTTP/1.1" 200 -
+2026-07-23 21:50:10,762 [INFO] FaceEMARSystem: Menginisialisasi FaceNet pada device: cpu
+2026-07-23 21:50:10,805 [INFO] FaceEMARSystem: MTCNN diinisialisasi (image_size=160, margin=20)
+2026-07-23 21:50:11,411 [INFO] FaceEMARSystem: InceptionResnetV1 (VGGFace2) dimuat ke device
+2026-07-23 21:50:11,412 [INFO] FaceEMARSystem: Galeri kosong — mulai enrollment baru
+2026-07-23 21:50:11,417 [INFO] FaceEMARSystem: Galeri disimpan: 1 subjek
+2026-07-23 21:50:24,328 [INFO] FaceEMARSystem: Menginisialisasi FaceNet pada device: cpu
+2026-07-23 21:50:24,350 [INFO] FaceEMARSystem: MTCNN diinisialisasi (image_size=160, margin=20)
+2026-07-23 21:50:24,731 [INFO] FaceEMARSystem: InceptionResnetV1 (VGGFace2) dimuat ke device
+2026-07-23 21:50:24,731 [INFO] FaceEMARSystem: Galeri dimuat: 1 subjek
+2026-07-23 21:50:24,732 [INFO] FaceEMARSystem: Galeri disimpan: 1 subjek
+2026-07-23 21:56:45,991 [INFO] FaceEMARSystem: Menginisialisasi FaceNet pada device: cpu
+2026-07-23 21:56:46,033 [INFO] FaceEMARSystem: MTCNN diinisialisasi (image_size=160, margin=20)
+2026-07-23 21:56:46,456 [INFO] FaceEMARSystem: InceptionResnetV1 (VGGFace2) dimuat ke device
+2026-07-23 21:56:46,457 [INFO] FaceEMARSystem: Galeri dimuat: 1 subjek
+2026-07-23 21:57:00,891 [INFO] FaceEMARSystem: Galeri disimpan: 1 subjek
+2026-07-23 21:57:00,891 [INFO] FaceEMARSystem: Enrollment berhasil: TEST-QALWANI-001 (Qalwani Anugerah) — 36 frames
+2026-07-23 21:57:00,892 [INFO] FaceEMARSystem: Galeri disimpan: 1 subjek
+2026-07-23 21:57:22,177 [INFO] FaceEMARSystem: Menginisialisasi FaceEMARSystem...
+2026-07-23 21:57:22,178 [INFO] FaceEMARSystem: Menginisialisasi FaceNet pada device: cpu
+2026-07-23 21:57:22,198 [INFO] FaceEMARSystem: MTCNN diinisialisasi (image_size=160, margin=20)
+2026-07-23 21:57:22,521 [INFO] FaceEMARSystem: InceptionResnetV1 (VGGFace2) dimuat ke device
+2026-07-23 21:57:22,521 [INFO] FaceEMARSystem: Galeri dimuat: 1 subjek
+2026-07-23 21:57:23,755 [INFO] FaceEMARSystem: dlib 68-Landmark Predictor diinisialisasi (F:\Face Verification Presensi\presensi-facenet-emar\models\shape_predictor_68_face_landmarks.dat)
+2026-07-23 21:57:23,763 [INFO] FaceEMARSystem: Database siap: logs\attendance.db
+2026-07-23 21:57:23,764 [INFO] FaceEMARSystem: FaceEMARSystem siap.
+2026-07-23 21:58:04,627 [INFO] FaceEMARSystem: Menginisialisasi FaceEMARSystem...
+2026-07-23 21:58:04,628 [INFO] FaceEMARSystem: Menginisialisasi FaceNet pada device: cpu
+2026-07-23 21:58:04,673 [INFO] FaceEMARSystem: MTCNN diinisialisasi (image_size=160, margin=20)
+2026-07-23 21:58:05,089 [INFO] FaceEMARSystem: InceptionResnetV1 (VGGFace2) dimuat ke device
+2026-07-23 21:58:05,089 [INFO] FaceEMARSystem: Galeri dimuat: 1 subjek
+2026-07-23 21:58:06,396 [INFO] FaceEMARSystem: dlib 68-Landmark Predictor diinisialisasi (F:\Face Verification Presensi\presensi-facenet-emar\models\shape_predictor_68_face_landmarks.dat)
+2026-07-23 21:58:06,406 [INFO] FaceEMARSystem: Database siap: logs\attendance.db
+2026-07-23 21:58:06,407 [INFO] FaceEMARSystem: FaceEMARSystem siap.
+2026-07-23 22:02:44,361 [INFO] FaceEMARSystem: Menginisialisasi FaceNet pada device: cpu
+2026-07-23 22:02:44,404 [INFO] FaceEMARSystem: MTCNN diinisialisasi (image_size=160, margin=20)
+2026-07-23 22:02:44,835 [INFO] FaceEMARSystem: InceptionResnetV1 (VGGFace2) dimuat ke device
+2026-07-23 22:02:44,836 [INFO] FaceEMARSystem: Galeri dimuat: 1 subjek
+2026-07-23 22:02:58,862 [INFO] FaceEMARSystem: Galeri disimpan: 1 subjek
+2026-07-23 22:02:58,862 [INFO] FaceEMARSystem: Enrollment berhasil: TEST-QALWANI-001 (Qalwani Anugerah) — 36 frames
+2026-07-23 22:02:58,863 [INFO] FaceEMARSystem: Galeri disimpan: 1 subjek
+2026-07-23 22:03:12,293 [INFO] FaceEMARSystem: Menginisialisasi FaceEMARSystem...
+2026-07-23 22:03:12,293 [INFO] FaceEMARSystem: Menginisialisasi FaceNet pada device: cpu
+2026-07-23 22:03:12,336 [INFO] FaceEMARSystem: MTCNN diinisialisasi (image_size=160, margin=20)
+2026-07-23 22:03:12,753 [INFO] FaceEMARSystem: InceptionResnetV1 (VGGFace2) dimuat ke device
+2026-07-23 22:03:12,753 [INFO] FaceEMARSystem: Galeri dimuat: 1 subjek
+2026-07-23 22:03:14,106 [INFO] FaceEMARSystem: dlib 68-Landmark Predictor diinisialisasi (F:\Face Verification Presensi\presensi-facenet-emar\models\shape_predictor_68_face_landmarks.dat)
+2026-07-23 22:03:14,117 [INFO] FaceEMARSystem: Database siap: logs\attendance.db
+2026-07-23 22:03:14,118 [INFO] FaceEMARSystem: FaceEMARSystem siap.
+2026-07-23 22:09:34,808 [WARNING] FaceEMARSystem: verify(2): subjek tidak ditemukan di galeri
+2026-07-23 22:09:34,844 [INFO] werkzeug: 127.0.0.1 - - [23/Jul/2026 22:09:34] "POST /verify HTTP/1.1" 200 -
+2026-07-23 22:10:09,158 [WARNING] FaceEMARSystem: verify(2): subjek tidak ditemukan di galeri
+2026-07-23 22:10:09,184 [INFO] werkzeug: 127.0.0.1 - - [23/Jul/2026 22:10:09] "POST /verify HTTP/1.1" 200 -
+2026-07-23 22:13:42,620 [WARNING] FaceEMARSystem: verify(2): subjek tidak ditemukan di galeri
+2026-07-23 22:13:42,644 [INFO] werkzeug: 127.0.0.1 - - [23/Jul/2026 22:13:42] "POST /verify HTTP/1.1" 200 -
+2026-07-23 22:20:43,038 [WARNING] FaceEMARSystem: verify(2): subjek tidak ditemukan di galeri
+2026-07-23 22:20:43,069 [INFO] werkzeug: 127.0.0.1 - - [23/Jul/2026 22:20:43] "POST /verify HTTP/1.1" 200 -
+2026-07-23 22:23:42,937 [INFO] FaceEMARSystem: Menginisialisasi FaceNet pada device: cpu
+2026-07-23 22:23:42,973 [INFO] FaceEMARSystem: MTCNN diinisialisasi (image_size=160, margin=20)
+2026-07-23 22:23:43,378 [INFO] FaceEMARSystem: InceptionResnetV1 (VGGFace2) dimuat ke device
+2026-07-23 22:23:43,379 [INFO] FaceEMARSystem: Galeri dimuat: 1 subjek
+2026-07-23 22:23:57,655 [INFO] FaceEMARSystem: Galeri disimpan: 1 subjek
+2026-07-23 22:23:57,655 [INFO] FaceEMARSystem: Enrollment berhasil: TEST-QALWANI-001 (Qalwani Anugerah) — 37 frames
+2026-07-23 22:23:57,656 [INFO] FaceEMARSystem: Galeri disimpan: 1 subjek
+2026-07-23 22:24:11,550 [INFO] FaceEMARSystem: Menginisialisasi FaceEMARSystem...
+2026-07-23 22:24:11,550 [INFO] FaceEMARSystem: Menginisialisasi FaceNet pada device: cpu
+2026-07-23 22:24:11,571 [INFO] FaceEMARSystem: MTCNN diinisialisasi (image_size=160, margin=20)
+2026-07-23 22:24:11,897 [INFO] FaceEMARSystem: InceptionResnetV1 (VGGFace2) dimuat ke device
+2026-07-23 22:24:11,897 [INFO] FaceEMARSystem: Galeri dimuat: 1 subjek
+2026-07-23 22:24:13,090 [INFO] FaceEMARSystem: dlib 68-Landmark Predictor diinisialisasi (F:\Face Verification Presensi\presensi-facenet-emar\models\shape_predictor_68_face_landmarks.dat)
+2026-07-23 22:24:13,099 [INFO] FaceEMARSystem: Database siap: logs\attendance.db
+2026-07-23 22:24:13,100 [INFO] FaceEMARSystem: FaceEMARSystem siap.
+2026-07-23 22:29:14,178 [WARNING] FaceEMARSystem: verify(2): subjek tidak ditemukan di galeri
+2026-07-23 22:29:14,215 [INFO] werkzeug: 127.0.0.1 - - [23/Jul/2026 22:29:14] "POST /verify HTTP/1.1" 200 -
+2026-07-23 22:29:43,411 [WARNING] FaceEMARSystem: verify(2): subjek tidak ditemukan di galeri
+2026-07-23 22:29:43,444 [INFO] werkzeug: 127.0.0.1 - - [23/Jul/2026 22:29:43] "POST /verify HTTP/1.1" 200 -
+2026-07-23 22:44:55,314 [WARNING] FaceEMARSystem: verify(TEST-QALWANI-001): subjek tidak ditemukan di galeri
+2026-07-23 22:44:55,343 [INFO] werkzeug: 127.0.0.1 - - [23/Jul/2026 22:44:55] "POST /verify HTTP/1.1" 200 -
+2026-07-23 22:45:16,191 [WARNING] FaceEMARSystem: verify(TEST-QALWANI-001): subjek tidak ditemukan di galeri
+2026-07-23 22:45:16,216 [INFO] werkzeug: 127.0.0.1 - - [23/Jul/2026 22:45:16] "POST /verify HTTP/1.1" 200 -
+2026-07-23 22:47:41,621 [INFO] FaceEMARSystem: Menginisialisasi FaceNet pada device: cpu
+2026-07-23 22:47:41,684 [INFO] FaceEMARSystem: MTCNN diinisialisasi (image_size=160, margin=20)
+2026-07-23 22:47:42,104 [INFO] FaceEMARSystem: InceptionResnetV1 (VGGFace2) dimuat ke device
+2026-07-23 22:47:42,104 [INFO] FaceEMARSystem: Galeri dimuat: 1 subjek
+2026-07-23 22:49:08,572 [INFO] FaceEMARSystem: Galeri disimpan: 1 subjek
+2026-07-23 22:49:08,572 [INFO] FaceEMARSystem: Enrollment berhasil: TEST-QALWANI-001 (Qalwani Anugerah) — 250 frames
+2026-07-23 22:49:08,573 [INFO] FaceEMARSystem: Galeri disimpan: 1 subjek
+2026-07-23 22:49:24,735 [INFO] werkzeug: 127.0.0.1 - - [23/Jul/2026 22:49:24] "GET /subjects HTTP/1.1" 200 -
+2026-07-23 22:49:27,396 [INFO] werkzeug: 127.0.0.1 - - [23/Jul/2026 22:49:27] "GET /subjects HTTP/1.1" 200 -
+2026-07-23 22:49:37,747 [INFO] werkzeug: 127.0.0.1 - - [23/Jul/2026 22:49:37] "GET /subjects HTTP/1.1" 200 -
+2026-07-23 22:49:57,665 [INFO] FaceEMARSystem: Menginisialisasi FaceEMARSystem...
+2026-07-23 22:49:57,665 [INFO] FaceEMARSystem: Menginisialisasi FaceNet pada device: cpu
+2026-07-23 22:49:57,689 [INFO] FaceEMARSystem: MTCNN diinisialisasi (image_size=160, margin=20)
+2026-07-23 22:49:58,109 [INFO] FaceEMARSystem: InceptionResnetV1 (VGGFace2) dimuat ke device
+2026-07-23 22:49:58,110 [INFO] FaceEMARSystem: Galeri dimuat: 1 subjek
+2026-07-23 22:49:59,478 [INFO] FaceEMARSystem: dlib 68-Landmark Predictor diinisialisasi (F:\Face Verification Presensi\presensi-facenet-emar\models\shape_predictor_68_face_landmarks.dat)
+2026-07-23 22:49:59,494 [INFO] FaceEMARSystem: Database siap: logs\attendance.db
+2026-07-23 22:49:59,495 [INFO] FaceEMARSystem: FaceEMARSystem siap.
+2026-07-23 22:49:59,501 [INFO] FaceEMARSystem: Flask API berjalan di http://127.0.0.1:5000
+2026-07-23 22:49:59,543 [INFO] werkzeug: [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on http://127.0.0.1:5000
+2026-07-23 22:49:59,544 [INFO] werkzeug: [33mPress CTRL+C to quit[0m
+2026-07-23 22:50:02,379 [INFO] FaceEMARSystem: Galeri dimuat: 1 subjek
+2026-07-23 22:50:02,379 [INFO] werkzeug: 127.0.0.1 - - [23/Jul/2026 22:50:02] "GET /subjects HTTP/1.1" 200 -
+2026-07-23 22:57:15,383 [INFO] FaceEMARSystem: Menginisialisasi FaceEMARSystem...
+2026-07-23 22:57:15,384 [INFO] FaceEMARSystem: Menginisialisasi FaceNet pada device: cpu
+2026-07-23 22:57:15,409 [INFO] FaceEMARSystem: MTCNN diinisialisasi (image_size=160, margin=20)
+2026-07-23 22:57:15,859 [INFO] FaceEMARSystem: InceptionResnetV1 (VGGFace2) dimuat ke device
+2026-07-23 22:57:15,860 [INFO] FaceEMARSystem: Galeri dimuat: 1 subjek
+2026-07-23 22:57:17,240 [INFO] FaceEMARSystem: dlib 68-Landmark Predictor diinisialisasi (F:\Face Verification Presensi\presensi-facenet-emar\models\shape_predictor_68_face_landmarks.dat)
+2026-07-23 22:57:17,241 [INFO] FaceEMARSystem: Database siap: logs\attendance.db
+2026-07-23 22:57:17,242 [INFO] FaceEMARSystem: FaceEMARSystem siap.
+2026-07-23 22:57:17,245 [INFO] FaceEMARSystem: Flask API berjalan di http://127.0.0.1:5000
+2026-07-23 22:57:17,259 [INFO] werkzeug: [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on http://127.0.0.1:5000
+2026-07-23 22:57:17,259 [INFO] werkzeug: [33mPress CTRL+C to quit[0m
+2026-07-23 22:57:17,907 [INFO] FaceEMARSystem: Galeri dimuat: 1 subjek
+2026-07-23 22:57:17,907 [INFO] werkzeug: 127.0.0.1 - - [23/Jul/2026 22:57:17] "GET /subjects HTTP/1.1" 200 -
+2026-07-23 22:58:56,403 [INFO] werkzeug: 127.0.0.1 - - [23/Jul/2026 22:58:56] "POST /verify HTTP/1.1" 200 -
+2026-07-23 22:59:22,197 [INFO] werkzeug: 127.0.0.1 - - [23/Jul/2026 22:59:22] "POST /verify HTTP/1.1" 200 -
+2026-07-25 15:01:54,874 [INFO] FaceEMARSystem: Menginisialisasi FaceEMARSystem...
+2026-07-25 15:01:54,875 [INFO] FaceEMARSystem: Menginisialisasi FaceNet pada device: cpu
+2026-07-25 15:01:54,955 [INFO] FaceEMARSystem: MTCNN diinisialisasi (image_size=160, margin=20)
+2026-07-25 15:01:55,365 [INFO] FaceEMARSystem: InceptionResnetV1 (VGGFace2) dimuat ke device
+2026-07-25 15:01:55,386 [INFO] FaceEMARSystem: Galeri dimuat: 1 subjek
+2026-07-25 15:01:56,586 [INFO] FaceEMARSystem: dlib 68-Landmark Predictor diinisialisasi (F:\Face Verification Presensi\presensi-facenet-emar\models\shape_predictor_68_face_landmarks.dat)
+2026-07-25 15:01:56,597 [INFO] FaceEMARSystem: Database siap: logs\attendance.db
+2026-07-25 15:01:56,598 [INFO] FaceEMARSystem: FaceEMARSystem siap.
+2026-07-25 15:01:56,602 [INFO] FaceEMARSystem: Flask API berjalan di http://127.0.0.1:5000
+2026-07-25 15:01:56,634 [INFO] werkzeug: [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on http://127.0.0.1:5000
+2026-07-25 15:01:56,635 [INFO] werkzeug: [33mPress CTRL+C to quit[0m
+2026-07-25 15:13:01,992 [INFO] werkzeug: 127.0.0.1 - - [25/Jul/2026 15:13:01] "[33mPOST /api/verify HTTP/1.1[0m" 404 -
+2026-07-25 15:15:08,265 [INFO] werkzeug: 127.0.0.1 - - [25/Jul/2026 15:15:08] "[33mPOST /api/verify HTTP/1.1[0m" 404 -
+2026-07-25 15:15:23,815 [INFO] werkzeug: 127.0.0.1 - - [25/Jul/2026 15:15:23] "[33mPOST /api/verify HTTP/1.1[0m" 404 -
+2026-07-25 15:15:55,741 [INFO] werkzeug: 127.0.0.1 - - [25/Jul/2026 15:15:55] "[33mGET / HTTP/1.1[0m" 404 -
+2026-07-25 15:16:07,661 [INFO] werkzeug: 127.0.0.1 - - [25/Jul/2026 15:16:07] "[33mPOST /api/verify HTTP/1.1[0m" 404 -
+2026-07-25 18:28:28,569 [INFO] FaceEMARSystem: Menginisialisasi FaceEMARSystem...
+2026-07-25 18:28:28,570 [INFO] FaceEMARSystem: Menginisialisasi FaceNet pada device: cpu
+2026-07-25 18:28:28,681 [INFO] FaceEMARSystem: MTCNN diinisialisasi (image_size=160, margin=20)
+2026-07-25 18:28:29,132 [INFO] FaceEMARSystem: InceptionResnetV1 (VGGFace2) dimuat ke device
+2026-07-25 18:28:29,135 [INFO] FaceEMARSystem: Galeri dimuat: 1 subjek
+2026-07-25 18:28:30,440 [INFO] FaceEMARSystem: dlib 68-Landmark Predictor diinisialisasi (F:\Face Verification Presensi\presensi-facenet-emar\models\shape_predictor_68_face_landmarks.dat)
+2026-07-25 18:28:30,467 [INFO] FaceEMARSystem: Database siap: logs\attendance.db
+2026-07-25 18:28:30,470 [INFO] FaceEMARSystem: FaceEMARSystem siap.
+2026-07-25 18:28:30,474 [INFO] FaceEMARSystem: Flask API berjalan di http://127.0.0.1:5000
+2026-07-25 18:28:30,521 [INFO] werkzeug: [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on http://127.0.0.1:5000
+2026-07-25 18:28:30,521 [INFO] werkzeug: [33mPress CTRL+C to quit[0m
+2026-07-25 18:40:12,402 [INFO] werkzeug: 127.0.0.1 - - [25/Jul/2026 18:40:12] "[33mPOST /api/verify HTTP/1.1[0m" 404 -
+2026-07-25 18:40:27,786 [INFO] werkzeug: 127.0.0.1 - - [25/Jul/2026 18:40:27] "[33mPOST /api/verify HTTP/1.1[0m" 404 -
+2026-07-25 18:51:05,338 [ERROR] facenet_emar_system: Exception on /health [GET]
+Traceback (most recent call last):
+  File "F:\Face Verification Presensi\presensi-facenet-emar\.venv\Lib\site-packages\flask\app.py", line 1511, in wsgi_app
+    response = self.full_dispatch_request()
+  File "F:\Face Verification Presensi\presensi-facenet-emar\.venv\Lib\site-packages\flask\app.py", line 919, in full_dispatch_request
+    rv = self.handle_user_exception(e)
+  File "F:\Face Verification Presensi\presensi-facenet-emar\.venv\Lib\site-packages\flask_cors\extension.py", line 206, in wrapped_function
+    return cors_after_request(app_any.make_response(f(*args, **kwargs)))
+                                                    ~^^^^^^^^^^^^^^^^^
+  File "F:\Face Verification Presensi\presensi-facenet-emar\.venv\Lib\site-packages\flask\app.py", line 917, in full_dispatch_request
+    rv = self.dispatch_request()
+  File "F:\Face Verification Presensi\presensi-facenet-emar\.venv\Lib\site-packages\flask\app.py", line 902, in dispatch_request
+    return self.ensure_sync(self.view_functions[rule.endpoint])(**view_args)  # type: ignore[no-any-return]
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^
+  File "F:\Face Verification Presensi\presensi-facenet-emar\facenet_emar_system.py", line 1892, in health
+    "mediapipe_ready": system.emar._mesh is not None,
+                       ^^^^^^^^^^^^^^^^^
+AttributeError: 'EMARModule' object has no attribute '_mesh'
+2026-07-25 18:51:05,373 [INFO] werkzeug: 127.0.0.1 - - [25/Jul/2026 18:51:05] "[35m[1mGET /health HTTP/1.1[0m" 500 -
+2026-07-25 18:57:55,433 [INFO] werkzeug: 127.0.0.1 - - [25/Jul/2026 18:57:55] "[31m[1mPOST /verify HTTP/1.1[0m" 400 -
+2026-07-25 18:58:09,406 [INFO] werkzeug: 127.0.0.1 - - [25/Jul/2026 18:58:09] "[31m[1mPOST /verify HTTP/1.1[0m" 400 -
+2026-07-25 18:58:23,989 [INFO] werkzeug: 127.0.0.1 - - [25/Jul/2026 18:58:23] "[31m[1mPOST /verify HTTP/1.1[0m" 400 -
+2026-07-25 18:58:30,740 [INFO] werkzeug: 127.0.0.1 - - [25/Jul/2026 18:58:30] "[33mPOST /api/verify HTTP/1.1[0m" 404 -
+2026-07-25 19:30:14,829 [INFO] werkzeug: 127.0.0.1 - - [25/Jul/2026 19:30:14] "POST /verify HTTP/1.1" 200 -
+2026-07-26 00:22:35,709 [INFO] FaceEMARSystem: Menginisialisasi FaceEMARSystem...
+2026-07-26 00:22:35,709 [INFO] FaceEMARSystem: Menginisialisasi FaceNet pada device: cpu
+2026-07-26 00:22:35,787 [INFO] FaceEMARSystem: MTCNN diinisialisasi (image_size=160, margin=20)
+2026-07-26 00:22:36,182 [INFO] FaceEMARSystem: InceptionResnetV1 (VGGFace2) dimuat ke device
+2026-07-26 00:22:36,199 [INFO] FaceEMARSystem: Galeri dimuat: 1 subjek
+2026-07-26 00:22:37,402 [INFO] FaceEMARSystem: dlib 68-Landmark Predictor diinisialisasi (F:\Face Verification Presensi\presensi-facenet-emar\models\shape_predictor_68_face_landmarks.dat)
+2026-07-26 00:22:37,413 [INFO] FaceEMARSystem: Database siap: logs\attendance.db
+2026-07-26 00:22:37,415 [INFO] FaceEMARSystem: FaceEMARSystem siap.
+2026-07-26 00:22:37,419 [INFO] FaceEMARSystem: Flask API berjalan di http://127.0.0.1:5000
+2026-07-26 00:22:37,456 [INFO] werkzeug: [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on http://127.0.0.1:5000
+2026-07-26 00:22:37,457 [INFO] werkzeug: [33mPress CTRL+C to quit[0m
+2026-07-26 00:26:54,657 [INFO] werkzeug: 127.0.0.1 - - [26/Jul/2026 00:26:54] "POST /verify HTTP/1.1" 200 -
+2026-07-26 00:27:25,430 [INFO] werkzeug: 127.0.0.1 - - [26/Jul/2026 00:27:25] "POST /verify HTTP/1.1" 200 -
+2026-07-26 00:36:19,728 [INFO] werkzeug: 127.0.0.1 - - [26/Jul/2026 00:36:19] "POST /verify HTTP/1.1" 200 -
+2026-07-26 00:36:42,476 [INFO] werkzeug: 127.0.0.1 - - [26/Jul/2026 00:36:42] "POST /verify HTTP/1.1" 200 -
+2026-07-26 01:00:44,330 [INFO] werkzeug: 127.0.0.1 - - [26/Jul/2026 01:00:44] "POST /verify HTTP/1.1" 200 -
+2026-07-26 01:01:24,677 [INFO] werkzeug: 127.0.0.1 - - [26/Jul/2026 01:01:24] "POST /verify HTTP/1.1" 200 -
+2026-07-26 01:07:15,340 [INFO] werkzeug: 127.0.0.1 - - [26/Jul/2026 01:07:15] "POST /verify HTTP/1.1" 200 -
+2026-07-26 01:08:16,507 [INFO] werkzeug: 127.0.0.1 - - [26/Jul/2026 01:08:16] "POST /verify HTTP/1.1" 200 -
+2026-07-26 01:08:32,733 [INFO] werkzeug: 127.0.0.1 - - [26/Jul/2026 01:08:32] "POST /verify HTTP/1.1" 200 -
+2026-07-26 01:08:51,858 [INFO] werkzeug: 127.0.0.1 - - [26/Jul/2026 01:08:51] "POST /verify HTTP/1.1" 200 -
+2026-07-26 01:09:19,470 [INFO] werkzeug: 127.0.0.1 - - [26/Jul/2026 01:09:19] "POST /verify HTTP/1.1" 200 -
+2026-07-26 01:09:57,504 [INFO] werkzeug: 127.0.0.1 - - [26/Jul/2026 01:09:57] "POST /verify HTTP/1.1" 200 -
+2026-07-26 01:26:48,652 [INFO] werkzeug: 127.0.0.1 - - [26/Jul/2026 01:26:48] "POST /verify HTTP/1.1" 200 -
+2026-07-26 01:27:08,199 [INFO] werkzeug: 127.0.0.1 - - [26/Jul/2026 01:27:08] "POST /verify HTTP/1.1" 200 -
+2026-07-26 02:45:03,462 [INFO] werkzeug: 127.0.0.1 - - [26/Jul/2026 02:45:03] "POST /verify HTTP/1.1" 200 -
+2026-07-26 02:45:36,240 [INFO] werkzeug: 127.0.0.1 - - [26/Jul/2026 02:45:36] "POST /verify HTTP/1.1" 200 -
+2026-07-26 03:04:07,683 [INFO] werkzeug: 127.0.0.1 - - [26/Jul/2026 03:04:07] "POST /verify HTTP/1.1" 200 -
+2026-07-26 03:36:23,865 [INFO] werkzeug: 127.0.0.1 - - [26/Jul/2026 03:36:23] "POST /verify HTTP/1.1" 200 -
+2026-07-26 03:39:23,840 [INFO] werkzeug: 127.0.0.1 - - [26/Jul/2026 03:39:23] "POST /verify HTTP/1.1" 200 -
+2026-07-26 03:40:57,651 [INFO] werkzeug: 127.0.0.1 - - [26/Jul/2026 03:40:57] "POST /verify HTTP/1.1" 200 -
+2026-07-26 03:41:21,022 [INFO] werkzeug: 127.0.0.1 - - [26/Jul/2026 03:41:21] "POST /verify HTTP/1.1" 200 -
+2026-07-26 04:04:14,875 [INFO] werkzeug: 127.0.0.1 - - [26/Jul/2026 04:04:14] "POST /verify HTTP/1.1" 200 -
+2026-07-26 04:04:27,851 [INFO] werkzeug: 127.0.0.1 - - [26/Jul/2026 04:04:27] "POST /verify HTTP/1.1" 200 -
+2026-07-26 04:04:36,811 [INFO] werkzeug: 127.0.0.1 - - [26/Jul/2026 04:04:36] "POST /verify HTTP/1.1" 200 -
+2026-07-26 04:04:57,718 [INFO] werkzeug: 127.0.0.1 - - [26/Jul/2026 04:04:57] "POST /verify HTTP/1.1" 200 -
+2026-07-26 04:05:45,945 [INFO] werkzeug: 127.0.0.1 - - [26/Jul/2026 04:05:45] "POST /verify HTTP/1.1" 200 -
+2026-07-26 04:07:38,052 [INFO] werkzeug: 127.0.0.1 - - [26/Jul/2026 04:07:38] "POST /verify HTTP/1.1" 200 -
+2026-07-26 04:08:17,587 [INFO] werkzeug: 127.0.0.1 - - [26/Jul/2026 04:08:17] "POST /verify HTTP/1.1" 200 -
+2026-07-26 04:13:59,003 [INFO] werkzeug: 127.0.0.1 - - [26/Jul/2026 04:13:59] "POST /verify HTTP/1.1" 200 -
+2026-07-26 04:14:11,357 [INFO] werkzeug: 127.0.0.1 - - [26/Jul/2026 04:14:11] "POST /verify HTTP/1.1" 200 -
+2026-07-26 04:14:24,803 [INFO] werkzeug: 127.0.0.1 - - [26/Jul/2026 04:14:24] "POST /verify HTTP/1.1" 200 -
+2026-07-26 04:14:46,272 [INFO] werkzeug: 127.0.0.1 - - [26/Jul/2026 04:14:46] "POST /verify HTTP/1.1" 200 -
+2026-07-26 04:15:40,773 [INFO] werkzeug: 127.0.0.1 - - [26/Jul/2026 04:15:40] "POST /verify HTTP/1.1" 200 -
+2026-07-26 04:15:55,008 [INFO] werkzeug: 127.0.0.1 - - [26/Jul/2026 04:15:55] "POST /verify HTTP/1.1" 200 -
+2026-07-26 04:16:38,052 [INFO] werkzeug: 127.0.0.1 - - [26/Jul/2026 04:16:38] "POST /verify HTTP/1.1" 200 -
+2026-07-26 04:17:45,959 [INFO] werkzeug: 127.0.0.1 - - [26/Jul/2026 04:17:45] "POST /verify HTTP/1.1" 200 -
+2026-07-26 04:17:57,265 [INFO] werkzeug: 127.0.0.1 - - [26/Jul/2026 04:17:57] "POST /verify HTTP/1.1" 200 -
+2026-07-26 04:18:17,013 [INFO] werkzeug: 127.0.0.1 - - [26/Jul/2026 04:18:17] "POST /verify HTTP/1.1" 200 -
+2026-07-26 04:18:32,018 [INFO] werkzeug: 127.0.0.1 - - [26/Jul/2026 04:18:32] "POST /verify HTTP/1.1" 200 -
+2026-07-26 04:18:47,256 [INFO] werkzeug: 127.0.0.1 - - [26/Jul/2026 04:18:47] "POST /verify HTTP/1.1" 200 -
+2026-07-26 04:19:10,960 [INFO] werkzeug: 127.0.0.1 - - [26/Jul/2026 04:19:10] "POST /verify HTTP/1.1" 200 -
+2026-09-25 04:18:51,678 [INFO] FaceEMARSystem: Menginisialisasi FaceNet pada device: cpu
+2026-09-25 04:18:51,751 [INFO] FaceEMARSystem: MTCNN diinisialisasi (image_size=160, margin=20)
+2026-09-25 04:18:52,130 [INFO] FaceEMARSystem: InceptionResnetV1 (VGGFace2) dimuat ke device
+2026-09-25 04:18:52,131 [INFO] FaceEMARSystem: Galeri dimuat: 2 subjek
+2026-09-25 04:18:54,279 [INFO] FaceEMARSystem: Galeri disimpan: 3 subjek
+2026-09-25 04:18:54,279 [INFO] FaceEMARSystem: Enrollment berhasil: S07 (Reynaldi surya.S) — 1 frames
+2026-09-25 04:18:56,008 [INFO] FaceEMARSystem: Galeri disimpan: 4 subjek
+2026-09-25 04:18:56,008 [INFO] FaceEMARSystem: Enrollment berhasil: REYNALDISURYA (Reynaldi surya.S) — 1 frames
+2026-09-25 04:18:57,621 [INFO] FaceEMARSystem: Galeri disimpan: 5 subjek
+2026-09-25 04:18:57,622 [INFO] FaceEMARSystem: Enrollment berhasil: REYNALDISURYAS (Reynaldi surya.S) — 1 frames
+2026-09-25 04:18:59,145 [INFO] FaceEMARSystem: Galeri disimpan: 6 subjek
+2026-09-25 04:18:59,145 [INFO] FaceEMARSystem: Enrollment berhasil: S03 (Mauludin Mauludin) — 1 frames
+2026-09-25 04:19:00,489 [INFO] FaceEMARSystem: Galeri disimpan: 7 subjek
+2026-09-25 04:19:00,489 [INFO] FaceEMARSystem: Enrollment berhasil: MAULUDINMAULUDIN (Mauludin Mauludin) — 1 frames
+2026-09-25 04:19:01,872 [INFO] FaceEMARSystem: Galeri disimpan: 8 subjek
+2026-09-25 04:19:01,872 [INFO] FaceEMARSystem: Enrollment berhasil: MAULUDIN (Mauludin Mauludin) — 1 frames
+2026-09-25 04:19:02,378 [INFO] FaceEMARSystem: Galeri disimpan: 9 subjek
+2026-09-25 04:19:02,378 [INFO] FaceEMARSystem: Enrollment berhasil: V1 (nur holis) — 1 frames
+2026-09-25 04:19:02,813 [INFO] FaceEMARSystem: Galeri disimpan: 10 subjek
+2026-09-25 04:19:02,813 [INFO] FaceEMARSystem: Enrollment berhasil: S01 (nur holis) — 1 frames
+2026-09-25 04:19:03,242 [INFO] FaceEMARSystem: Galeri disimpan: 11 subjek
+2026-09-25 04:19:03,242 [INFO] FaceEMARSystem: Enrollment berhasil: NURHOLIS (nur holis) — 1 frames
+2026-09-25 04:19:03,672 [INFO] FaceEMARSystem: Galeri disimpan: 12 subjek
+2026-09-25 04:19:03,672 [INFO] FaceEMARSystem: Enrollment berhasil: V2 (nur holis) — 1 frames
+2026-09-25 04:19:04,155 [INFO] FaceEMARSystem: Galeri disimpan: 13 subjek
+2026-09-25 04:19:04,155 [INFO] FaceEMARSystem: Enrollment berhasil: V3 (nur holis) — 1 frames
+2026-09-25 04:19:04,626 [INFO] FaceEMARSystem: Galeri disimpan: 14 subjek
+2026-09-25 04:19:04,627 [INFO] FaceEMARSystem: Enrollment berhasil: QALWANI001 (nur holis) — 1 frames
+2026-09-25 04:19:05,109 [INFO] FaceEMARSystem: Galeri disimpan: 14 subjek
+2026-09-25 04:19:05,110 [INFO] FaceEMARSystem: Enrollment berhasil: V1 (nur holis) — 1 frames
+2026-09-25 04:19:05,551 [INFO] FaceEMARSystem: Galeri disimpan: 14 subjek
+2026-09-25 04:19:05,551 [INFO] FaceEMARSystem: Enrollment berhasil: S01 (nur holis) — 1 frames
+2026-09-25 04:19:05,996 [INFO] FaceEMARSystem: Galeri disimpan: 14 subjek
+2026-09-25 04:19:05,996 [INFO] FaceEMARSystem: Enrollment berhasil: NURHOLIS (nur holis) — 1 frames
+2026-09-25 04:19:06,425 [INFO] FaceEMARSystem: Galeri disimpan: 14 subjek
+2026-09-25 04:19:06,425 [INFO] FaceEMARSystem: Enrollment berhasil: V2 (nur holis) — 1 frames
+2026-09-25 04:19:06,856 [INFO] FaceEMARSystem: Galeri disimpan: 14 subjek
+2026-09-25 04:19:06,856 [INFO] FaceEMARSystem: Enrollment berhasil: V3 (nur holis) — 1 frames
+2026-09-25 04:19:07,292 [INFO] FaceEMARSystem: Galeri disimpan: 14 subjek
+2026-09-25 04:19:07,292 [INFO] FaceEMARSystem: Enrollment berhasil: QALWANI001 (nur holis) — 1 frames
+2026-09-25 04:19:08,413 [INFO] FaceEMARSystem: Galeri disimpan: 15 subjek
+2026-09-25 04:19:08,413 [INFO] FaceEMARSystem: Enrollment berhasil: KARMILA (Karmila Milla) — 1 frames
+2026-09-25 04:19:09,493 [INFO] FaceEMARSystem: Galeri disimpan: 16 subjek
+2026-09-25 04:19:09,494 [INFO] FaceEMARSystem: Enrollment berhasil: S06 (Karmila Milla) — 1 frames
+2026-09-25 04:19:10,560 [INFO] FaceEMARSystem: Galeri disimpan: 17 subjek
+2026-09-25 04:19:10,560 [INFO] FaceEMARSystem: Enrollment berhasil: KARMILAMILLA (Karmila Milla) — 1 frames
+2026-09-25 04:19:11,281 [INFO] FaceEMARSystem: Galeri disimpan: 18 subjek
+2026-09-25 04:19:11,282 [INFO] FaceEMARSystem: Enrollment berhasil: WERYSAPUTRA (Wery Saputra) — 1 frames
+2026-09-25 04:19:11,917 [INFO] FaceEMARSystem: Galeri disimpan: 19 subjek
+2026-09-25 04:19:11,917 [INFO] FaceEMARSystem: Enrollment berhasil: S09 (Wery Saputra) — 1 frames
+2026-09-25 04:19:12,395 [INFO] FaceEMARSystem: Galeri disimpan: 19 subjek
+2026-09-25 04:19:12,395 [INFO] FaceEMARSystem: Enrollment berhasil: WERYSAPUTRA (Wery Saputra) — 1 frames
+2026-09-25 04:19:12,829 [INFO] FaceEMARSystem: Galeri disimpan: 19 subjek
+2026-09-25 04:19:12,829 [INFO] FaceEMARSystem: Enrollment berhasil: S09 (Wery Saputra) — 1 frames
+2026-09-25 04:19:13,555 [INFO] FaceEMARSystem: Galeri disimpan: 20 subjek
+2026-09-25 04:19:13,555 [INFO] FaceEMARSystem: Enrollment berhasil: VIKYWIDIYANTI (Viky Widiyanti) — 1 frames
+2026-09-25 04:19:14,210 [INFO] FaceEMARSystem: Galeri disimpan: 21 subjek
+2026-09-25 04:19:14,210 [INFO] FaceEMARSystem: Enrollment berhasil: S02 (Viky Widiyanti) — 1 frames
+2026-09-25 04:19:14,864 [INFO] FaceEMARSystem: Galeri disimpan: 22 subjek
+2026-09-25 04:19:14,865 [INFO] FaceEMARSystem: Enrollment berhasil: FIKIWIDIYANTI (Viky Widiyanti) — 1 frames
+2026-09-25 04:19:15,006 [INFO] FaceEMARSystem: Galeri disimpan: 22 subjek
+2026-09-25 04:19:15,007 [INFO] FaceEMARSystem: Enrollment berhasil: V1 (nur holis) — 1 frames
+2026-09-25 04:19:15,112 [INFO] FaceEMARSystem: Galeri disimpan: 22 subjek
+2026-09-25 04:19:15,112 [INFO] FaceEMARSystem: Enrollment berhasil: S01 (nur holis) — 1 frames
+2026-09-25 04:19:15,223 [INFO] FaceEMARSystem: Galeri disimpan: 22 subjek
+2026-09-25 04:19:15,223 [INFO] FaceEMARSystem: Enrollment berhasil: NURHOLIS (nur holis) — 1 frames
+2026-09-25 04:19:15,338 [INFO] FaceEMARSystem: Galeri disimpan: 22 subjek
+2026-09-25 04:19:15,338 [INFO] FaceEMARSystem: Enrollment berhasil: V2 (nur holis) — 1 frames
+2026-09-25 04:19:15,445 [INFO] FaceEMARSystem: Galeri disimpan: 22 subjek
+2026-09-25 04:19:15,445 [INFO] FaceEMARSystem: Enrollment berhasil: V3 (nur holis) — 1 frames
+2026-09-25 04:19:15,565 [INFO] FaceEMARSystem: Galeri disimpan: 22 subjek
+2026-09-25 04:19:15,565 [INFO] FaceEMARSystem: Enrollment berhasil: QALWANI001 (nur holis) — 1 frames
+2026-09-25 04:19:15,994 [INFO] FaceEMARSystem: Galeri disimpan: 23 subjek
+2026-09-25 04:19:15,994 [INFO] FaceEMARSystem: Enrollment berhasil: SINTAYULISMA (Yulisma Shinta) — 1 frames
+2026-09-25 04:19:16,357 [INFO] FaceEMARSystem: Galeri disimpan: 24 subjek
+2026-09-25 04:19:16,357 [INFO] FaceEMARSystem: Enrollment berhasil: S13 (Yulisma Shinta) — 1 frames
+2026-09-25 04:19:16,738 [INFO] FaceEMARSystem: Galeri disimpan: 25 subjek
+2026-09-25 04:19:16,739 [INFO] FaceEMARSystem: Enrollment berhasil: YULISMASHINTA (Yulisma Shinta) — 1 frames
+2026-09-25 04:19:17,428 [INFO] FaceEMARSystem: Galeri disimpan: 26 subjek
+2026-09-25 04:19:17,429 [INFO] FaceEMARSystem: Enrollment berhasil: ARIELAZIDO (Arie Lazido) — 1 frames
+2026-09-25 04:19:18,729 [INFO] FaceEMARSystem: Galeri disimpan: 27 subjek
+2026-09-25 04:19:18,729 [INFO] FaceEMARSystem: Enrollment berhasil: S05 (Merli Yanti) — 1 frames
+2026-09-25 04:19:19,948 [INFO] FaceEMARSystem: Galeri disimpan: 28 subjek
+2026-09-25 04:19:19,949 [INFO] FaceEMARSystem: Enrollment berhasil: MERLIYANTI (Merli Yanti) — 1 frames
+2026-09-25 04:19:22,236 [INFO] FaceEMARSystem: Galeri disimpan: 29 subjek
+2026-09-25 04:19:22,236 [INFO] FaceEMARSystem: Enrollment berhasil: S11 (Susi Lisnasari) — 1 frames
+2026-09-25 04:19:24,230 [INFO] FaceEMARSystem: Galeri disimpan: 30 subjek
+2026-09-25 04:19:24,230 [INFO] FaceEMARSystem: Enrollment berhasil: SUSILISNASARI (Susi Lisnasari) — 1 frames
+2026-09-25 04:19:25,425 [INFO] FaceEMARSystem: Galeri disimpan: 31 subjek
+2026-09-25 04:19:25,425 [INFO] FaceEMARSystem: Enrollment berhasil: S12 (ponco prastio) — 1 frames
+2026-09-25 04:19:26,496 [INFO] FaceEMARSystem: Galeri disimpan: 32 subjek
+2026-09-25 04:19:26,496 [INFO] FaceEMARSystem: Enrollment berhasil: PONCOPRASETIO (ponco prastio) — 1 frames
+2026-09-25 04:19:27,538 [INFO] FaceEMARSystem: Galeri disimpan: 33 subjek
+2026-09-25 04:19:27,538 [INFO] FaceEMARSystem: Enrollment berhasil: PONCOPRASTIO (ponco prastio) — 1 frames
+2026-09-25 04:19:28,638 [INFO] FaceEMARSystem: Galeri disimpan: 33 subjek
+2026-09-25 04:19:28,638 [INFO] FaceEMARSystem: Enrollment berhasil: S12 (ponco prastio) — 1 frames
+2026-09-25 04:19:29,673 [INFO] FaceEMARSystem: Galeri disimpan: 33 subjek
+2026-09-25 04:19:29,673 [INFO] FaceEMARSystem: Enrollment berhasil: PONCOPRASETIO (ponco prastio) — 1 frames
+2026-09-25 04:19:30,705 [INFO] FaceEMARSystem: Galeri disimpan: 33 subjek
+2026-09-25 04:19:30,705 [INFO] FaceEMARSystem: Enrollment berhasil: PONCOPRASTIO (ponco prastio) — 1 frames
+2026-09-25 04:19:31,987 [INFO] FaceEMARSystem: Galeri disimpan: 33 subjek
+2026-09-25 04:19:31,987 [INFO] FaceEMARSystem: Enrollment berhasil: S12 (ponco prastio) — 1 frames
+2026-09-25 04:19:33,149 [INFO] FaceEMARSystem: Galeri disimpan: 33 subjek
+2026-09-25 04:19:33,149 [INFO] FaceEMARSystem: Enrollment berhasil: PONCOPRASETIO (ponco prastio) — 1 frames
+2026-09-25 04:19:34,349 [INFO] FaceEMARSystem: Galeri disimpan: 33 subjek
+2026-09-25 04:19:34,349 [INFO] FaceEMARSystem: Enrollment berhasil: PONCOPRASTIO (ponco prastio) — 1 frames
+2026-09-25 04:19:34,569 [INFO] FaceEMARSystem: Galeri disimpan: 34 subjek
+2026-09-25 04:19:34,569 [INFO] FaceEMARSystem: Enrollment berhasil: S08 (Taufik Hidayat) — 1 frames
+2026-09-25 04:19:34,746 [INFO] FaceEMARSystem: Galeri disimpan: 35 subjek
+2026-09-25 04:19:34,746 [INFO] FaceEMARSystem: Enrollment berhasil: TAUFIKHIDAYAT (Taufik Hidayat) — 1 frames
+2026-09-25 04:19:34,747 [INFO] FaceEMARSystem: Galeri disimpan: 35 subjek
+2026-09-25 09:27:35,175 [INFO] FaceEMARSystem: Menginisialisasi FaceEMARSystem...
+2026-09-25 09:27:35,176 [INFO] FaceEMARSystem: Menginisialisasi FaceNet pada device: cpu
+2026-09-25 09:27:35,262 [INFO] FaceEMARSystem: MTCNN diinisialisasi (image_size=160, margin=20)
+2026-09-25 09:27:35,967 [INFO] FaceEMARSystem: InceptionResnetV1 (VGGFace2) dimuat ke device
+2026-09-25 09:27:36,004 [INFO] FaceEMARSystem: Galeri dimuat: 35 subjek
+2026-09-25 09:27:38,553 [INFO] FaceEMARSystem: dlib 68-Landmark Predictor diinisialisasi (F:\Face Verification Presensi\presensi-facenet-emar\models\shape_predictor_68_face_landmarks.dat)
+2026-09-25 09:27:38,565 [INFO] FaceEMARSystem: Database siap: logs\attendance.db
+2026-09-25 09:27:38,567 [INFO] FaceEMARSystem: FaceEMARSystem siap.
+2026-09-25 09:27:38,574 [INFO] FaceEMARSystem: Flask API berjalan di http://127.0.0.1:5000
+2026-09-25 09:27:38,626 [INFO] werkzeug: [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on http://127.0.0.1:5000
+2026-09-25 09:27:38,626 [INFO] werkzeug: [33mPress CTRL+C to quit[0m
+2026-09-25 09:27:39,061 [INFO] werkzeug: 127.0.0.1 - - [25/Sep/2026 09:27:39] "[33mHEAD / HTTP/1.1[0m" 404 -
+2026-09-25 09:27:39,518 [INFO] werkzeug: 127.0.0.1 - - [25/Sep/2026 09:27:39] "[33mGET / HTTP/1.1[0m" 404 -
+2026-09-25 09:27:39,787 [INFO] werkzeug: 127.0.0.1 - - [25/Sep/2026 09:27:39] "[33mGET /favicon.ico HTTP/1.1[0m" 404 -
+2026-09-25 09:28:34,020 [INFO] werkzeug: 127.0.0.1 - - [25/Sep/2026 09:28:34] "GET /health HTTP/1.1" 200 -
+2026-09-25 09:29:02,875 [INFO] werkzeug: 127.0.0.1 - - [25/Sep/2026 09:29:02] "GET /health HTTP/1.1" 200 -
+2026-09-25 09:29:48,028 [INFO] FaceEMARSystem: Galeri dimuat: 35 subjek
+2026-09-25 09:29:48,030 [INFO] werkzeug: 127.0.0.1 - - [25/Sep/2026 09:29:48] "GET /subjects HTTP/1.1" 200 -
+2026-09-25 09:30:04,572 [INFO] werkzeug: 127.0.0.1 - - [25/Sep/2026 09:30:04] "POST /verify HTTP/1.1" 200 -
+2026-09-25 09:30:07,223 [INFO] werkzeug: 127.0.0.1 - - [25/Sep/2026 09:30:07] "POST /verify HTTP/1.1" 200 -
+2026-09-25 09:30:09,203 [INFO] werkzeug: 127.0.0.1 - - [25/Sep/2026 09:30:09] "POST /verify HTTP/1.1" 200 -
+2026-09-25 09:30:11,868 [INFO] FaceEMARSystem: Galeri dimuat: 35 subjek
+2026-09-25 09:30:11,868 [WARNING] FaceEMARSystem: verify(S99): subjek tidak ditemukan di galeri
+2026-09-25 09:30:11,879 [INFO] werkzeug: 127.0.0.1 - - [25/Sep/2026 09:30:11] "POST /verify HTTP/1.1" 200 -
+2026-09-25 09:31:05,718 [INFO] werkzeug: 127.0.0.1 - - [25/Sep/2026 09:31:05] "GET /health HTTP/1.1" 200 -
+2026-09-25 09:31:10,946 [INFO] werkzeug: 127.0.0.1 - - [25/Sep/2026 09:31:10] "GET /health HTTP/1.1" 200 -
+2026-09-25 09:31:34,141 [INFO] werkzeug: 127.0.0.1 - - [25/Sep/2026 09:31:34] "GET /health HTTP/1.1" 200 -
+2026-09-25 09:31:40,204 [INFO] werkzeug: 127.0.0.1 - - [25/Sep/2026 09:31:40] "POST /verify HTTP/1.1" 200 -
+2026-09-25 09:31:41,359 [INFO] werkzeug: 127.0.0.1 - - [25/Sep/2026 09:31:41] "GET /health HTTP/1.1" 200 -
+2026-09-25 09:31:44,583 [INFO] werkzeug: 127.0.0.1 - - [25/Sep/2026 09:31:44] "POST /verify HTTP/1.1" 200 -
+2026-09-25 09:32:07,032 [INFO] werkzeug: 127.0.0.1 - - [25/Sep/2026 09:32:07] "GET /health HTTP/1.1" 200 -
+2026-09-25 09:32:10,297 [INFO] werkzeug: 127.0.0.1 - - [25/Sep/2026 09:32:10] "POST /verify HTTP/1.1" 200 -
+2026-09-25 09:32:10,405 [INFO] werkzeug: 127.0.0.1 - - [25/Sep/2026 09:32:10] "GET /health HTTP/1.1" 200 -
+2026-09-25 09:32:13,647 [INFO] werkzeug: 127.0.0.1 - - [25/Sep/2026 09:32:13] "POST /verify HTTP/1.1" 200 -
+2026-09-25 13:00:19,217 [INFO] FaceEMARSystem: Menginisialisasi FaceNet pada device: cpu
+2026-09-25 13:00:19,298 [INFO] FaceEMARSystem: MTCNN diinisialisasi (image_size=160, margin=20)
+2026-09-25 13:00:19,692 [INFO] FaceEMARSystem: InceptionResnetV1 (VGGFace2) dimuat ke device
+2026-09-25 13:00:19,707 [INFO] FaceEMARSystem: Galeri dimuat: 48 subjek
+2026-09-25 13:00:34,010 [INFO] FaceEMARSystem: Menginisialisasi FaceNet pada device: cpu
+2026-09-25 13:00:34,030 [INFO] FaceEMARSystem: MTCNN diinisialisasi (image_size=160, margin=20)
+2026-09-25 13:00:34,361 [INFO] FaceEMARSystem: InceptionResnetV1 (VGGFace2) dimuat ke device
+2026-09-25 13:00:34,362 [INFO] FaceEMARSystem: Galeri dimuat: 48 subjek
+2026-09-25 13:00:47,041 [INFO] FaceEMARSystem: Menginisialisasi FaceNet pada device: cpu
+2026-09-25 13:00:47,061 [INFO] FaceEMARSystem: MTCNN diinisialisasi (image_size=160, margin=20)
+2026-09-25 13:00:47,434 [INFO] FaceEMARSystem: InceptionResnetV1 (VGGFace2) dimuat ke device
+2026-09-25 13:00:47,435 [INFO] FaceEMARSystem: Galeri dimuat: 48 subjek
+2026-09-25 13:01:34,605 [INFO] FaceEMARSystem: Menginisialisasi FaceEMARSystem...
+2026-09-25 13:01:34,605 [INFO] FaceEMARSystem: Menginisialisasi FaceNet pada device: cpu
+2026-09-25 13:01:34,625 [INFO] FaceEMARSystem: MTCNN diinisialisasi (image_size=160, margin=20)
+2026-09-25 13:01:34,954 [INFO] FaceEMARSystem: InceptionResnetV1 (VGGFace2) dimuat ke device
+2026-09-25 13:01:34,954 [INFO] FaceEMARSystem: Galeri dimuat: 48 subjek
+2026-09-25 13:01:36,273 [INFO] FaceEMARSystem: dlib 68-Landmark Predictor diinisialisasi (F:\Face Verification Presensi\presensi-facenet-emar\models\shape_predictor_68_face_landmarks.dat)
+2026-09-25 13:01:36,276 [INFO] FaceEMARSystem: Database siap: logs\attendance.db
+2026-09-25 13:01:36,277 [INFO] FaceEMARSystem: FaceEMARSystem siap.
+2026-09-25 13:01:51,386 [INFO] FaceEMARSystem: Menginisialisasi FaceEMARSystem...
+2026-09-25 13:01:51,387 [INFO] FaceEMARSystem: Menginisialisasi FaceNet pada device: cpu
+2026-09-25 13:01:51,407 [INFO] FaceEMARSystem: MTCNN diinisialisasi (image_size=160, margin=20)
+2026-09-25 13:01:51,718 [INFO] FaceEMARSystem: InceptionResnetV1 (VGGFace2) dimuat ke device
+2026-09-25 13:01:51,719 [INFO] FaceEMARSystem: Galeri dimuat: 48 subjek
+2026-09-25 13:01:52,868 [INFO] FaceEMARSystem: dlib 68-Landmark Predictor diinisialisasi (F:\Face Verification Presensi\presensi-facenet-emar\models\shape_predictor_68_face_landmarks.dat)
+2026-09-25 13:01:52,870 [INFO] FaceEMARSystem: Database siap: logs\attendance.db
+2026-09-25 13:01:52,870 [INFO] FaceEMARSystem: FaceEMARSystem siap.
+2026-09-25 13:31:05,746 [INFO] FaceEMARSystem: Menginisialisasi FaceEMARSystem...
+2026-09-25 13:31:05,746 [INFO] FaceEMARSystem: Menginisialisasi FaceNet pada device: cpu
+2026-09-25 13:31:05,767 [INFO] FaceEMARSystem: MTCNN diinisialisasi (image_size=160, margin=20)
+2026-09-25 13:31:06,103 [INFO] FaceEMARSystem: InceptionResnetV1 (VGGFace2) dimuat ke device
+2026-09-25 13:31:06,104 [INFO] FaceEMARSystem: Galeri dimuat: 48 subjek
+2026-09-25 13:31:07,214 [INFO] FaceEMARSystem: dlib 68-Landmark Predictor diinisialisasi (F:\Face Verification Presensi\presensi-facenet-emar\models\shape_predictor_68_face_landmarks.dat)
+2026-09-25 13:31:07,216 [INFO] FaceEMARSystem: Database siap: F:\Face Verification Presensi\presensi-facenet-emar\logs\attendance.db
+2026-09-25 13:31:07,216 [INFO] FaceEMARSystem: FaceEMARSystem siap.
+2026-09-25 13:31:11,937 [INFO] FaceEMARSystem: Galeri dimuat: 48 subjek
+2026-09-25 13:31:11,938 [WARNING] FaceEMARSystem: verify(S99): subjek tidak ditemukan di galeri
+2026-09-25 13:43:19,823 [INFO] FaceEMARSystem: Menginisialisasi FaceNet pada device: cpu
+2026-09-25 13:43:19,849 [INFO] FaceEMARSystem: MTCNN diinisialisasi (image_size=160, margin=20)
+2026-09-25 13:43:20,282 [INFO] FaceEMARSystem: InceptionResnetV1 (VGGFace2) dimuat ke device
+2026-09-25 13:43:20,284 [INFO] FaceEMARSystem: Galeri dimuat: 48 subjek
+2026-09-25 13:43:39,329 [INFO] FaceEMARSystem: Menginisialisasi FaceNet pada device: cpu
+2026-09-25 13:43:39,352 [INFO] FaceEMARSystem: MTCNN diinisialisasi (image_size=160, margin=20)
+2026-09-25 13:43:39,724 [INFO] FaceEMARSystem: InceptionResnetV1 (VGGFace2) dimuat ke device
+2026-09-25 13:43:39,725 [INFO] FaceEMARSystem: Galeri dimuat: 48 subjek
+2026-09-25 13:43:53,359 [INFO] FaceEMARSystem: Menginisialisasi FaceNet pada device: cpu
+2026-09-25 13:43:53,379 [INFO] FaceEMARSystem: MTCNN diinisialisasi (image_size=160, margin=20)
+2026-09-25 13:43:53,683 [INFO] FaceEMARSystem: InceptionResnetV1 (VGGFace2) dimuat ke device
+2026-09-25 13:43:53,683 [INFO] FaceEMARSystem: Galeri dimuat: 48 subjek
+2026-09-25 13:44:17,295 [INFO] FaceEMARSystem: Menginisialisasi FaceNet pada device: cpu
+2026-09-25 13:44:17,316 [INFO] FaceEMARSystem: MTCNN diinisialisasi (image_size=160, margin=20)
+2026-09-25 13:44:17,641 [INFO] FaceEMARSystem: InceptionResnetV1 (VGGFace2) dimuat ke device
+2026-09-25 13:44:17,642 [INFO] FaceEMARSystem: Galeri dimuat: 48 subjek
+2026-09-25 13:45:21,387 [INFO] FaceEMARSystem: Menginisialisasi FaceEMARSystem...
+2026-09-25 13:45:21,387 [INFO] FaceEMARSystem: Menginisialisasi FaceNet pada device: cpu
+2026-09-25 13:45:21,409 [INFO] FaceEMARSystem: MTCNN diinisialisasi (image_size=160, margin=20)
+2026-09-25 13:45:21,731 [INFO] FaceEMARSystem: InceptionResnetV1 (VGGFace2) dimuat ke device
+2026-09-25 13:45:21,731 [INFO] FaceEMARSystem: Galeri dimuat: 48 subjek
+2026-09-25 13:45:22,892 [INFO] FaceEMARSystem: dlib 68-Landmark Predictor diinisialisasi (F:\Face Verification Presensi\presensi-facenet-emar\models\shape_predictor_68_face_landmarks.dat)
+2026-09-25 13:45:22,893 [INFO] FaceEMARSystem: Database siap: F:\Face Verification Presensi\presensi-facenet-emar\logs\attendance.db
+2026-09-25 13:45:22,893 [INFO] FaceEMARSystem: FaceEMARSystem siap.
+2026-09-25 13:47:06,932 [INFO] FaceEMARSystem: Menginisialisasi FaceNet pada device: cpu
+2026-09-25 13:47:06,952 [INFO] FaceEMARSystem: MTCNN diinisialisasi (image_size=160, margin=20)
+2026-09-25 13:47:07,287 [INFO] FaceEMARSystem: InceptionResnetV1 (VGGFace2) dimuat ke device
+2026-09-25 13:47:07,287 [INFO] FaceEMARSystem: Galeri dimuat: 48 subjek
+2026-09-25 13:49:48,114 [INFO] FaceEMARSystem: Menginisialisasi FaceEMARSystem...
+2026-09-25 13:49:48,114 [INFO] FaceEMARSystem: Menginisialisasi FaceNet pada device: cpu
+2026-09-25 13:49:48,135 [INFO] FaceEMARSystem: MTCNN diinisialisasi (image_size=160, margin=20)
+2026-09-25 13:49:48,465 [INFO] FaceEMARSystem: InceptionResnetV1 (VGGFace2) dimuat ke device
+2026-09-25 13:49:48,466 [INFO] FaceEMARSystem: Galeri dimuat: 48 subjek
+2026-09-25 13:49:49,587 [INFO] FaceEMARSystem: dlib 68-Landmark Predictor diinisialisasi (F:\Face Verification Presensi\presensi-facenet-emar\models\shape_predictor_68_face_landmarks.dat)
+2026-09-25 13:49:49,588 [INFO] FaceEMARSystem: Database siap: F:\Face Verification Presensi\presensi-facenet-emar\logs\attendance.db
+2026-09-25 13:49:49,588 [INFO] FaceEMARSystem: FaceEMARSystem siap.
+2026-09-25 13:55:36,397 [INFO] FaceEMARSystem: Menginisialisasi FaceNet pada device: cpu
+2026-09-25 13:55:36,420 [INFO] FaceEMARSystem: MTCNN diinisialisasi (image_size=160, margin=20)
+2026-09-25 13:55:36,776 [INFO] FaceEMARSystem: InceptionResnetV1 (VGGFace2) dimuat ke device
+2026-09-25 13:55:36,777 [INFO] FaceEMARSystem: Galeri dimuat: 48 subjek
+2026-09-25 14:07:45,911 [INFO] FaceEMARSystem: Menginisialisasi FaceEMARSystem...
+2026-09-25 14:07:45,911 [INFO] FaceEMARSystem: Menginisialisasi FaceNet pada device: cpu
+2026-09-25 14:07:45,937 [INFO] FaceEMARSystem: MTCNN diinisialisasi (image_size=160, margin=20)
+2026-09-25 14:07:46,280 [INFO] FaceEMARSystem: InceptionResnetV1 (VGGFace2) dimuat ke device
+2026-09-25 14:07:46,281 [INFO] FaceEMARSystem: Galeri dimuat: 48 subjek
+2026-09-25 14:07:47,518 [INFO] FaceEMARSystem: dlib 68-Landmark Predictor diinisialisasi (F:\Face Verification Presensi\presensi-facenet-emar\models\shape_predictor_68_face_landmarks.dat)
+2026-09-25 14:07:47,520 [INFO] FaceEMARSystem: Database siap: F:\Face Verification Presensi\presensi-facenet-emar\logs\attendance.db
+2026-09-25 14:07:47,521 [INFO] FaceEMARSystem: FaceEMARSystem siap.
+2026-09-25 14:17:15,919 [INFO] FaceEMARSystem: Menginisialisasi FaceEMARSystem...
+2026-09-25 14:17:15,919 [INFO] FaceEMARSystem: Menginisialisasi FaceNet pada device: cpu
+2026-09-25 14:17:15,939 [INFO] FaceEMARSystem: MTCNN diinisialisasi (image_size=160, margin=20)
+2026-09-25 14:17:16,261 [INFO] FaceEMARSystem: InceptionResnetV1 (VGGFace2) dimuat ke device
+2026-09-25 14:17:16,262 [INFO] FaceEMARSystem: Galeri dimuat: 48 subjek
+2026-09-25 14:17:17,451 [INFO] FaceEMARSystem: dlib 68-Landmark Predictor diinisialisasi (F:\Face Verification Presensi\presensi-facenet-emar\models\shape_predictor_68_face_landmarks.dat)
+2026-09-25 14:17:17,453 [INFO] FaceEMARSystem: Database siap: F:\Face Verification Presensi\presensi-facenet-emar\logs\attendance.db
+2026-09-25 14:17:17,453 [INFO] FaceEMARSystem: FaceEMARSystem siap.
+2026-09-25 14:31:24,162 [INFO] FaceEMARSystem: Menginisialisasi FaceNet pada device: cpu
+2026-09-25 14:31:24,183 [INFO] FaceEMARSystem: MTCNN diinisialisasi (image_size=160, margin=20)
+2026-09-25 14:31:24,542 [INFO] FaceEMARSystem: InceptionResnetV1 (VGGFace2) dimuat ke device
+2026-09-25 14:31:24,543 [INFO] FaceEMARSystem: Galeri dimuat: 48 subjek
+2026-09-25 14:32:41,303 [INFO] FaceEMARSystem: Menginisialisasi FaceEMARSystem...
+2026-09-25 14:32:41,303 [INFO] FaceEMARSystem: Menginisialisasi FaceNet pada device: cpu
+2026-09-25 14:32:41,326 [INFO] FaceEMARSystem: MTCNN diinisialisasi (image_size=160, margin=20)
+2026-09-25 14:32:41,642 [INFO] FaceEMARSystem: InceptionResnetV1 (VGGFace2) dimuat ke device
+2026-09-25 14:32:41,655 [INFO] FaceEMARSystem: Galeri dimuat: 48 subjek
+2026-09-25 14:32:42,859 [INFO] FaceEMARSystem: dlib 68-Landmark Predictor diinisialisasi (F:\Face Verification Presensi\presensi-facenet-emar\models\shape_predictor_68_face_landmarks.dat)
+2026-09-25 14:32:42,861 [INFO] FaceEMARSystem: Database siap: F:\Face Verification Presensi\presensi-facenet-emar\logs\attendance.db
+2026-09-25 14:32:42,862 [INFO] FaceEMARSystem: FaceEMARSystem siap.
+2026-09-25 14:36:45,067 [INFO] FaceEMARSystem: Menginisialisasi FaceEMARSystem...
+2026-09-25 14:36:45,067 [INFO] FaceEMARSystem: Menginisialisasi FaceNet pada device: cpu
+2026-09-25 14:36:45,088 [INFO] FaceEMARSystem: MTCNN diinisialisasi (image_size=160, margin=20)
+2026-09-25 14:36:45,422 [INFO] FaceEMARSystem: InceptionResnetV1 (VGGFace2) dimuat ke device
+2026-09-25 14:36:45,423 [INFO] FaceEMARSystem: Galeri dimuat: 48 subjek
+2026-09-25 14:36:46,578 [INFO] FaceEMARSystem: dlib 68-Landmark Predictor diinisialisasi (F:\Face Verification Presensi\presensi-facenet-emar\models\shape_predictor_68_face_landmarks.dat)
+2026-09-25 14:36:46,580 [INFO] FaceEMARSystem: Database siap: F:\Face Verification Presensi\presensi-facenet-emar\logs\attendance.db
+2026-09-25 14:36:46,580 [INFO] FaceEMARSystem: FaceEMARSystem siap.
+2026-09-25 14:39:15,673 [INFO] FaceEMARSystem: Menginisialisasi FaceEMARSystem...
+2026-09-25 14:39:15,673 [INFO] FaceEMARSystem: Menginisialisasi FaceNet pada device: cpu
+2026-09-25 14:39:15,696 [INFO] FaceEMARSystem: MTCNN diinisialisasi (image_size=160, margin=20)
+2026-09-25 14:39:16,024 [INFO] FaceEMARSystem: InceptionResnetV1 (VGGFace2) dimuat ke device
+2026-09-25 14:39:16,025 [INFO] FaceEMARSystem: Galeri dimuat: 48 subjek
+2026-09-25 14:39:17,132 [INFO] FaceEMARSystem: dlib 68-Landmark Predictor diinisialisasi (F:\Face Verification Presensi\presensi-facenet-emar\models\shape_predictor_68_face_landmarks.dat)
+2026-09-25 14:39:17,133 [INFO] FaceEMARSystem: Database siap: F:\Face Verification Presensi\presensi-facenet-emar\logs\attendance.db
+2026-09-25 14:39:17,134 [INFO] FaceEMARSystem: FaceEMARSystem siap.
+2026-09-25 14:41:54,857 [INFO] FaceEMARSystem: Menginisialisasi FaceEMARSystem...
+2026-09-25 14:41:54,857 [INFO] FaceEMARSystem: Menginisialisasi FaceNet pada device: cpu
+2026-09-25 14:41:54,877 [INFO] FaceEMARSystem: MTCNN diinisialisasi (image_size=160, margin=20)
+2026-09-25 14:41:55,193 [INFO] FaceEMARSystem: InceptionResnetV1 (VGGFace2) dimuat ke device
+2026-09-25 14:41:55,193 [INFO] FaceEMARSystem: Galeri dimuat: 48 subjek
+2026-09-25 14:41:56,308 [INFO] FaceEMARSystem: dlib 68-Landmark Predictor diinisialisasi (F:\Face Verification Presensi\presensi-facenet-emar\models\shape_predictor_68_face_landmarks.dat)
+2026-09-25 14:41:56,309 [INFO] FaceEMARSystem: Database siap: F:\Face Verification Presensi\presensi-facenet-emar\logs\attendance.db
+2026-09-25 14:41:56,310 [INFO] FaceEMARSystem: FaceEMARSystem siap.
+2026-09-25 14:41:56,938 [INFO] FaceEMARSystem: Galeri disimpan: 48 subjek
+2026-09-25 14:41:56,938 [INFO] FaceEMARSystem: Enrollment berhasil: TEST-QALWANI-001 (Qalwani Anugerah) — 1 frames
+2026-09-25 14:41:56,940 [INFO] FaceEMARSystem: Galeri disimpan: 48 subjek
+2026-09-25 14:42:07,785 [INFO] FaceEMARSystem: Menginisialisasi FaceNet pada device: cpu
+2026-09-25 14:42:07,807 [INFO] FaceEMARSystem: MTCNN diinisialisasi (image_size=160, margin=20)
+2026-09-25 14:42:08,128 [INFO] FaceEMARSystem: InceptionResnetV1 (VGGFace2) dimuat ke device
+2026-09-25 14:42:08,142 [INFO] FaceEMARSystem: Galeri dimuat: 48 subjek
+2026-09-25 14:42:49,541 [INFO] FaceEMARSystem: Galeri dimuat: 48 subjek
+2026-09-25 15:49:55,556 [INFO] FaceEMARSystem: Menginisialisasi FaceEMARSystem...
+2026-09-25 15:49:55,556 [INFO] FaceEMARSystem: Menginisialisasi FaceNet pada device: cpu
+2026-09-25 15:49:55,576 [INFO] FaceEMARSystem: MTCNN diinisialisasi (image_size=160, margin=20)
+2026-09-25 15:49:55,904 [INFO] FaceEMARSystem: InceptionResnetV1 (VGGFace2) dimuat ke device
+2026-09-25 15:49:55,905 [INFO] FaceEMARSystem: Galeri dimuat: 48 subjek
+2026-09-25 15:49:57,097 [INFO] FaceEMARSystem: dlib 68-Landmark Predictor diinisialisasi (F:\Face Verification Presensi\presensi-facenet-emar\models\shape_predictor_68_face_landmarks.dat)
+2026-09-25 15:49:57,099 [INFO] FaceEMARSystem: Database siap: F:\Face Verification Presensi\presensi-facenet-emar\logs\attendance.db
+2026-09-25 15:49:57,099 [INFO] FaceEMARSystem: FaceEMARSystem siap.
+2026-09-26 23:22:49,259 [INFO] FaceEMARSystem: Menginisialisasi FaceEMARSystem...
+2026-09-26 23:22:49,260 [INFO] FaceEMARSystem: Menginisialisasi FaceNet pada device: cpu
+2026-09-26 23:22:49,378 [INFO] FaceEMARSystem: MTCNN diinisialisasi (image_size=160, margin=20)
+2026-09-26 23:22:51,953 [INFO] FaceEMARSystem: InceptionResnetV1 (VGGFace2) dimuat ke device
+2026-09-26 23:22:51,979 [INFO] FaceEMARSystem: Galeri dimuat: 48 subjek
+2026-09-26 23:22:54,106 [INFO] FaceEMARSystem: dlib 68-Landmark Predictor diinisialisasi (F:\Face Verification Presensi\presensi-facenet-emar\models\shape_predictor_68_face_landmarks.dat)
+2026-09-26 23:22:54,117 [INFO] FaceEMARSystem: Database siap: F:\Face Verification Presensi\presensi-facenet-emar\logs\attendance.db
+2026-09-26 23:22:54,119 [INFO] FaceEMARSystem: FaceEMARSystem siap.
+2026-09-26 23:54:45,173 [INFO] FaceEMARSystem: Menginisialisasi FaceEMARSystem...
+2026-09-26 23:54:45,173 [INFO] FaceEMARSystem: Menginisialisasi FaceNet pada device: cpu
+2026-09-26 23:54:45,235 [INFO] FaceEMARSystem: MTCNN diinisialisasi (image_size=160, margin=20)
+2026-09-26 23:54:45,658 [INFO] FaceEMARSystem: InceptionResnetV1 (VGGFace2) dimuat ke device
+2026-09-26 23:54:45,675 [INFO] FaceEMARSystem: Galeri dimuat: 48 subjek
+2026-09-26 23:54:46,992 [INFO] FaceEMARSystem: dlib 68-Landmark Predictor diinisialisasi (F:\Face Verification Presensi\presensi-facenet-emar\models\shape_predictor_68_face_landmarks.dat)
+2026-09-26 23:54:46,993 [INFO] FaceEMARSystem: Database siap: F:\Face Verification Presensi\presensi-facenet-emar\logs\attendance.db
+2026-09-26 23:54:46,995 [INFO] FaceEMARSystem: FaceEMARSystem siap.
+2026-09-27 00:38:22,628 [INFO] FaceEMARSystem: Galeri disimpan: 49 subjek
+2026-09-27 00:38:22,629 [INFO] FaceEMARSystem: Enrollment berhasil: PEMULIHAN-TMP (pemulihan sementara) — 1 frames
+2026-09-27 00:38:22,630 [INFO] FaceEMARSystem: Galeri disimpan: 50 subjek
+2026-09-27 00:40:55,433 [INFO] FaceEMARSystem: Menginisialisasi FaceEMARSystem...
+2026-09-27 00:40:55,434 [INFO] FaceEMARSystem: Menginisialisasi FaceNet pada device: cpu
+2026-09-27 00:40:55,457 [INFO] FaceEMARSystem: MTCNN diinisialisasi (image_size=160, margin=20)
+2026-09-27 00:40:55,822 [INFO] FaceEMARSystem: InceptionResnetV1 (VGGFace2) dimuat ke device
+2026-09-27 00:40:55,823 [INFO] FaceEMARSystem: Galeri dimuat: 48 subjek
+2026-09-27 00:40:57,110 [INFO] FaceEMARSystem: dlib 68-Landmark Predictor diinisialisasi (F:\Face Verification Presensi\presensi-facenet-emar\models\shape_predictor_68_face_landmarks.dat)
+2026-09-27 00:40:57,112 [INFO] FaceEMARSystem: Database siap: F:\Face Verification Presensi\presensi-facenet-emar\logs\attendance.db
+2026-09-27 00:40:57,113 [INFO] FaceEMARSystem: FaceEMARSystem siap.
+2026-09-27 00:41:11,151 [INFO] FaceEMARSystem: Galeri dimuat: 48 subjek
+2026-09-27 00:41:11,151 [WARNING] FaceEMARSystem: verify(PEMULIHAN-TMP): subjek tidak ditemukan di galeri
+2026-09-27 00:41:11,403 [INFO] FaceEMARSystem: Galeri dimuat: 48 subjek
+2026-09-27 00:41:11,404 [WARNING] FaceEMARSystem: verify(PEMULIHAN-TMP): subjek tidak ditemukan di galeri
+2026-09-27 00:41:11,636 [INFO] FaceEMARSystem: Galeri dimuat: 48 subjek
+2026-09-27 00:41:11,636 [WARNING] FaceEMARSystem: verify(PEMULIHAN-TMP): subjek tidak ditemukan di galeri
+2026-09-27 00:41:11,886 [INFO] FaceEMARSystem: Galeri dimuat: 48 subjek
+2026-09-27 00:41:11,886 [WARNING] FaceEMARSystem: verify(PEMULIHAN-TMP): subjek tidak ditemukan di galeri
+2026-09-27 00:41:12,121 [INFO] FaceEMARSystem: Galeri dimuat: 48 subjek
+2026-09-27 00:41:12,121 [WARNING] FaceEMARSystem: verify(PEMULIHAN-TMP): subjek tidak ditemukan di galeri
+2026-09-27 00:41:12,363 [INFO] FaceEMARSystem: Galeri dimuat: 48 subjek
+2026-09-27 00:41:12,364 [WARNING] FaceEMARSystem: verify(PEMULIHAN-TMP): subjek tidak ditemukan di galeri
+2026-09-27 00:41:12,609 [INFO] FaceEMARSystem: Galeri dimuat: 48 subjek
+2026-09-27 00:41:12,609 [WARNING] FaceEMARSystem: verify(PEMULIHAN-TMP): subjek tidak ditemukan di galeri
+2026-09-27 00:41:12,842 [INFO] FaceEMARSystem: Galeri dimuat: 48 subjek
+2026-09-27 00:41:12,842 [WARNING] FaceEMARSystem: verify(PEMULIHAN-TMP): subjek tidak ditemukan di galeri
+2026-09-27 00:41:13,104 [INFO] FaceEMARSystem: Galeri dimuat: 48 subjek
+2026-09-27 00:41:13,104 [WARNING] FaceEMARSystem: verify(PEMULIHAN-TMP): subjek tidak ditemukan di galeri
+2026-09-27 11:56:44,750 [INFO] FaceEMARSystem: Galeri dimuat: 3 subjek
+2026-09-27 11:56:44,753 [INFO] FaceEMARSystem: Galeri disimpan: 1 subjek
+2026-09-27 11:56:44,753 [INFO] FaceEMARSystem: Enrollment berhasil: P_EVAL (P_EVAL) — 1 frames
+2026-09-27 12:11:05,710 [INFO] FaceEMARSystem: Menginisialisasi FaceEMARSystem...
+2026-09-27 12:11:05,711 [INFO] FaceEMARSystem: Menginisialisasi FaceNet pada device: cpu
+2026-09-27 12:11:05,782 [INFO] FaceEMARSystem: MTCNN diinisialisasi (image_size=160, margin=20)
+2026-09-27 12:11:06,139 [INFO] FaceEMARSystem: InceptionResnetV1 (VGGFace2) dimuat ke device
+2026-09-27 12:11:06,140 [INFO] FaceEMARSystem: Galeri dimuat: 48 subjek
+2026-09-27 12:11:07,348 [INFO] FaceEMARSystem: dlib 68-Landmark Predictor diinisialisasi (F:\Face Verification Presensi\presensi-facenet-emar\models\shape_predictor_68_face_landmarks.dat)
+2026-09-27 12:11:07,358 [INFO] FaceEMARSystem: Database siap: F:\Face Verification Presensi\presensi-facenet-emar\logs\attendance.db
+2026-09-27 12:11:07,359 [INFO] FaceEMARSystem: FaceEMARSystem siap.
+2026-09-27 15:43:40,112 [INFO] FaceEMARSystem: Menginisialisasi FaceEMARSystem...
+2026-09-27 15:43:40,113 [INFO] FaceEMARSystem: Menginisialisasi FaceNet pada device: cpu
+2026-09-27 15:43:40,133 [INFO] FaceEMARSystem: MTCNN diinisialisasi (image_size=160, margin=20)
+2026-09-27 15:43:40,463 [INFO] FaceEMARSystem: InceptionResnetV1 (VGGFace2) dimuat ke device
+2026-09-27 15:43:40,464 [INFO] FaceEMARSystem: Galeri dimuat: 48 subjek
+2026-09-27 15:43:41,703 [INFO] FaceEMARSystem: dlib 68-Landmark Predictor diinisialisasi (F:\Face Verification Presensi\presensi-facenet-emar\models\shape_predictor_68_face_landmarks.dat)
+2026-09-27 15:43:41,705 [INFO] FaceEMARSystem: Database siap: F:\Face Verification Presensi\presensi-facenet-emar\logs\attendance.db
+2026-09-27 15:43:41,705 [INFO] FaceEMARSystem: FaceEMARSystem siap.
+2026-09-27 16:30:22,115 [INFO] FaceEMARSystem: Galeri dicadangkan ke backup_20260927_163022_114229.pkl
+2026-09-27 16:30:22,117 [INFO] FaceEMARSystem: Galeri disimpan: 48 subjek
+2026-09-27 16:30:22,117 [INFO] FaceEMARSystem: Template disimpan: emb_TEST-QALWANI-001, TEST-QALWANI-001 (Qalwani Anugerah) — 5 frames

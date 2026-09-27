@@ -1,0 +1,7 @@
+sample_id,subject_id,claimed_subject_id,consent_version,consent_status,session_id,source_media_id,source_hash,sample_type,pai_species,lux,distance_cm,device_id,split,enrollment_role,quality_status,exclusion_reason
+SMPL-001,SUBJ-001,SUBJ-001,v1.0,active,SESS-001,video_001.mp4,e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855,video,NONE,250,45.0,DEV-CAM-01,DEVELOPMENT,gallery,OK,
+SMPL-002,SUBJ-001,SUBJ-001,v1.0,active,SESS-001,video_002.mp4,d04b98f48e8f8bcc15c6ae5ac050801cd6dcfd428fb5f9e65c4e16e7807340fa,video,NONE,250,45.0,DEV-CAM-01,DEVELOPMENT,probe,OK,
+SMPL-003,SUBJ-001,SUBJ-002,v1.0,active,SESS-002,video_003.mp4,b94d27b9934d3e08a52e52d7da7dabfac484efe37a5380ee9088f7ace2efcde9,video,SCREEN,150,30.0,DEV-CAM-01,DEVELOPMENT,probe,OK,
+SMPL-004,SUBJ-002,SUBJ-002,v1.0,active,SESS-003,img_001.jpg,3e23e8160039594a33894f6564e1b1348bbd7a0088d42c4acb73eeaed59c009d,image,NONE,300,50.0,DEV-CAM-02,CALIBRATION,gallery,OK,
+SMPL-005,SUBJ-003,SUBJ-003,v1.0,revoked,SESS-004,video_004.mp4,9b871512327c09ce91dd649b3f96a63b7408ef267c8cc5710114e629730cb61f,video,NONE,,,,EXCLUDED,none,OK,Consent revoked
+SMPL-006,SUBJ-004,SUBJ-004,v1.0,active,SESS-005,video_005.mp4,07123e1f482356c415f684407a3b8723e10b2cbbc0b8fcd6282c49d37c9c1abc,video,NONE,200,40.0,DEV-CAM-03,TEST,probe,NO_FACE,

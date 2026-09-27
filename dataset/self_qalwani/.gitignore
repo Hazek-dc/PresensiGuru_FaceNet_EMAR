@@ -1,0 +1,70 @@
+# Local .gitignore for dataset/self_qalwani/
+# Prevents raw biometric data, processed faces, embeddings, consent docs, and temporary files from entering Git.
+
+# Ignore all media files (photos & videos)
+*.jpg
+*.jpeg
+*.png
+*.mp4
+*.webm
+*.avi
+*.mov
+
+# Ignore binary embeddings & templates
+*.pkl
+*.pth
+*.npz
+*.bin
+*.dat
+
+# Ignore raw data folders
+raw/enrollment/session_e/*
+!raw/enrollment/session_e/.gitkeep
+raw/calibration/session_c/bona_fide/*
+!raw/calibration/session_c/bona_fide/.gitkeep
+raw/calibration/session_c/attacks/printed_photo/*
+!raw/calibration/session_c/attacks/printed_photo/.gitkeep
+raw/calibration/session_c/attacks/screen_photo/*
+!raw/calibration/session_c/attacks/screen_photo/.gitkeep
+raw/calibration/session_c/attacks/replay_video/*
+!raw/calibration/session_c/attacks/replay_video/.gitkeep
+raw/test/session_t/bona_fide/*
+!raw/test/session_t/bona_fide/.gitkeep
+raw/test/session_t/attacks/printed_photo/*
+!raw/test/session_t/attacks/printed_photo/.gitkeep
+raw/test/session_t/attacks/screen_photo/*
+!raw/test/session_t/attacks/screen_photo/.gitkeep
+raw/test/session_t/attacks/replay_video/*
+!raw/test/session_t/attacks/replay_video/.gitkeep
+
+# Ignore processed features and faces
+processed/extracted_frames/*
+!processed/extracted_frames/.gitkeep
+processed/detected_faces/*
+!processed/detected_faces/.gitkeep
+processed/aligned_faces/*
+!processed/aligned_faces/.gitkeep
+processed/rejected_samples/*
+!processed/rejected_samples/.gitkeep
+processed/quality_reports/*
+!processed/quality_reports/.gitkeep
+
+# Ignore manifests with actual capture metadata, keep template
+manifests/*.csv
+!manifests/MANIFEST_QALWANI_TEMPLATE.csv
+manifests/validated/*.csv
+!manifests/validated/.gitkeep
+
+# Ignore consent & temporary
+consent/*
+!consent/.gitkeep
+temporary/*
+!temporary/.gitkeep
+
+# Ignore evaluation outputs containing sensitive metadata
+reports/validation/*.json
+reports/validation/*.csv
+!reports/validation/.gitkeep
+reports/evaluation/*.json
+reports/evaluation/*.csv
+!reports/evaluation/.gitkeep

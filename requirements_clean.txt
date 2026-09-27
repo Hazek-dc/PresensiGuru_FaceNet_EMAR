@@ -1,0 +1,15 @@
+torch
+torchvision
+facenet-pytorch
+opencv-python
+dlib
+numpy
+scipy
+scikit-learn
+matplotlib
+flask
+flask-cors
+pillow
+tqdm
+pandas
+openpyxl

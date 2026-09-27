@@ -1,0 +1,4 @@
+File_Uji,Claimed_ID,Sample_Type,PAI_Species,Lux,Jarak_cm,Session
+S01_Guru_NurHolis_v2.mp4,S01,BONA_FIDE,NONE,60,50,PILOT
+S09_Guru_WerySaputra_v2.mp4,S09,BONA_FIDE,NONE,60,50,PILOT
+SpoofScreen_NurHolis.mp4,S01,ATTACK,SCREEN,60,50,PILOT

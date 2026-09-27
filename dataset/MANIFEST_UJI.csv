@@ -1,0 +1,34 @@
+sample_id,subject_id,claimed_subject_id,sample_type,pai_species,lux_category,distance_cm,session,split,image_path,gt_label
+ENR_S07_178053,S07,S07,bona_fide,bona_fide,normal,60,enrollment,TRAIN,dataset/foto_selfie/17805329924835129958027868354075 - Reynaldi surya.S.jpg,1
+ENR_S03_178053,S03,S03,bona_fide,bona_fide,normal,60,enrollment,TRAIN,dataset/foto_selfie/17805330280731745181382 - Mauludin Mauludin.jpg,1
+ENR_S01_178053,S01,S01,bona_fide,bona_fide,normal,60,enrollment,TRAIN,dataset/foto_selfie/17805338724046890026856170677286 - nur holis.jpg,1
+ENR_S01_178053,S01,S01,bona_fide,bona_fide,normal,60,enrollment,TRAIN,dataset/foto_selfie/17805340728343855989262958592997 - nur holis.jpg,1
+ENR_S06_178053,S06,S06,bona_fide,bona_fide,normal,60,enrollment,TRAIN,dataset/foto_selfie/17805377879556095746779800432109 - Karmila Milla.jpg,1
+ENR_S09_178053,S09,S09,bona_fide,bona_fide,normal,60,enrollment,TRAIN,dataset/foto_selfie/17805389273427602646822118312862 - Wery Saputra.jpg,1
+ENR_S09_178053,S09,S09,bona_fide,bona_fide,normal,60,enrollment,TRAIN,dataset/foto_selfie/17805397456483656669243780204448 - Wery Saputra.jpg,1
+ENR_S02_image ,S02,S02,bona_fide,bona_fide,normal,60,enrollment,TRAIN,dataset/foto_selfie/image - Viky Widiyanti.jpg,1
+ENR_S01_IMG-20,S01,S01,bona_fide,bona_fide,normal,60,enrollment,TRAIN,dataset/foto_selfie/IMG-20251120-WA0041 - nur holis.jpg,1
+ENR_S13_IMG-20,S13,S13,bona_fide,bona_fide,normal,60,enrollment,TRAIN,dataset/foto_selfie/IMG-20260604-WA0040 (1) - Yulisma Shinta.jpg,1
+ENR_S14_IMG_20,S14,S14,bona_fide,bona_fide,normal,60,enrollment,TRAIN,dataset/foto_selfie/IMG_20181002_103624 - Arie Lazido.jpg,1
+ENR_S05_IMG_20,S05,S05,bona_fide,bona_fide,normal,60,enrollment,TRAIN,dataset/foto_selfie/IMG_20260604_084355 - Merli Yanti.jpg,1
+ENR_S11_IMG_20,S11,S11,bona_fide,bona_fide,normal,60,enrollment,TRAIN,dataset/foto_selfie/IMG_20260604_135231 - Susi Lisnasari.jpg,1
+ENR_S12_IMG_20,S12,S12,bona_fide,bona_fide,normal,60,enrollment,TRAIN,dataset/foto_selfie/IMG_20260604_140945 - ponco prastio.jpg,1
+ENR_S12_IMG_20,S12,S12,bona_fide,bona_fide,normal,60,enrollment,TRAIN,dataset/foto_selfie/IMG_20260604_140950 - ponco prastio.jpg,1
+ENR_S12_IMG_20,S12,S12,bona_fide,bona_fide,normal,60,enrollment,TRAIN,dataset/foto_selfie/IMG_20260604_140952 - ponco prastio.jpg,1
+ENR_S08_bca173,S08,S08,bona_fide,bona_fide,normal,60,enrollment,TRAIN,dataset/foto_selfie/bca173b1117eff1be0ccd33c5999aed3_0 - Taufik Hidayat.jpeg,1
+PROBE_S01_S01_Guru,S01,S01,bona_fide,bona_fide,normal,60,probe,CALIBRATION,dataset/video_singkat/S01_Guru_NurHolis.mp4,1
+PROBE_S01_S01_Guru,S01,S01,bona_fide,bona_fide,normal,60,probe,TEST,dataset/video_singkat/S01_Guru_NurHolis_v2.mp4,1
+PROBE_S01_S01_Guru,S01,S01,bona_fide,bona_fide,normal,60,probe,CALIBRATION,dataset/video_singkat/S01_Guru_NurHolis_v3.mp4,1
+PROBE_S02_S02_Guru,S02,S02,bona_fide,bona_fide,normal,60,probe,CALIBRATION,dataset/video_singkat/S02_Guru_FikiWidiyanti.mp4,1
+PROBE_S03_S03_Staf,S03,S03,bona_fide,bona_fide,normal,60,probe,TEST,dataset/video_singkat/S03_Staf_Mauludin.mp4,1
+PROBE_S05_S05_Guru,S05,S05,bona_fide,bona_fide,normal,60,probe,CALIBRATION,dataset/video_singkat/S05_Guru_Merliyanti.mp4,1
+PROBE_S06_S06_Staf,S06,S06,bona_fide,bona_fide,normal,60,probe,TEST,dataset/video_singkat/S06_Staf_Karmila.mp4,1
+PROBE_S07_S07_Guru,S07,S07,bona_fide,bona_fide,normal,60,probe,TEST,dataset/video_singkat/S07_Guru_ReynaldiSurya.mp4,1
+PROBE_S08_S08_Guru,S08,S08,bona_fide,bona_fide,normal,60,probe,TEST,dataset/video_singkat/S08_Guru_TaufikHidayat.mp4,1
+PROBE_S09_S09_Guru,S09,S09,bona_fide,bona_fide,normal,60,probe,CALIBRATION,dataset/video_singkat/S09_Guru_WerySaputra.mp4,1
+PROBE_S09_S09_Guru,S09,S09,bona_fide,bona_fide,normal,60,probe,CALIBRATION,dataset/video_singkat/S09_Guru_WerySaputra_v2.mp4,1
+PROBE_S11_S11_Guru,S11,S11,bona_fide,bona_fide,normal,60,probe,TEST,dataset/video_singkat/S11_Guru_SusiLisnasari.mp4,1
+PROBE_S12_S12_Guru,S12,S12,bona_fide,bona_fide,normal,60,probe,TEST,dataset/video_singkat/S12_Guru_PoncoPrasetio.mp4,1
+PROBE_S13_S13_Guru,S13,S13,bona_fide,bona_fide,normal,60,probe,CALIBRATION,dataset/video_singkat/S13_Guru_SintaYulisma.mp4,1
+ATK_S01_SpoofScr,S01,S01,screen_attack,screen_phone,normal,60,probe,CALIBRATION,dataset/video_singkat/SpoofScreen_Qalwani.mp4,0
+PROBE_S14_VID_2026,S14,S14,bona_fide,bona_fide,normal,60,probe,TEST,dataset/video_singkat/VID_20260604_090104 - Arie Lazido.mp4,1

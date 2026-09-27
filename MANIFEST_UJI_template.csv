@@ -1,0 +1,22 @@
+sample_id,subject_id,sample_type,pai_species,lux_category,distance_cm,session,image_path,gt_label
+# ============================================================
+# MANIFEST_UJI.csv — Template Dataset Eksperimen
+# Penelitian: Qalwani Anugerah — NPM 221220048 — UMP 2026
+# ============================================================
+# CATATAN ANTI-LEAKAGE:
+#   session="enrollment" → TIDAK BOLEH digunakan sebagai probe
+#   session="probe"      → Data evaluasi resmi
+#
+# gt_label: 1 = bona-fide, 0 = serangan (print/screen/replay)
+#
+# Rumus jumlah data (Persamaan Bab III Proposal):
+#   N_bona_fide = 18 subjek × 10 gambar × (3 lux × 3 jarak) = 1620 citra
+#   N_spoof     = 18 subjek × 3 jenis × 10 gambar × 9 kondisi = 4860 citra
+# ============================================================
+# CONTOH BARIS DATA:
+BF_GURU001_N60_001,GURU001,bona_fide,bona_fide,normal,60,probe,data/bona_fide/GURU001/normal_60cm_001.jpg,1
+BF_GURU001_N60_002,GURU001,bona_fide,bona_fide,normal,60,probe,data/bona_fide/GURU001/normal_60cm_002.jpg,1
+ATK_GURU001_PA_N60_001,GURU001,print_attack,print,normal,60,probe,data/attacks/GURU001/print_normal_60cm_001.jpg,0
+ATK_GURU001_SA_N60_001,GURU001,screen_attack,screen_phone,normal,60,probe,data/attacks/GURU001/screen_normal_60cm_001.jpg,0
+ATK_GURU001_RV_N60_001,GURU001,replay_video,replay,normal,60,probe,data/attacks/GURU001/replay_normal_60cm_001.jpg,0
+ENR_GURU001_001,GURU001,bona_fide,bona_fide,normal,60,enrollment,data/enrollment/GURU001/enroll_001.jpg,1

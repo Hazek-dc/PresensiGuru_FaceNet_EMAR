@@ -1,0 +1,28 @@
+2026-09-25 13:02:16,800 [INFO] FaceEMARSystem: Menginisialisasi FaceEMARSystem...
+2026-09-25 13:02:16,800 [INFO] FaceEMARSystem: Menginisialisasi FaceNet pada device: cpu
+2026-09-25 13:02:16,824 [INFO] FaceEMARSystem: MTCNN diinisialisasi (image_size=160, margin=20)
+2026-09-25 13:02:17,215 [INFO] FaceEMARSystem: InceptionResnetV1 (VGGFace2) dimuat ke device
+2026-09-25 13:02:17,215 [INFO] FaceEMARSystem: Galeri kosong — mulai enrollment baru
+2026-09-25 13:02:18,409 [INFO] FaceEMARSystem: dlib 68-Landmark Predictor diinisialisasi (F:\Face Verification Presensi\presensi-facenet-emar\models\shape_predictor_68_face_landmarks.dat)
+2026-09-25 13:02:18,434 [INFO] FaceEMARSystem: Database siap: logs\attendance.db
+2026-09-25 13:02:18,435 [INFO] FaceEMARSystem: FaceEMARSystem siap.
+2026-09-25 13:02:23,829 [INFO] FaceEMARSystem: Galeri kosong — mulai enrollment baru
+2026-09-25 13:02:23,829 [WARNING] FaceEMARSystem: verify(emb_TEST-QALWANI-001): subjek tidak ditemukan di galeri
+2026-09-25 13:14:51,979 [INFO] FaceEMARSystem: Menginisialisasi FaceEMARSystem...
+2026-09-25 13:14:51,979 [INFO] FaceEMARSystem: Menginisialisasi FaceNet pada device: cpu
+2026-09-25 13:14:52,001 [INFO] FaceEMARSystem: MTCNN diinisialisasi (image_size=160, margin=20)
+2026-09-25 13:14:52,419 [INFO] FaceEMARSystem: InceptionResnetV1 (VGGFace2) dimuat ke device
+2026-09-25 13:14:52,420 [INFO] FaceEMARSystem: Galeri kosong — mulai enrollment baru
+2026-09-25 13:14:53,867 [INFO] FaceEMARSystem: dlib 68-Landmark Predictor diinisialisasi (F:\Face Verification Presensi\presensi-facenet-emar\models\shape_predictor_68_face_landmarks.dat)
+2026-09-25 13:14:53,869 [INFO] FaceEMARSystem: Database siap: logs\attendance.db
+2026-09-25 13:14:53,870 [INFO] FaceEMARSystem: FaceEMARSystem siap.
+2026-09-25 13:14:54,266 [INFO] FaceEMARSystem: Galeri kosong — mulai enrollment baru
+2026-09-25 13:14:54,266 [WARNING] FaceEMARSystem: verify(emb_TEST-QALWANI-001): subjek tidak ditemukan di galeri
+2026-09-25 13:21:23,592 [INFO] FaceEMARSystem: Menginisialisasi FaceEMARSystem...
+2026-09-25 13:21:23,593 [INFO] FaceEMARSystem: Menginisialisasi FaceNet pada device: cpu
+2026-09-25 13:21:23,613 [INFO] FaceEMARSystem: MTCNN diinisialisasi (image_size=160, margin=20)
+2026-09-25 13:21:23,929 [INFO] FaceEMARSystem: InceptionResnetV1 (VGGFace2) dimuat ke device
+2026-09-25 13:21:23,929 [INFO] FaceEMARSystem: Galeri kosong — mulai enrollment baru
+2026-09-25 13:21:25,074 [INFO] FaceEMARSystem: dlib 68-Landmark Predictor diinisialisasi (F:\Face Verification Presensi\presensi-facenet-emar\models\shape_predictor_68_face_landmarks.dat)
+2026-09-25 13:21:25,075 [INFO] FaceEMARSystem: Database siap: logs\attendance.db
+2026-09-25 13:21:25,075 [INFO] FaceEMARSystem: FaceEMARSystem siap.

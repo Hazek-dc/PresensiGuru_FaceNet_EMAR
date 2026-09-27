@@ -1,0 +1,81 @@
+openapi: 3.0.3
+info:
+  title: Biometric Verification Service (FaceNet+EMAR)
+  version: 1.0.0
+  description: API for processing video uploads to verify identity and check for presentation attacks.
+paths:
+  /api/v1/verify:
+    post:
+      summary: Verify identity and PAD from video
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                claimed_subject_id:
+                  type: string
+                  description: The subject identity being claimed.
+                video:
+                  type: string
+                  format: binary
+                  description: Video file (max 10s) containing the presenter's face.
+      responses:
+        '200':
+          description: Verification response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VerificationResponse'
+        '400':
+          description: Bad request (missing fields, wrong format)
+        '404':
+          description: Claimed subject ID not found in gallery
+components:
+  schemas:
+    VerificationResponse:
+      type: object
+      required:
+        - request_id
+        - claimed_subject_id
+        - acquisition_status
+        - identity
+        - pad
+        - final_decision
+        - reasons
+      properties:
+        request_id:
+          type: string
+          description: Opaque ID tracking this request.
+        claimed_subject_id:
+          type: string
+        acquisition_status:
+          type: string
+          enum: [OK, FTA, INVALID_CLAIM]
+        identity:
+          type: object
+          properties:
+            decision:
+              type: string
+              enum: [MATCH, NON_MATCH, NOT_EVALUATED]
+            score:
+              type: number
+              format: float
+        pad:
+          type: object
+          properties:
+            decision:
+              type: string
+              enum: [BONA_FIDE, ATTACK, NOT_EVALUATED]
+        final_decision:
+          type: string
+          enum: [ACCEPT, REJECT]
+        reasons:
+          type: array
+          items:
+            type: string
+        model_version:
+          type: string
+        config_version:
+          type: string

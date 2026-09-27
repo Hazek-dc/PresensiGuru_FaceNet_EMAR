@@ -1,0 +1,15 @@
+---
+description: Methodology safeguards for the face-verification attendance system
+alwaysApply: true
+---
+
+# Thesis methodology safeguards
+
+- The system performs **1:1 face verification** only. It must never identify a person by searching a 1:N gallery.
+- Normalize both gallery and probe embeddings with the same L2 normalization routine before comparison.
+- Treat failure to acquire a valid biometric sample as FTA. Report FTA separately; it must not enter APCER or BPCER denominators.
+- Keep DEVELOPMENT, CALIBRATION, and TEST splits immutable unless an explicit user request authorizes a split change.
+- Do not introduce, replace, or tune FaceNet, EAR, MAR, blink, or timing thresholds without explicit approval. Runtime thresholds must be supplied through configuration.
+- Do not alter metric formulas without accompanying unit tests.
+- Do not use `except: pass`; surface errors or handle them explicitly.
+- Review diffs and run relevant tests before accepting a change.

@@ -1,0 +1,39 @@
+# ============================================================
+# requirements.txt
+# FaceNet + EMAR Liveness Detection System
+# Penelitian: Qalwani Anugerah — NPM 221220048 — UMP 2026
+# ============================================================
+
+# ---- Core Deep Learning ----
+torch>=2.2.0
+torchvision>=0.17.0
+facenet-pytorch>=2.6.0       # MTCNN + InceptionResnetV1
+
+# ---- Computer Vision ----
+opencv-python>=4.9.0.80
+dlib>=19.24.6                # 68-point facial landmark predictor
+# CATATAN: dlib memerlukan cmake. Unduh model:
+#   http://dlib.net/files/shape_predictor_68_face_landmarks.dat.bz2
+#   → ekstrak ke folder models/
+
+# ---- Scientific Computing ----
+numpy>=1.26.0
+scipy>=1.12.0
+scikit-learn>=1.4.0
+matplotlib>=3.8.0
+
+# ---- Web API ----
+flask>=3.0.0
+flask-cors>=4.0.0
+
+# ---- Database ----
+# SQLite: built-in Python (tidak perlu install)
+# MySQL/MariaDB (untuk produksi dengan Laravel):
+# PyMySQL>=1.1.0
+# SQLAlchemy>=2.0.0
+
+# ---- Utilitas ----
+pillow>=10.2.0
+tqdm>=4.66.0
+pandas>=2.2.0                # Untuk analisis data CSV
+openpyxl>=3.1.2              # Ekspor Excel

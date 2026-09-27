@@ -1,0 +1,1 @@
+sample_id,subject_id,session_id,split,sample_type,attack_type,presentation_medium,lighting_category,measured_lux,distance_cm,camera_device,resolution,fps,capture_timestamp,relative_path,consent_version,ground_truth_identity,ground_truth_liveness,is_test_data,sha256,notes

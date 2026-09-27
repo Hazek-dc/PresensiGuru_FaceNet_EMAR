@@ -1,0 +1,72 @@
+# ============================================================
+# docker-compose.yml
+# Arsitektur Microservice FaceNet + EMAR
+# Browser → Next.js/Laravel → Biometric API (Python) → MySQL
+# ============================================================
+version: '3.8'
+
+services:
+  # ── Microservice Biometrik (Python FastAPI/Flask) ────────
+  biometric-api:
+    build: .
+    container_name: facenet_emar_api
+    restart: unless-stopped
+    ports:
+      - "5000:5000"
+    volumes:
+      - ./gallery:/app/gallery     # Galeri embedding (persistent)
+      - ./logs:/app/logs           # Log sistem dan DB SQLite
+      - ./results:/app/results     # Hasil evaluasi dan plot
+      - ./models:/app/models       # Model Dlib dan FaceNet
+    environment:
+      - FLASK_ENV=production
+      - FACENET_THRESHOLD=0.40
+      - EMAR_W1=0.50
+      - EMAR_W2=0.50
+      - ALPHA=0.60
+    networks:
+      - presensi_network
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:5000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # ── MySQL / MariaDB ───────────────────────────────────────
+  # (Untuk integrasi dengan Laravel attendance-web)
+  db:
+    image: mysql:8.0
+    container_name: presensi_mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: root_secret
+      MYSQL_DATABASE: presensi_db
+      MYSQL_USER: presensi_user
+      MYSQL_PASSWORD: presensi_pass
+    volumes:
+      - mysql_data:/var/lib/mysql
+    ports:
+      - "3306:3306"
+    networks:
+      - presensi_network
+
+  # ── Nginx Reverse Proxy ───────────────────────────────────
+  nginx:
+    image: nginx:alpine
+    container_name: presensi_nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      - biometric-api
+    networks:
+      - presensi_network
+
+volumes:
+  mysql_data:
+
+networks:
+  presensi_network:
+    driver: bridge
