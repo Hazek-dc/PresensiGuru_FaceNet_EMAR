@@ -23,6 +23,11 @@ class AttendanceResponse(BaseModel):
     blink_cycles: int | None = None
     mouth_cycles: int | None = None
     video_seconds: float | None = None
+    # Rasio lebar wajah untuk jarak kamera; tidak ikut keputusan verifikasi.
+    face_width_ratio: float | None = None
+    face_width_frames: int | None = None
+    frame_width: int | None = None
+    frame_height: int | None = None
     request_id: str | None = None
 
 UPLOAD_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "storage", "temp_video")

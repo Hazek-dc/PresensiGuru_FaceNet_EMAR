@@ -7,26 +7,53 @@ use Inertia\Inertia;
 use Illuminate\Support\Facades\Http;
 use App\Models\User;
 use App\Models\AttendanceRecord;
+use App\Models\DistanceCalibration;
+use App\Models\DistanceLog;
+use App\Models\LightingLog;
+use App\Models\LuxCalibration;
 use App\Models\EvaluationMatrix;
 use App\Services\AttendanceScheduleService;
+use App\Services\DistanceModel;
+use App\Services\EngineBrightness;
+use App\Services\LightingModel;
+use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Arr;
 use Illuminate\Support\Str;
 use Carbon\Carbon;
 
 class PresensiController extends Controller
 {
     /** Sumber yang dihitung sebagai pengukuran langsung (lihat measuredInput()). */
-    private const LUX_SOURCES = ['luxmeter', 'camera'];
-    private const DISTANCE_SOURCES = ['sensor', 'camera'];
+    // camera_calibrated: estimasi browser dengan model kalibrasi luxmeter aktif.
+    private const LUX_SOURCES = ['luxmeter', 'camera', 'camera_calibrated'];
+    // camera_calibrated: estimasi browser dengan model kalibrasi kamera aktif.
+    private const DISTANCE_SOURCES = ['sensor', 'camera', 'camera_calibrated'];
 
     public function index(Request $request)
     {
         $currentSchedule = AttendanceScheduleService::evaluate();
         $scheduleMatrix = AttendanceScheduleService::getScheduleMatrix();
 
+        // Daftar guru Studio dari tabel users, bukan daftar tetap di frontend,
+        // beserta kesiapan template wajahnya di galeri mesin.
+        $teachers = \App\Services\TemplateReadiness::teachers();
+
+        // Kalibrasi ikut dalam halaman: artisan serve melayani satu permintaan
+        // sekaligus, jadi dua permintaan susulan menunda kesiapan Studio.
+        $distanceCalibration = DistanceCalibration::tablesReady() ? DistanceCalibration::active() : null;
+        $luxCalibration = LuxCalibration::tablesReady() ? LuxCalibration::active() : null;
+        $canCalibrate = in_array($request->user()?->role, ['admin', 'researcher'], true);
+
         return Inertia::render('Presensi/Index', [
             'user' => $request->user(),
             'schedule_session' => $currentSchedule,
             'schedule_matrix' => $scheduleMatrix,
+            'subjects' => $teachers['subjects'],
+            'template_status_available' => $teachers['engine_available'],
+            'distance_calibration' => $distanceCalibration?->toContract(),
+            'lux_calibration' => $luxCalibration?->toContract(),
+            // Kalibrasi lux dapat dilakukan langsung dari Studio dengan kamera yang sama.
+            'lux_calibration_setup' => $canCalibrate ? \App\Services\LuxCalibrationDraft::setupProps($request) : null,
         ]);
     }
 
@@ -44,6 +71,13 @@ class PresensiController extends Controller
             'distance_cm' => 'nullable|numeric',
             'distance_source' => 'nullable|string|max:32',
             'distance_target_cm' => 'nullable|numeric',
+            // Metadata kamera dibaca longgar di cameraInfo()/recordedDistance(): nilai
+            // yang tidak terbaca (mis. "null" dari FormData) disimpan null dan tidak
+            // pernah menggagalkan presensi.
+            'camera_label' => 'nullable',
+            'camera_resolution' => 'nullable',
+            'camera_fps' => 'nullable',
+            'calibration_id' => 'nullable',
             'session_type' => 'nullable|string',
             'sample_type' => 'nullable|string',
             'ear_blinks' => 'nullable|numeric',
@@ -88,7 +122,9 @@ class PresensiController extends Controller
         // Tanpa itu nilainya null: dulu 300 lux / 30 cm diisikan dan tercatat
         // sebagai hasil ukur. Target skenario (dari Studio/preset) disimpan terpisah.
         [$luxValue, $luxSource] = $this->measuredInput($request, ['lux_value', 'lux'], 'lux_source', self::LUX_SOURCES);
-        [$distanceCm, $distanceSource] = $this->measuredInput($request, ['distance_cm'], 'distance_source', self::DISTANCE_SOURCES);
+        // Jarak dari klien (browser/sensor). Jarak tercatat baru ditentukan setelah
+        // mesin mengukur ulang video, lihat recordedDistance().
+        [$browserDistanceCm, $browserDistanceSource] = $this->measuredInput($request, ['distance_cm'], 'distance_source', self::DISTANCE_SOURCES);
         $luxTarget = $request->filled('lux_target') ? round((float) $request->input('lux_target'), 1) : null;
         $distanceTarget = $request->filled('distance_target_cm') ? round((float) $request->input('distance_target_cm'), 1) : null;
         $sessionType = $request->input('session_type') ?: 'TEST';
@@ -130,6 +166,7 @@ class PresensiController extends Controller
         $minStability = (float) ($modelSettings['stability_threshold'] ?? 80.0); // Kestabilan Wajah >= 80.0%
 
         $allowSimulated = (bool) config('biometrics.allow_simulated_scores', false);
+        $engineFace = $this->engineFaceWidth(null);
 
         if ($allowSimulated && $request->filled('euclidean_distance')) {
             $euclideanDistance = (float) $request->input('euclidean_distance');
@@ -151,7 +188,7 @@ class PresensiController extends Controller
                     'clean_id' => $cleanSubjectId,
                     'attempt_id' => $attemptId,
                     'session' => $sessionType,
-                ] + array_filter(['distance_cm' => $distanceCm, 'lux' => $luxValue], fn ($v) => $v !== null);
+                ] + array_filter(['distance_cm' => $browserDistanceCm, 'lux' => $luxValue], fn ($v) => $v !== null);
                 $send = fn (string $url) => Http::timeout((int) config('biometrics.verify_timeout', 90))->attach(
                     'video', file_get_contents($videoFile->getRealPath()), $videoFile->getClientOriginalName()
                 )->post($url, $payload);
@@ -162,6 +199,9 @@ class PresensiController extends Controller
                 }
 
                 $result = $response->json();
+                if ($response->successful() && is_array($result)) {
+                    $engineFace = $this->engineFaceWidth($result);
+                }
                 $distance = is_array($result)
                     ? ($result['distance'] ?? $result['euclidean_distance'] ?? null)
                     : null;
@@ -191,6 +231,32 @@ class PresensiController extends Controller
                 $backendError = 'mesin biometrik tidak dapat dihubungi';
             }
         }
+
+        // Jarak hanya dicatat; tidak ada bagian keputusan di bawah yang membacanya.
+        $camera = $this->cameraInfo($request);
+        $distanceTablesReady = DistanceCalibration::tablesReady();
+        if (!$distanceTablesReady) {
+            \Illuminate\Support\Facades\Log::warning('Tabel distance_calibrations/distance_logs belum ada; jalankan php artisan migrate. Presensi dicatat tanpa distance_logs.');
+        }
+        $distanceInfo = $this->recordedDistance(
+            $engineFace, $camera, $browserDistanceCm, $browserDistanceSource,
+            $request->input('calibration_id'), $distanceTablesReady
+        );
+        $distanceCm = $distanceInfo['distance_cm'];
+        $distanceSource = $distanceInfo['distance_source'];
+        $distanceMeta = array_merge($camera, $distanceInfo);
+
+        // Pencahayaan juga hanya dicatat (keputusan pemilik: semua kategori boleh
+        // lanjut, tidak ada bagian keputusan yang membacanya).
+        $luxTablesReady = LuxCalibration::tablesReady();
+        $luxInfo = $this->recordedLux($request, $camera, $luxValue, $luxSource, $luxTablesReady);
+        $luxValue = $luxInfo['lux'];
+        $luxSource = $luxInfo['lux_source'];
+
+        // Kesesuaian dengan target skenario Studio (Ubah Parameter). Hanya dicatat:
+        // presentasi di luar target ditandai, bukan ditolak.
+        $distanceTargetMet = DistanceModel::targetMet($distanceTarget, $distanceCm);
+        $luxTargetMet = LightingModel::targetMet($luxTarget, $luxValue);
 
         // 2. Evaluasi Komponen Mandiri Sesuai Metodologi Bab 3
         // Perbandingan eksplisit terhadap null: di PHP, null <= 0.40 bernilai true.
@@ -322,9 +388,14 @@ class PresensiController extends Controller
             'lux' => $luxValue,
             'lux_source' => $luxSource,
             'lux_target' => $luxTarget,
+            'lux_target_met' => $luxTargetMet,
+            'lighting_category' => $luxInfo['lighting_category'],
+            'lighting_status' => $luxInfo['lighting_status'],
             'distance_cm' => $distanceCm,
             'distance_source' => $distanceSource,
+            'distance_category' => $distanceInfo['distance_category'],
             'distance_target_cm' => $distanceTarget,
+            'distance_target_met' => $distanceTargetMet,
         ];
 
         // Database Persistence Transaction (Atomik Sesuai PRD)
@@ -332,9 +403,9 @@ class PresensiController extends Controller
         \Illuminate\Support\Facades\DB::transaction(function () use (
             $user, $subjectId, $statusStr, $message, $requestId,
             $facenetScore, $emarScore, $euclideanDistance, $distanceCm, $luxValue,
-            $distanceSource, $luxSource, $distanceTarget, $luxTarget,
+            $distanceSource, $luxSource, $distanceTarget, $luxTarget, $distanceTargetMet, $luxTargetMet,
             $earBlinks, $marMouths, $facePct, $scanDuration, $padPred, $idPred,
-            $activeChallenge, $challengeStatus,
+            $activeChallenge, $challengeStatus, $distanceMeta, $distanceTablesReady, $luxInfo, $luxTablesReady,
             $finalDecision, $schedule, $sampleType, $sessionType, $evaluationBab5, $biometricSource, $round3, &$record
         ) {
             // 1. Save Attendance Record
@@ -346,16 +417,18 @@ class PresensiController extends Controller
                 'biometric_request_id' => $requestId,
                 'verified_at' => now(),
                 'is_test_data' => $user->is_test_data ?? false,
-                'metadata' => [
+                'metadata' => array_merge([
                     'facenet_score' => $facenetScore,
                     'emar_score' => $emarScore,
                     'euclidean_distance' => $euclideanDistance,
                     'distance_cm' => $distanceCm,
                     'distance_source' => $distanceSource,
                     'distance_target_cm' => $distanceTarget,
+                    'distance_target_met' => $distanceTargetMet,
                     'lux' => $luxValue,
                     'lux_source' => $luxSource,
                     'lux_target' => $luxTarget,
+                    'lux_target_met' => $luxTargetMet,
                     'ear_blinks' => $earBlinks,
                     'mar_mouths' => $marMouths,
                     'face_detected_pct' => $facePct,
@@ -368,8 +441,48 @@ class PresensiController extends Controller
                     'operational_session' => $schedule,
                     'evaluation_bab5' => $evaluationBab5,
                     'biometric_source' => $biometricSource,
-                ]
+                ], $distanceMeta, Arr::except($luxInfo, ['lux', 'lux_source'])),
             ]);
+
+            if ($luxTablesReady) {
+                LightingLog::create([
+                    'attendance_record_id' => $record->id,
+                    'user_id' => $user->id,
+                    'camera_device' => $distanceMeta['camera_label'],
+                    'lux_value' => $luxInfo['lux'],
+                    'lighting_category' => $luxInfo['lighting_category'],
+                    'lighting_status' => $luxInfo['lighting_status'],
+                    'lux_category_naskah' => $luxInfo['lux_category_naskah'],
+                    'lux_source' => $luxInfo['lux_source'],
+                    'luxmeter_lux' => $luxInfo['luxmeter_lux'],
+                    'browser_lux' => $luxInfo['browser_lux'],
+                    'engine_lux' => $luxInfo['engine_lux'],
+                    'engine_luma' => $luxInfo['engine_luma'],
+                    'exposure_locked' => $luxInfo['lux_exposure_locked'],
+                    'calibration_id' => $luxInfo['lux_calibration_id'],
+                    'decision' => $finalDecision,
+                ]);
+            }
+
+            if ($distanceTablesReady) {
+                DistanceLog::create([
+                    'attendance_record_id' => $record->id,
+                    'user_id' => $user->id,
+                    'camera_device' => $distanceMeta['camera_label'],
+                    'camera_resolution' => $distanceMeta['camera_resolution'],
+                    'distance_cm' => $distanceMeta['distance_cm'],
+                    'distance_category' => $distanceMeta['distance_category'],
+                    'distance_source' => $distanceMeta['distance_source'],
+                    'browser_distance_cm' => $distanceMeta['browser_distance_cm'],
+                    'engine_distance_cm' => $distanceMeta['engine_distance_cm'],
+                    'engine_face_width_ratio' => $distanceMeta['engine_face_width_ratio'],
+                    'distance_mismatch_cm' => $distanceMeta['distance_mismatch_cm'],
+                    'calibration_id' => $distanceMeta['calibration_id'],
+                    'facenet_distance' => $euclideanDistance,
+                    'emar_score' => $emarScore,
+                    'decision' => $finalDecision,
+                ]);
+            }
 
             // 2. Update status presensi pada tabel guru secara langsung saat ACCEPT
             if ($finalDecision === 'ACCEPT') {
@@ -513,7 +626,9 @@ class PresensiController extends Controller
                     'attendance_id' => $record->id,
                     'teacher_name' => $user->name,
                     'distance_cm' => $distanceCm,
+                    'distance_source' => $distanceSource,
                     'lux' => $luxValue,
+                    'lux_source' => $luxSource,
                     'final_decision' => $finalDecision,
                     'active_challenge' => $activeChallenge,
                     'challenge_status' => $challengeStatus,
@@ -551,7 +666,7 @@ class PresensiController extends Controller
             'active_challenge' => $activeChallenge,
             'challenge_status' => $challengeStatus,
             'operational_session' => $schedule,
-            'evaluation' => [
+            'evaluation' => array_merge([
                 'final_decision' => $finalDecision,
                 'status_str' => $statusStr,
                 'status_label' => $schedule['status_label'],
@@ -574,9 +689,20 @@ class PresensiController extends Controller
                 'distance_cm' => $distanceCm,
                 'distance_source' => $distanceSource,
                 'distance_target_cm' => $distanceTarget,
+                'distance_target_met' => $distanceTargetMet,
                 'lux_value' => $luxValue,
                 'lux_source' => $luxSource,
                 'lux_target' => $luxTarget,
+                'lux_target_met' => $luxTargetMet,
+                'lighting_category' => $luxInfo['lighting_category'],
+                'lighting_status' => $luxInfo['lighting_status'],
+                'lighting_message' => $luxInfo['lighting_message'],
+                'lux_engine_note' => $luxInfo['lux_engine_note'],
+                'lighting' => \App\Services\LightingSummary::fromMetadata([
+                    'lux' => $luxValue,
+                    'lux_source' => $luxSource,
+                    'lux_target' => $luxTarget,
+                ] + $luxInfo),
                 'operational_session' => $schedule,
                 's1_decision' => $s1,
                 's2_decision' => $s2,
@@ -587,7 +713,7 @@ class PresensiController extends Controller
                 'liveness_valid' => $livenessValid,
                 'ear_val' => round($earVal, 3),
                 'mar_val' => round($marVal, 3),
-            ],
+            ], $distanceMeta),
             'metadata' => [
                 'facenet_score' => $facenetScore,
                 'emar_score' => $emarScore,
@@ -616,6 +742,236 @@ class PresensiController extends Controller
         }
 
         return [null, 'none'];
+    }
+
+    /**
+     * Rasio lebar wajah dlib (rahang 0-16 / lebar bingkai, median) dari jawaban
+     * /verify. Mesin lama tidak mengirimnya; nilainya lalu null.
+     *
+     * @return array{ratio: float|null, frames: int|null, frame_width: int|null, frame_height: int|null}
+     */
+    private function engineFaceWidth(?array $result): array
+    {
+        $int = fn ($v) => is_numeric($v) && (int) $v > 0 ? (int) $v : null;
+        $ratio = $result['face_width_ratio'] ?? null;
+
+        return [
+            'ratio' => is_numeric($ratio) && (float) $ratio > 0.0 && (float) $ratio <= 1.0 ? (float) $ratio : null,
+            'frames' => is_numeric($result['face_width_frames'] ?? null) ? (int) $result['face_width_frames'] : null,
+            'frame_width' => $int($result['frame_width'] ?? null),
+            'frame_height' => $int($result['frame_height'] ?? null),
+        ];
+    }
+
+    /** @return array{camera_label: string|null, camera_resolution: string|null, camera_fps: float|null} */
+    private function cameraInfo(Request $request): array
+    {
+        $label = $request->input('camera_label');
+        $label = is_string($label) ? mb_substr(trim($label), 0, 191) : '';
+        $resolution = $request->input('camera_resolution');
+        $resolution = is_string($resolution) && preg_match('/^\s*(\d{2,5})\s*[x×]\s*(\d{2,5})\s*$/u', $resolution, $m)
+            ? $m[1] . 'x' . $m[2]
+            : null;
+        $fps = $request->input('camera_fps');
+        $fps = is_numeric($fps) && (float) $fps > 0 && (float) $fps <= 1000 ? round((float) $fps, 1) : null;
+
+        return [
+            'camera_label' => $label === '' ? null : $label,
+            'camera_resolution' => $resolution,
+            'camera_fps' => $fps,
+        ];
+    }
+
+    /**
+     * Lux tercatat untuk satu presentasi. Urutan: luxmeter fisik (instrumen
+     * naskah), lalu lux mesin dari foto pra-cek yang diukur ulang dengan model
+     * kalibrasi aktif, lalu nilai browser beserta sumbernya, selain itu null.
+     * Alasan lux mesin tidak dihitung ada di lux_engine_note.
+     */
+    private function recordedLux(Request $request, array $camera, ?float $clientLux, string $clientSource, bool $tablesReady): array
+    {
+        $calibration = $tablesReady ? LuxCalibration::active() : null;
+        $locked = filter_var($request->input('lux_exposure_locked'), FILTER_VALIDATE_BOOLEAN, FILTER_NULL_ON_FAILURE);
+        $frames = collect(Arr::wrap($request->file('lux_probe_frames')))
+            ->filter(fn ($f) => $f instanceof UploadedFile && $f->isValid()
+                && in_array(strtolower($f->getClientOriginalExtension() ?: (string) $f->extension()), ['jpg', 'jpeg'], true))
+            ->take(5)->values()->all();
+        $browserLuma = $request->input('lux_browser_luma');
+        $browserLuma = is_numeric($browserLuma) && (float) $browserLuma >= 0 && (float) $browserLuma <= 255
+            ? round((float) $browserLuma, 3) : null;
+
+        // Klaim camera_calibrated harus menunjuk kalibrasi lux yang sah; bila tidak,
+        // turun menjadi estimasi kamera biasa.
+        $clientCalibrationId = null;
+        $claimedSource = $clientSource;
+        if ($clientSource === 'camera_calibrated') {
+            $cid = $request->input('lux_calibration_id');
+            $clientCalibrationId = $tablesReady && is_numeric($cid)
+                ? LuxCalibration::query()->whereKey((int) $cid)->value('id') : null;
+            if ($clientCalibrationId === null) {
+                $clientSource = 'camera';
+            }
+        }
+
+        $engineLux = null;
+        $engineLuma = null;
+        $note = null;
+        if (!$tablesReady) {
+            $note = 'lux_table_missing';
+        } elseif (!$calibration) {
+            $note = 'no_lux_calibration';
+        } elseif (!$calibration->hasEngineModel()) {
+            $note = 'lux_calibration_without_engine_model';
+        } elseif (!$frames) {
+            $note = 'no_lux_probe';
+        } elseif ($locked === null || $locked !== $calibration->exposure_locked) {
+            $note = 'exposure_mode_mismatch';
+        } elseif ($camera['camera_label'] !== null && $calibration->camera_label !== null
+            && strcasecmp(trim($camera['camera_label']), trim($calibration->camera_label)) !== 0) {
+            $note = 'camera_label_mismatch';
+        } else {
+            $measured = EngineBrightness::measure($frames);
+            $engineLuma = $measured['luma'];
+            $engineLux = $calibration->engineLux($engineLuma);
+            if ($engineLux === null) {
+                $note = 'engine_brightness_unavailable';
+            }
+        }
+
+        if ($clientSource === 'luxmeter' && $clientLux !== null) {
+            [$lux, $source, $calibrationId] = [$clientLux, 'luxmeter', null];
+        } elseif ($engineLux !== null) {
+            [$lux, $source, $calibrationId] = [$engineLux, 'engine', $calibration->id];
+        } elseif ($clientLux !== null) {
+            [$lux, $source, $calibrationId] = [$clientLux, $clientSource, $clientCalibrationId];
+        } else {
+            [$lux, $source, $calibrationId] = [null, 'none', null];
+        }
+        $class = LightingModel::classify($lux);
+
+        return [
+            'lux' => $class['lux'],
+            'lux_source' => $source,
+            'lighting_category' => $class['category'],
+            'lighting_status' => $class['status'],
+            'lighting_message' => $class['message'],
+            'lux_category_naskah' => $class['kategori_naskah'],
+            'luxmeter_lux' => $clientSource === 'luxmeter' ? $clientLux : null,
+            'browser_lux' => in_array($clientSource, ['camera', 'camera_calibrated'], true) ? $clientLux : null,
+            'browser_lux_source' => in_array($clientSource, ['camera', 'camera_calibrated'], true) ? $clientSource : null,
+            'browser_luma' => $browserLuma,
+            'engine_lux' => $engineLux,
+            'engine_luma' => $engineLuma,
+            'lux_exposure_locked' => $locked,
+            'lux_engine_note' => $note,
+            // Klaim sumber dari browser yang diturunkan (mis. camera_calibrated tanpa kalibrasi sah).
+            'browser_lux_claimed_source' => $claimedSource !== $clientSource ? $claimedSource : null,
+            // Cara perkiraan kamera tanpa kalibrasi dibuat; hanya dicatat, tidak dipakai keputusan.
+            'lux_estimate' => $source === 'camera' ? $this->luxEstimateDetail($request) : null,
+            'lux_calibration_id' => $calibrationId,
+            // Alat acuan kalibrasi yang dipakai (luxmeter / aplikasi HP), disimpan per presensi.
+            'lux_reference_device' => $calibrationId === null ? null
+                : ($calibration?->id === $calibrationId ? $calibration : LuxCalibration::find($calibrationId))?->referenceDevice(),
+        ];
+    }
+
+    /**
+     * Rincian perkiraan lux kamera (metode, profil lensa, faktor, offset) dari
+     * browser. Hanya kunci dan tipe yang dikenal yang disimpan; selain itu null.
+     *
+     * @return array{method: string, profile: ?string, factor: ?float, offset: ?float, glare_compensated: ?bool, face_targeted: ?bool}|null
+     */
+    private function luxEstimateDetail(Request $request): ?array
+    {
+        $raw = $request->input('lux_estimate');
+        if (!is_string($raw) || strlen($raw) > 500) {
+            return null;
+        }
+        $data = json_decode($raw, true);
+        $method = is_array($data) ? ($data['method'] ?? null) : null;
+        if (!in_array($method, ['human_face_photometry', 'apex_exposure', 'fallback_portrait_photometry'], true)) {
+            return null;
+        }
+        $number = fn ($v) => is_int($v) || is_float($v) ? (is_finite((float) $v) ? round((float) $v, 4) : null) : null;
+        $flag = fn ($v) => is_bool($v) ? $v : null;
+        $profile = $data['profile'] ?? null;
+
+        return [
+            'method' => $method,
+            'profile' => is_string($profile) && preg_match('/^[A-Za-z0-9_\-]{1,40}\z/', $profile) ? $profile : null,
+            'factor' => $number($data['factor'] ?? null),
+            'offset' => $number($data['offset'] ?? null),
+            'glare_compensated' => $flag($data['glare_compensated'] ?? null),
+            'face_targeted' => $flag($data['face_targeted'] ?? null),
+        ];
+    }
+
+    /**
+     * Jarak tercatat untuk satu presentasi. Urutan: jarak mesin dari video yang
+     * benar-benar diverifikasi (kalibrasi aktif), lalu ukuran klien (sensor,
+     * camera, camera_calibrated), selain itu null. Jarak mesin tidak dihitung bila
+     * kalibrasinya untuk kamera atau aspek bingkai lain; alasannya ada di
+     * engine_distance_note.
+     */
+    private function recordedDistance(array $engineFace, array $camera, ?float $browserCm, string $browserSource, $clientCalibrationId, bool $tablesReady): array
+    {
+        $calibration = $tablesReady ? DistanceCalibration::active() : null;
+        $engineCm = null;
+        $note = null;
+
+        if ($engineFace['ratio'] === null) {
+            $note = 'engine_no_face_width';
+        } elseif (!$tablesReady) {
+            $note = 'calibration_table_missing';
+        } elseif (!$calibration) {
+            $note = 'no_calibration';
+        } elseif (!$calibration->hasEngineModel()) {
+            $note = 'calibration_without_engine_model';
+        } elseif ($camera['camera_label'] !== null && $calibration->camera_label !== null
+            && strcasecmp(trim($camera['camera_label']), trim($calibration->camera_label)) !== 0) {
+            $note = 'camera_label_mismatch';
+        } elseif (!$calibration->matchesAspect($engineFace['frame_width'], $engineFace['frame_height'])) {
+            $note = 'aspect_mismatch';
+        } else {
+            $engineCm = $calibration->engineDistance($engineFace['ratio']);
+        }
+
+        // Id kalibrasi hanya berarti untuk estimasi browser berkalibrasi, dan harus
+        // benar-benar ada. Klaim camera_calibrated tanpa kalibrasi yang sah turun
+        // menjadi estimasi kamera biasa agar asal-usul angkanya tidak dilebihkan.
+        $browserCalibrationId = null;
+        if ($browserSource === 'camera_calibrated') {
+            $browserCalibrationId = $tablesReady && is_numeric($clientCalibrationId)
+                ? DistanceCalibration::query()->whereKey((int) $clientCalibrationId)->value('id')
+                : null;
+            if ($browserCalibrationId === null) {
+                $browserSource = 'camera';
+            }
+        }
+
+        if ($engineCm !== null) {
+            [$distanceCm, $source, $calibrationId] = [$engineCm, 'engine', $calibration->id];
+        } else {
+            $calibrationId = $browserSource === 'camera_calibrated' ? $browserCalibrationId : null;
+            [$distanceCm, $source] = [$browserCm, $browserSource];
+        }
+
+        return [
+            'distance_cm' => $distanceCm,
+            'distance_source' => $source,
+            'distance_category' => DistanceModel::category($distanceCm),
+            'browser_distance_cm' => $browserCm,
+            'browser_distance_source' => $browserSource,
+            'browser_calibration_id' => $browserCalibrationId,
+            'engine_distance_cm' => $engineCm,
+            'engine_face_width_ratio' => $engineFace['ratio'],
+            'engine_face_width_frames' => $engineFace['frames'],
+            'engine_frame_width' => $engineFace['frame_width'],
+            'engine_frame_height' => $engineFace['frame_height'],
+            'engine_distance_note' => $note,
+            'distance_mismatch_cm' => ($engineCm !== null && $browserCm !== null) ? round(abs($engineCm - $browserCm), 1) : null,
+            'calibration_id' => $calibrationId,
+        ];
     }
 
     /**

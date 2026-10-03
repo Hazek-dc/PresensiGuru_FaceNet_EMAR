@@ -1,12 +1,16 @@
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
+import { recordedDistance } from '@/Utils/distanceCalibration';
 import { formatMeasured } from '@/Utils/sensorReading';
 import { Head, Link, router } from '@inertiajs/react';
 import axios from 'axios';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
-import { AnimatePresence, motion } from 'motion/react';
-import { FormEventHandler, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { AnimatePresence, motion, MotionConfig } from 'motion/react';
+import { FormEventHandler, useCallback, useMemo, useRef, useState } from 'react';
 import { Bab5ScenarioCard } from '@/Components/Presensi/Bab5ScenarioCard';
+import { LightingSummaryView } from '@/Components/Presensi/LightingSummaryView';
+import { TeacherAvatar } from '@/Components/Admin/TeacherAvatar';
+import { CountUp, scrollToTopOf, SPRING_SOFT, useInertiaNavigating } from '@/Components/Motion';
 
 /* ─── Toast Feedback Notification Interface ─── */
 interface Toast {
@@ -97,6 +101,7 @@ function BiometricDetailModal({
     const isIzin = statusStr === 'izin';
     const isSakit = statusStr === 'sakit';
     const meta = record.metadata || {};
+    const recorded = recordedDistance(meta);
 
     const dist =
         meta.euclidean_distance !== null && meta.euclidean_distance !== undefined
@@ -118,11 +123,11 @@ function BiometricDetailModal({
                 {/* Header with Avatar & Subject Info */}
                 <div className="flex items-start justify-between gap-3 border-b border-slate-100 dark:border-white/5 pb-4">
                     <div className="flex items-center gap-3.5 min-w-0">
-                        <div className="flex h-12 w-12 sm:h-14 sm:w-14 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-tr from-royal-blue/15 to-sky-accent/20 dark:from-sky-500/20 dark:to-royal-blue/30 text-royal-blue dark:text-sky-300 font-extrabold text-sm sm:text-base border border-royal-blue/20 dark:border-sky-400/30 shadow-xs">
-                            {record.user?.embedding_id ||
-                                record.user?.name?.substring(0, 2).toUpperCase() ||
-                                'GU'}
-                        </div>
+                        <TeacherAvatar
+                            name={record.user?.name ?? '?'}
+                            url={record.user?.avatar_url}
+                            className="h-12 w-12 sm:h-14 sm:w-14 rounded-2xl bg-gradient-to-tr from-royal-blue/15 to-sky-accent/20 dark:from-sky-500/20 dark:to-royal-blue/30 text-royal-blue dark:text-sky-300 text-sm sm:text-base border border-royal-blue/20 dark:border-sky-400/30 shadow-xs"
+                        />
                         <div className="min-w-0">
                             <div className="flex items-center gap-2 flex-wrap">
                                 <h3 className="font-extrabold text-base sm:text-lg text-deep-navy dark:text-white truncate">
@@ -225,7 +230,7 @@ function BiometricDetailModal({
                                         : 'bg-amber-500/10 text-amber-700 dark:text-amber-300'
                                 }`}
                             >
-                                {meta.id_pred || (isPassingThreshold ? 'MATCH' : 'MISMATCH')}
+                                {meta.id_pred || '–'}
                             </span>
                         </div>
 
@@ -268,10 +273,12 @@ function BiometricDetailModal({
                                 className={`px-2 py-0.5 rounded-md font-mono text-[10px] font-bold ${
                                     meta.pad_pred === 'BONA_FIDE'
                                         ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300'
-                                        : 'bg-rose-500/15 text-rose-700 dark:text-rose-300'
+                                        : meta.pad_pred
+                                          ? 'bg-rose-500/15 text-rose-700 dark:text-rose-300'
+                                          : 'bg-slate-500/10 text-slate-600 dark:text-slate-300'
                                 }`}
                             >
-                                {meta.pad_pred || 'BONA_FIDE'}
+                                {meta.pad_pred || '–'}
                             </span>
                         </div>
 
@@ -281,7 +288,7 @@ function BiometricDetailModal({
                                     Kedipan (EAR)
                                 </span>
                                 <span className="text-base font-black font-mono text-deep-navy dark:text-white">
-                                    {meta.ear_blinks ?? 0}x
+                                    {meta.ear_blinks != null ? `${meta.ear_blinks}x` : '–'}
                                 </span>
                             </div>
                             <div className="rounded-xl bg-white dark:bg-white/5 p-2 border border-slate-200/60 dark:border-white/5">
@@ -289,13 +296,14 @@ function BiometricDetailModal({
                                     Mulut (MAR)
                                 </span>
                                 <span className="text-base font-black font-mono text-deep-navy dark:text-white">
-                                    {meta.mar_mouths ?? 0}x
+                                    {meta.mar_mouths != null ? `${meta.mar_mouths}x` : '–'}
                                 </span>
                             </div>
                         </div>
 
                         <p className="mt-2 text-[10px] text-slate-500 dark:text-slate-400">
-                            Durasi audit: {meta.scan_duration_s ?? 8}s • Deteksi: {meta.face_detected_pct ?? 100}%
+                            Durasi audit: {meta.scan_duration_s != null ? `${meta.scan_duration_s}s` : '–'} • Deteksi:{' '}
+                            {meta.face_detected_pct != null ? `${meta.face_detected_pct}%` : '–'}
                         </p>
                     </div>
                 </div>
@@ -303,11 +311,17 @@ function BiometricDetailModal({
                 {/* Environment Info Strip */}
                 <div className="mt-3 flex flex-wrap items-center justify-between gap-2 px-3 py-2 rounded-xl bg-slate-100/70 dark:bg-white/5 text-[11px] text-slate-600 dark:text-slate-400">
                     <span>
-                        Jarak Kamera: <strong className="text-deep-navy dark:text-white">{formatMeasured(meta.distance_cm, 'cm')}</strong>
+                        Jarak Kamera: <strong className="text-deep-navy dark:text-white">{formatMeasured(recorded.distanceCm, 'cm', 1)}</strong>
+                        {recorded.category && <> · {recorded.category}</>}
+                        {recorded.source && <span className="block text-[10px]">Sumber: {recorded.source}</span>}
                     </span>
-                    <span>
-                        Pencahayaan: <strong className="text-deep-navy dark:text-white">{formatMeasured(meta.lux, 'Lux')}</strong>
-                    </span>
+                    {meta.lighting ? (
+                        <LightingSummaryView summary={meta.lighting} variant="compact" />
+                    ) : (
+                        <span>
+                            Pencahayaan: <strong className="text-deep-navy dark:text-white">{formatMeasured(meta.lux, 'Lux')}</strong>
+                        </span>
+                    )}
                     <span>
                         ID Catatan: <strong className="font-mono text-deep-navy dark:text-white">#{record.id}</strong>
                     </span>
@@ -700,6 +714,62 @@ const itemVariants = {
     },
 };
 
+/**
+ * Paginasi daftar. Di HP hanya Sebelumnya / halaman aktif / Berikutnya yang tampil.
+ * Pindah halaman mempertahankan state (mode kartu/tabel tidak kembali ke kartu) lalu
+ * menggulir halus ke awal daftar, bukan melompat ke atas halaman.
+ */
+function HistoryPagination({ page, noun, onNavigated }: { page: any; noun: string; onNavigated: () => void }) {
+    if (!page?.links || page.links.length <= 3) return null;
+    return (
+        <div className="mt-6 flex flex-col sm:flex-row items-center justify-between gap-3 sm:gap-4 border-t border-slate-200/70 dark:border-white/[0.08] pt-4">
+            <div className="text-xs text-slate-500 dark:text-slate-400 text-center sm:text-left">
+                Menampilkan <span className="font-bold text-deep-navy dark:text-white">{page.from || 0}</span> sampai{' '}
+                <span className="font-bold text-deep-navy dark:text-white">{page.to || 0}</span> dari{' '}
+                <span className="font-bold text-deep-navy dark:text-white">{page.total}</span> {noun}
+            </div>
+            <nav aria-label={`Halaman ${noun}`} className="flex flex-wrap items-center justify-center gap-1.5">
+                {page.links.map((link: any, i: number) => {
+                    const numeric = /^\d+$/.test(String(link.label).trim());
+                    const className = `${
+                        numeric && !link.active ? 'hidden sm:inline-flex' : 'inline-flex'
+                    } h-11 min-w-[44px] lg:h-9 lg:min-w-[36px] items-center justify-center rounded-xl px-3 text-xs font-semibold transition-colors ${
+                        link.active
+                            ? 'bg-deep-navy dark:bg-sky-600 text-white shadow-sm'
+                            : 'border border-slate-200/80 dark:border-white/10 bg-slate-50 dark:bg-white/5 text-deep-navy dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-white/10'
+                    }`;
+                    return link.url ? (
+                        <Link
+                            key={i}
+                            href={link.url}
+                            preserveState
+                            preserveScroll
+                            onSuccess={onNavigated}
+                            aria-current={link.active ? 'page' : undefined}
+                            className={className}
+                            dangerouslySetInnerHTML={{ __html: link.label }}
+                        />
+                    ) : (
+                        <span
+                            key={i}
+                            aria-disabled="true"
+                            className={`${className} cursor-not-allowed opacity-50`}
+                            dangerouslySetInnerHTML={{ __html: link.label }}
+                        />
+                    );
+                })}
+            </nav>
+        </div>
+    );
+}
+
+/** Lencana Bab 5 dari log: 1 / 'ACCEPT' = diterima, 0 / 'REJECT' = ditolak, kosong = tidak tercatat. */
+function bab5Verdict(value: unknown): 'ACC' | 'REJ' | '–' {
+    if (value === 1 || value === '1' || value === 'ACCEPT') return 'ACC';
+    if (value === 0 || value === '0' || value === 'REJECT') return 'REJ';
+    return '–';
+}
+
 /* ─── Main History Component ─── */
 export default function History({
     records,
@@ -720,6 +790,10 @@ export default function History({
 
     // Mobile Actions Drawer state
     const [isMobileActionOpen, setIsMobileActionOpen] = useState(false);
+
+    // Daftar lama diredupkan selama saringan / halaman baru dimuat; titik gulir setelah pindah halaman.
+    const navigating = useInertiaNavigating();
+    const listTopRef = useRef<HTMLDivElement | null>(null);
 
     // Toast notifications state
     const [toasts, setToasts] = useState<Toast[]>([]);
@@ -1127,7 +1201,7 @@ export default function History({
                     <div className="flex items-center justify-between">
                         <Link
                             href="/dashboard"
-                            className="inline-flex items-center gap-1.5 text-xs font-semibold text-royal-blue dark:text-sky-300 hover:text-blue-700 dark:hover:text-sky-200 transition-colors group"
+                            className="-my-2 inline-flex min-h-[44px] sm:min-h-0 items-center gap-1.5 py-2 text-xs font-semibold text-royal-blue dark:text-sky-300 hover:text-blue-700 dark:hover:text-sky-200 transition-colors group"
                         >
                             <span className="material-symbols-outlined text-[16px] transition-transform group-hover:-translate-x-1">
                                 arrow_back
@@ -1136,7 +1210,7 @@ export default function History({
                         </Link>
 
                         <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-500/10 dark:bg-emerald-500/20 border border-emerald-500/20 px-2.5 py-0.5 text-[10px] font-bold text-emerald-700 dark:text-emerald-400">
-                            <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                            <span className="h-1.5 w-1.5 rounded-full bg-emerald-500"></span>
                             <span>Live Telemetri (FaceNet + EMAR)</span>
                         </span>
                     </div>
@@ -1161,7 +1235,7 @@ export default function History({
                                 type="button"
                                 onClick={handleExportPdf}
                                 disabled={isExportingPdf}
-                                className="inline-flex items-center gap-1.5 rounded-xl border border-rose-200 dark:border-rose-500/30 bg-rose-50 dark:bg-rose-500/10 px-3.5 py-2 text-xs font-bold text-rose-700 dark:text-rose-300 hover:bg-rose-100 dark:hover:bg-rose-500/20 transition-all shadow-xs disabled:opacity-60 min-h-[38px]"
+                                className="inline-flex items-center gap-1.5 rounded-xl border border-rose-200 dark:border-rose-500/30 bg-rose-50 dark:bg-rose-500/10 px-3.5 py-2 text-xs font-bold text-rose-700 dark:text-rose-300 hover:bg-rose-100 dark:hover:bg-rose-500/20 transition-all shadow-xs disabled:opacity-60 min-h-[44px] lg:min-h-[38px]"
                                 title="Unduh tabel presensi dalam format PDF (A4 Landscape)"
                             >
                                 {isExportingPdf ? (
@@ -1188,20 +1262,32 @@ export default function History({
                                 href={route('attendance.export.print', { search, date, status })}
                                 target="_blank"
                                 rel="noopener noreferrer"
-                                className="inline-flex items-center gap-1.5 rounded-xl border border-royal-blue/30 dark:border-sky-500/30 bg-royal-blue/5 dark:bg-sky-500/10 px-3.5 py-2 text-xs font-bold text-royal-blue dark:text-sky-300 hover:bg-royal-blue/10 dark:hover:bg-sky-500/20 transition-all shadow-xs min-h-[38px]"
+                                className="inline-flex items-center gap-1.5 rounded-xl border border-royal-blue/30 dark:border-sky-500/30 bg-royal-blue/5 dark:bg-sky-500/10 px-3.5 py-2 text-xs font-bold text-royal-blue dark:text-sky-300 hover:bg-royal-blue/10 dark:hover:bg-sky-500/20 transition-all shadow-xs min-h-[44px] lg:min-h-[38px]"
                                 title="Buka pratinjau cetak resmi A4 dengan Kop Surat SMK Al-Madani"
                             >
                                 <span className="material-symbols-outlined text-[16px]">print</span>
                                 <span>Cetak A4</span>
                             </motion.a>
 
-                            {/* Desktop Additional Actions */}
-                            <div className="hidden sm:flex items-center gap-2">
+                            {/* 3. Satu CSV: semua riwayat presensi + log aktivitas */}
+                            <motion.a
+                                whileHover={{ y: -1.5 }}
+                                whileTap={{ scale: 0.96 }}
+                                href={route('attendance.export.all')}
+                                className="inline-flex items-center gap-1.5 rounded-xl border border-emerald-300 dark:border-emerald-500/30 bg-emerald-50 dark:bg-emerald-500/10 px-3.5 py-2 text-xs font-bold text-emerald-700 dark:text-emerald-300 hover:bg-emerald-100 dark:hover:bg-emerald-500/20 transition-all shadow-xs min-h-[44px] lg:min-h-[38px]"
+                                title="Unduh semua riwayat presensi dan log aktivitas dalam satu berkas CSV"
+                            >
+                                <span className="material-symbols-outlined text-[16px]">download</span>
+                                <span>CSV Lengkap</span>
+                            </motion.a>
+
+                            {/* Tombol tambahan ikut membungkus baris induk, jadi label tidak terlipat di tablet. */}
+                            <div className="hidden sm:contents">
                                 <motion.a
                                     whileHover={{ y: -1.5 }}
                                     whileTap={{ scale: 0.96 }}
                                     href={route('attendance.export.latest')}
-                                    className="inline-flex items-center gap-1.5 rounded-xl border border-sky-300 dark:border-sky-500/30 bg-sky-50 dark:bg-sky-500/10 px-3 py-2 text-xs font-bold text-sky-700 dark:text-sky-300 hover:bg-sky-100 dark:hover:bg-sky-500/20 transition-all shadow-xs min-h-[38px]"
+                                    className="inline-flex items-center gap-1.5 rounded-xl border border-sky-300 dark:border-sky-500/30 bg-sky-50 dark:bg-sky-500/10 px-3 py-2 text-xs font-bold text-sky-700 dark:text-sky-300 hover:bg-sky-100 dark:hover:bg-sky-500/20 transition-all shadow-xs min-h-[44px] lg:min-h-[38px]"
                                     title="Unduh CSV data subjek yang paling baru melakukan presensi"
                                 >
                                     <span className="material-symbols-outlined text-[16px]">
@@ -1216,7 +1302,7 @@ export default function History({
                                             whileHover={{ y: -1.5 }}
                                             whileTap={{ scale: 0.96 }}
                                             href={route('export.operational')}
-                                            className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 dark:border-white/10 bg-white dark:bg-white/5 px-3 py-2 text-xs font-bold text-deep-navy dark:text-white hover:bg-slate-50 dark:hover:bg-white/10 transition-all shadow-xs min-h-[38px]"
+                                            className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 dark:border-white/10 bg-white dark:bg-white/5 px-3 py-2 text-xs font-bold text-deep-navy dark:text-white hover:bg-slate-50 dark:hover:bg-white/10 transition-all shadow-xs min-h-[44px] lg:min-h-[38px]"
                                             title="Unduh seluruh rekaman riwayat presensi operasional format CSV"
                                         >
                                             <span className="material-symbols-outlined text-[16px]">
@@ -1229,7 +1315,7 @@ export default function History({
                                             whileHover={{ y: -1.5 }}
                                             whileTap={{ scale: 0.96 }}
                                             href={route('export.research')}
-                                            className="inline-flex items-center gap-1.5 rounded-xl bg-royal-blue dark:bg-sky-600 px-3.5 py-2 text-xs font-bold text-white hover:brightness-110 transition-all shadow-xs min-h-[38px]"
+                                            className="inline-flex items-center gap-1.5 rounded-xl bg-royal-blue dark:bg-sky-600 px-3.5 py-2 text-xs font-bold text-white hover:brightness-110 transition-all shadow-xs min-h-[44px] lg:min-h-[38px]"
                                             title="Unduh Matriks Evaluasi Bab 4 CSV untuk keperluan analitik & skripsi"
                                         >
                                             <span className="material-symbols-outlined text-[16px]">
@@ -1242,7 +1328,7 @@ export default function History({
                                             whileHover={{ y: -1.5 }}
                                             whileTap={{ scale: 0.96 }}
                                             href={route('export.cochran')}
-                                            className="inline-flex items-center gap-1.5 rounded-xl border border-royal-blue/30 dark:border-sky-400/30 bg-royal-blue/10 dark:bg-sky-400/10 hover:bg-royal-blue/20 dark:hover:bg-sky-400/20 text-royal-blue dark:text-sky-300 px-3.5 py-2 text-xs font-bold transition-colors shadow-xs min-h-[38px]"
+                                            className="inline-flex items-center gap-1.5 rounded-xl border border-royal-blue/30 dark:border-sky-400/30 bg-royal-blue/10 dark:bg-sky-400/10 hover:bg-royal-blue/20 dark:hover:bg-sky-400/20 text-royal-blue dark:text-sky-300 px-3.5 py-2 text-xs font-bold transition-colors shadow-xs min-h-[44px] lg:min-h-[38px]"
                                             title="Unduh presentasi uji berpasangan (S1/S2/S3) yang terekam capture_session. Rancangan penuh: 3.240 presentasi (810 bona fide + 2.430 serangan)"
                                         >
                                             <span className="material-symbols-outlined text-[16px]">
@@ -1255,7 +1341,7 @@ export default function History({
                                             whileHover={{ y: -1.5 }}
                                             whileTap={{ scale: 0.96 }}
                                             href={route('attendance.export.bab5')}
-                                            className="inline-flex items-center gap-1.5 rounded-xl border border-emerald-300 dark:border-emerald-500/30 bg-emerald-50 dark:bg-emerald-500/10 hover:bg-emerald-100 dark:hover:bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 px-3.5 py-2 text-xs font-bold transition-all shadow-xs min-h-[38px]"
+                                            className="inline-flex items-center gap-1.5 rounded-xl border border-emerald-300 dark:border-emerald-500/30 bg-emerald-50 dark:bg-emerald-500/10 hover:bg-emerald-100 dark:hover:bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 px-3.5 py-2 text-xs font-bold transition-all shadow-xs min-h-[44px] lg:min-h-[38px]"
                                             title="Unduh CSV 3 Skenario Evaluasi Bab 5 (FaceNet Stand-alone, Rule-Based Gate, Weighted Fusion)"
                                         >
                                             <span className="material-symbols-outlined text-[16px]">
@@ -1276,7 +1362,7 @@ export default function History({
                                             setConfirmChecked(false);
                                             setIsClearModalOpen(true);
                                         }}
-                                        className="inline-flex items-center gap-1.5 rounded-xl border border-rose-300 dark:border-rose-500/30 bg-rose-50 dark:bg-rose-500/10 px-3 py-2 text-xs font-semibold text-rose-700 dark:text-rose-300 transition-colors hover:bg-rose-100 dark:hover:bg-rose-500/20 shadow-xs min-h-[38px]"
+                                        className="inline-flex items-center gap-1.5 rounded-xl border border-rose-300 dark:border-rose-500/30 bg-rose-50 dark:bg-rose-500/10 px-3 py-2 text-xs font-semibold text-rose-700 dark:text-rose-300 transition-colors hover:bg-rose-100 dark:hover:bg-rose-500/20 shadow-xs min-h-[44px] lg:min-h-[38px]"
                                         title="Hapus seluruh riwayat presensi"
                                     >
                                         <span className="material-symbols-outlined text-[16px]">
@@ -1293,7 +1379,7 @@ export default function History({
                                     whileTap={{ scale: 0.92 }}
                                     type="button"
                                     onClick={() => setIsMobileActionOpen(!isMobileActionOpen)}
-                                    className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200/80 dark:border-white/10 bg-slate-100/90 dark:bg-white/10 px-3 py-2 text-xs font-bold text-deep-navy dark:text-white transition-all min-h-[38px]"
+                                    className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200/80 dark:border-white/10 bg-slate-100/90 dark:bg-white/10 px-3 py-2 text-xs font-bold text-deep-navy dark:text-white transition-all min-h-[44px] lg:min-h-[38px]"
                                 >
                                     <span className="material-symbols-outlined text-[18px]">
                                         tune
@@ -1396,6 +1482,7 @@ export default function History({
             {/* Floating Toast Popup Feedback */}
             <ToastContainer toasts={toasts} onDismiss={dismissToast} />
 
+            <MotionConfig reducedMotion="user">
             {/* Telemetry Inspection Popup Modal */}
             <AnimatePresence>
                 {selectedDetailRecord && (
@@ -1415,28 +1502,28 @@ export default function History({
                             variants={containerVariants}
                             initial="hidden"
                             animate="show"
-                            className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5 sm:gap-4 mb-5 sm:mb-6"
+                            className="grid grid-cols-3 lg:grid-cols-6 gap-2 sm:gap-4 mb-4 sm:mb-6"
                         >
                             {/* Card 1: Total Entri */}
                             <motion.div
                                 variants={itemVariants}
                                 whileHover={{ y: -3, transition: { duration: 0.15 } }}
-                                className="rounded-2xl sm:rounded-3xl border border-slate-200/80 dark:border-white/[0.08] bg-white dark:bg-[#0F1B36] p-3 sm:p-4 shadow-xs hover:shadow-md transition-all flex flex-col justify-between"
+                                className="rounded-2xl sm:rounded-3xl border border-slate-200/80 dark:border-white/[0.08] bg-white dark:bg-[#0F1B36] p-2.5 sm:p-4 shadow-xs hover:shadow-md transition-shadow flex flex-col sm:justify-between min-w-0"
                             >
                                 <div className="flex items-center justify-between">
                                     <span className="text-[10px] sm:text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
                                         Total Entri
                                     </span>
-                                    <div className="flex h-7 w-7 sm:h-8 sm:w-8 items-center justify-center rounded-xl bg-slate-100 dark:bg-white/5 text-slate-700 dark:text-slate-200">
+                                    <div aria-hidden="true" className="hidden sm:flex h-8 w-8 items-center justify-center rounded-xl bg-slate-100 dark:bg-white/5 text-slate-700 dark:text-slate-200">
                                         <span className="material-symbols-outlined text-[16px] sm:text-[18px]">
                                             fact_check
                                         </span>
                                     </div>
                                 </div>
-                                <div className="mt-2 text-xl sm:text-2xl font-black font-mono text-slate-900 dark:text-white">
-                                    {summaryStats.total ?? records?.total ?? 0}
+                                <div className="mt-1 sm:mt-2 text-lg sm:text-2xl font-black font-mono text-slate-900 dark:text-white">
+                                    <CountUp value={Number(summaryStats.total ?? records?.total ?? 0)} />
                                 </div>
-                                <div className="mt-1 text-[10px] text-slate-500 dark:text-slate-400 truncate">
+                                <div className="mt-1 hidden sm:block text-[10px] text-slate-500 dark:text-slate-400 truncate">
                                     Semua data terverifikasi
                                 </div>
                             </motion.div>
@@ -1445,22 +1532,22 @@ export default function History({
                             <motion.div
                                 variants={itemVariants}
                                 whileHover={{ y: -3, transition: { duration: 0.15 } }}
-                                className="rounded-2xl sm:rounded-3xl border border-emerald-500/20 bg-white dark:bg-[#0F1B36] p-3 sm:p-4 shadow-xs hover:shadow-md transition-all flex flex-col justify-between"
+                                className="rounded-2xl sm:rounded-3xl border border-emerald-500/20 bg-white dark:bg-[#0F1B36] p-2.5 sm:p-4 shadow-xs hover:shadow-md transition-shadow flex flex-col sm:justify-between min-w-0"
                             >
                                 <div className="flex items-center justify-between">
                                     <span className="text-[10px] sm:text-[11px] font-bold text-emerald-700 dark:text-emerald-400 uppercase tracking-wider">
                                         Tepat Waktu
                                     </span>
-                                    <div className="flex h-7 w-7 sm:h-8 sm:w-8 items-center justify-center rounded-xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
+                                    <div aria-hidden="true" className="hidden sm:flex h-8 w-8 items-center justify-center rounded-xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
                                         <span className="material-symbols-outlined text-[16px] sm:text-[18px]">
                                             check_circle
                                         </span>
                                     </div>
                                 </div>
-                                <div className="mt-2 text-xl sm:text-2xl font-black font-mono text-emerald-600 dark:text-emerald-400">
-                                    {summaryStats.hadir ?? 0}
+                                <div className="mt-1 sm:mt-2 text-lg sm:text-2xl font-black font-mono text-emerald-600 dark:text-emerald-400">
+                                    <CountUp value={Number(summaryStats.hadir ?? 0)} />
                                 </div>
-                                <div className="mt-1 text-[10px] text-emerald-700 dark:text-emerald-400/80 truncate">
+                                <div className="mt-1 hidden sm:block text-[10px] text-emerald-700 dark:text-emerald-400/80 truncate">
                                     Sesi Masuk &lt; 07:15 WIB
                                 </div>
                             </motion.div>
@@ -1469,22 +1556,22 @@ export default function History({
                             <motion.div
                                 variants={itemVariants}
                                 whileHover={{ y: -3, transition: { duration: 0.15 } }}
-                                className="rounded-2xl sm:rounded-3xl border border-amber-500/20 bg-white dark:bg-[#0F1B36] p-3 sm:p-4 shadow-xs hover:shadow-md transition-all flex flex-col justify-between"
+                                className="rounded-2xl sm:rounded-3xl border border-amber-500/20 bg-white dark:bg-[#0F1B36] p-2.5 sm:p-4 shadow-xs hover:shadow-md transition-shadow flex flex-col sm:justify-between min-w-0"
                             >
                                 <div className="flex items-center justify-between">
                                     <span className="text-[10px] sm:text-[11px] font-bold text-amber-700 dark:text-amber-400 uppercase tracking-wider">
                                         Terlambat
                                     </span>
-                                    <div className="flex h-7 w-7 sm:h-8 sm:w-8 items-center justify-center rounded-xl bg-amber-500/10 text-amber-600 dark:text-amber-400">
+                                    <div aria-hidden="true" className="hidden sm:flex h-8 w-8 items-center justify-center rounded-xl bg-amber-500/10 text-amber-600 dark:text-amber-400">
                                         <span className="material-symbols-outlined text-[16px] sm:text-[18px]">
                                             schedule
                                         </span>
                                     </div>
                                 </div>
-                                <div className="mt-2 text-xl sm:text-2xl font-black font-mono text-amber-600 dark:text-amber-400">
-                                    {summaryStats.terlambat ?? 0}
+                                <div className="mt-1 sm:mt-2 text-lg sm:text-2xl font-black font-mono text-amber-600 dark:text-amber-400">
+                                    <CountUp value={Number(summaryStats.terlambat ?? 0)} />
                                 </div>
-                                <div className="mt-1 text-[10px] text-amber-700 dark:text-amber-400/80 truncate">
+                                <div className="mt-1 hidden sm:block text-[10px] text-amber-700 dark:text-amber-400/80 truncate">
                                     07:15 - 08:00 WIB
                                 </div>
                             </motion.div>
@@ -1493,22 +1580,22 @@ export default function History({
                             <motion.div
                                 variants={itemVariants}
                                 whileHover={{ y: -3, transition: { duration: 0.15 } }}
-                                className="rounded-2xl sm:rounded-3xl border border-sky-500/20 bg-white dark:bg-[#0F1B36] p-3 sm:p-4 shadow-xs hover:shadow-md transition-all flex flex-col justify-between"
+                                className="rounded-2xl sm:rounded-3xl border border-sky-500/20 bg-white dark:bg-[#0F1B36] p-2.5 sm:p-4 shadow-xs hover:shadow-md transition-shadow flex flex-col sm:justify-between min-w-0"
                             >
                                 <div className="flex items-center justify-between">
                                     <span className="text-[10px] sm:text-[11px] font-bold text-sky-700 dark:text-sky-400 uppercase tracking-wider">
                                         Pulang
                                     </span>
-                                    <div className="flex h-7 w-7 sm:h-8 sm:w-8 items-center justify-center rounded-xl bg-sky-500/10 text-sky-600 dark:text-sky-400">
+                                    <div aria-hidden="true" className="hidden sm:flex h-8 w-8 items-center justify-center rounded-xl bg-sky-500/10 text-sky-600 dark:text-sky-400">
                                         <span className="material-symbols-outlined text-[16px] sm:text-[18px]">
                                             logout
                                         </span>
                                     </div>
                                 </div>
-                                <div className="mt-2 text-xl sm:text-2xl font-black font-mono text-sky-600 dark:text-sky-400">
-                                    {summaryStats.pulang ?? 0}
+                                <div className="mt-1 sm:mt-2 text-lg sm:text-2xl font-black font-mono text-sky-600 dark:text-sky-400">
+                                    <CountUp value={Number(summaryStats.pulang ?? 0)} />
                                 </div>
-                                <div className="mt-1 text-[10px] text-sky-700 dark:text-sky-400/80 truncate">
+                                <div className="mt-1 hidden sm:block text-[10px] text-sky-700 dark:text-sky-400/80 truncate">
                                     Sesi Kepulangan Guru
                                 </div>
                             </motion.div>
@@ -1517,22 +1604,22 @@ export default function History({
                             <motion.div
                                 variants={itemVariants}
                                 whileHover={{ y: -3, transition: { duration: 0.15 } }}
-                                className="rounded-2xl sm:rounded-3xl border border-purple-500/20 bg-white dark:bg-[#0F1B36] p-3 sm:p-4 shadow-xs hover:shadow-md transition-all flex flex-col justify-between"
+                                className="rounded-2xl sm:rounded-3xl border border-purple-500/20 bg-white dark:bg-[#0F1B36] p-2.5 sm:p-4 shadow-xs hover:shadow-md transition-shadow flex flex-col sm:justify-between min-w-0"
                             >
                                 <div className="flex items-center justify-between">
                                     <span className="text-[10px] sm:text-[11px] font-bold text-purple-700 dark:text-purple-400 uppercase tracking-wider">
                                         Izin / Sakit
                                     </span>
-                                    <div className="flex h-7 w-7 sm:h-8 sm:w-8 items-center justify-center rounded-xl bg-purple-500/10 text-purple-600 dark:text-purple-400">
+                                    <div aria-hidden="true" className="hidden sm:flex h-8 w-8 items-center justify-center rounded-xl bg-purple-500/10 text-purple-600 dark:text-purple-400">
                                         <span className="material-symbols-outlined text-[16px] sm:text-[18px]">
                                             clinical_notes
                                         </span>
                                     </div>
                                 </div>
-                                <div className="mt-2 text-xl sm:text-2xl font-black font-mono text-purple-600 dark:text-purple-400">
-                                    {summaryStats.izin_sakit ?? 0}
+                                <div className="mt-1 sm:mt-2 text-lg sm:text-2xl font-black font-mono text-purple-600 dark:text-purple-400">
+                                    <CountUp value={Number(summaryStats.izin_sakit ?? 0)} />
                                 </div>
-                                <div className="mt-1 text-[10px] text-purple-700 dark:text-purple-400/80 truncate">
+                                <div className="mt-1 hidden sm:block text-[10px] text-purple-700 dark:text-purple-400/80 truncate">
                                     Dispensasi &amp; Sakit
                                 </div>
                             </motion.div>
@@ -1541,20 +1628,24 @@ export default function History({
                             <motion.div
                                 variants={itemVariants}
                                 whileHover={{ y: -3, transition: { duration: 0.15 } }}
-                                className="col-span-2 sm:col-span-3 lg:col-span-1 rounded-2xl sm:rounded-3xl border border-royal-blue/20 dark:border-sky-500/20 bg-white dark:bg-[#0F1B36] p-3 sm:p-4 shadow-xs hover:shadow-md transition-all flex flex-col justify-between"
+                                className="rounded-2xl sm:rounded-3xl border border-royal-blue/20 dark:border-sky-500/20 bg-white dark:bg-[#0F1B36] p-2.5 sm:p-4 shadow-xs hover:shadow-md transition-shadow flex flex-col sm:justify-between min-w-0"
                             >
                                 <div className="flex items-center justify-between">
                                     <span className="text-[10px] sm:text-[11px] font-bold text-royal-blue dark:text-sky-400 uppercase tracking-wider">
                                         Kehadiran
                                     </span>
-                                    <div className="flex h-7 w-7 sm:h-8 sm:w-8 items-center justify-center rounded-xl bg-royal-blue/10 dark:bg-sky-500/10 text-royal-blue dark:text-sky-400">
+                                    <div aria-hidden="true" className="hidden sm:flex h-8 w-8 items-center justify-center rounded-xl bg-royal-blue/10 dark:bg-sky-500/10 text-royal-blue dark:text-sky-400">
                                         <span className="material-symbols-outlined text-[16px] sm:text-[18px]">
                                             analytics
                                         </span>
                                     </div>
                                 </div>
-                                <div className="mt-2 text-xl sm:text-2xl font-black font-mono text-royal-blue dark:text-sky-400">
-                                    {summaryStats.success_rate ?? 0}%
+                                <div className="mt-1 sm:mt-2 text-lg sm:text-2xl font-black font-mono text-royal-blue dark:text-sky-400">
+                                    <CountUp
+                                        value={Number(summaryStats.success_rate ?? 0)}
+                                        decimals={Number.isInteger(Number(summaryStats.success_rate ?? 0)) ? 0 : 1}
+                                        suffix="%"
+                                    />
                                 </div>
                                 <div className="mt-2 w-full bg-slate-100 dark:bg-white/10 rounded-full h-1.5 overflow-hidden">
                                     <motion.div
@@ -1562,7 +1653,7 @@ export default function History({
                                         animate={{
                                             width: `${Math.min(100, summaryStats.success_rate ?? 0)}%`,
                                         }}
-                                        transition={{ duration: 0.8, ease: 'easeOut' }}
+                                        transition={{ duration: 1, ease: [0.16, 1, 0.3, 1], delay: 0.15 }}
                                         className="bg-royal-blue dark:bg-sky-500 h-1.5 rounded-full"
                                     />
                                 </div>
@@ -1581,7 +1672,7 @@ export default function History({
                                         <button
                                             type="button"
                                             onClick={() => handleTabSwitch('presensi')}
-                                            className={`relative inline-flex items-center gap-1.5 sm:gap-2 rounded-xl px-3 sm:px-4 py-2 font-bold transition-colors min-h-[38px] ${
+                                            className={`relative inline-flex items-center gap-1.5 sm:gap-2 rounded-xl px-3 sm:px-4 py-2 font-bold transition-colors min-h-[44px] lg:min-h-[38px] ${
                                                 currentTab === 'presensi'
                                                     ? 'text-white'
                                                     : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
@@ -1615,7 +1706,7 @@ export default function History({
                                         <button
                                             type="button"
                                             onClick={() => handleTabSwitch('audit')}
-                                            className={`relative inline-flex items-center gap-1.5 sm:gap-2 rounded-xl px-3 sm:px-4 py-2 font-bold transition-colors min-h-[38px] ${
+                                            className={`relative inline-flex items-center gap-1.5 sm:gap-2 rounded-xl px-3 sm:px-4 py-2 font-bold transition-colors min-h-[44px] lg:min-h-[38px] ${
                                                 currentTab === 'audit'
                                                     ? 'text-white'
                                                     : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
@@ -1653,7 +1744,7 @@ export default function History({
                                             <button
                                                 type="button"
                                                 onClick={() => setViewMode('cards')}
-                                                className={`relative px-3 py-1.5 rounded-lg font-bold flex items-center gap-1.5 text-xs transition-all min-h-[32px] ${
+                                                className={`relative px-3 py-1.5 rounded-lg font-bold flex items-center gap-1.5 text-xs transition-all min-h-[44px] lg:min-h-[32px] ${
                                                     viewMode === 'cards'
                                                         ? 'text-deep-navy dark:text-white'
                                                         : 'text-slate-500 dark:text-slate-400 hover:text-slate-800'
@@ -1682,7 +1773,7 @@ export default function History({
                                             <button
                                                 type="button"
                                                 onClick={() => setViewMode('table')}
-                                                className={`relative px-3 py-1.5 rounded-lg font-bold flex items-center gap-1.5 text-xs transition-all min-h-[32px] ${
+                                                className={`relative px-3 py-1.5 rounded-lg font-bold flex items-center gap-1.5 text-xs transition-all min-h-[44px] lg:min-h-[32px] ${
                                                     viewMode === 'table'
                                                         ? 'text-deep-navy dark:text-white'
                                                         : 'text-slate-500 dark:text-slate-400 hover:text-slate-800'
@@ -1728,7 +1819,7 @@ export default function History({
                                                         key={chip.id}
                                                         type="button"
                                                         onClick={() => handleQuickStatus(chip.id)}
-                                                        className={`relative shrink-0 inline-flex items-center gap-1.5 rounded-xl px-3 py-2 text-xs font-semibold transition-all min-h-[38px] ${
+                                                        className={`relative shrink-0 inline-flex items-center gap-1.5 rounded-xl px-3 py-2 text-xs font-semibold transition-all min-h-[44px] lg:min-h-[38px] ${
                                                             isActive
                                                                 ? 'text-white shadow-xs'
                                                                 : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white bg-slate-100/80 dark:bg-white/5 hover:bg-slate-200/80 dark:hover:bg-white/10'
@@ -1770,10 +1861,10 @@ export default function History({
                                 {/* Advanced Filter Controls Form */}
                                 <form
                                     onSubmit={handleFilter}
-                                    className="flex flex-col sm:flex-row flex-wrap items-center gap-2.5 pt-1"
+                                    className="flex flex-col sm:flex-row flex-wrap items-stretch sm:items-center gap-2.5 pt-1"
                                 >
                                     <div className="relative flex-1 min-w-[220px] w-full sm:w-auto">
-                                        <span className="material-symbols-outlined absolute left-3 top-2.5 text-[17px] text-slate-400 dark:text-slate-500">
+                                        <span aria-hidden="true" className="material-symbols-outlined pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[17px] text-slate-400 dark:text-slate-500">
                                             search
                                         </span>
                                         <input
@@ -1785,7 +1876,7 @@ export default function History({
                                                     ? 'Cari nama guru / ID (S01) / status...'
                                                     : 'Cari aktivitas sistem / event / aktor...'
                                             }
-                                            className="w-full rounded-xl border border-slate-200/80 dark:border-white/10 bg-slate-50/70 dark:bg-slate-900/80 px-3 py-2 pl-9 text-xs text-deep-navy dark:text-white placeholder:text-slate-400 focus:border-royal-blue dark:focus:border-sky-400 focus:ring-1 focus:ring-royal-blue transition-all min-h-[38px]"
+                                            className="w-full rounded-xl border border-slate-200/80 dark:border-white/10 bg-slate-50/70 dark:bg-slate-900/80 px-3 py-2 pl-9 text-xs text-deep-navy dark:text-white placeholder:text-slate-400 focus:border-royal-blue dark:focus:border-sky-400 focus:ring-1 focus:ring-royal-blue transition-all min-h-[44px] lg:min-h-[38px]"
                                         />
                                         {search && (
                                             <button
@@ -1798,7 +1889,8 @@ export default function History({
                                                         { preserveState: true, replace: true },
                                                     );
                                                 }}
-                                                className="absolute right-3 top-2.5 text-slate-400 hover:text-slate-700 dark:hover:text-white"
+                                                aria-label="Hapus kata pencarian"
+                                                className="absolute right-1 top-1/2 -translate-y-1/2 flex h-9 w-9 items-center justify-center rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-white"
                                             >
                                                 <span className="material-symbols-outlined text-[16px]">
                                                     close
@@ -1808,52 +1900,18 @@ export default function History({
                                     </div>
 
                                     {currentTab === 'presensi' && (
-                                        <>
-                                            <div className="w-full sm:w-auto">
-                                                <input
-                                                    type="date"
-                                                    value={date}
-                                                    onChange={(e) => setDate(e.target.value)}
-                                                    className="w-full sm:w-auto rounded-xl border border-slate-200/80 dark:border-white/10 bg-slate-50/70 dark:bg-slate-900/80 px-3 py-2 text-xs text-deep-navy dark:text-white shadow-xs focus:border-royal-blue dark:focus:border-sky-400 focus:ring-1 focus:ring-royal-blue min-h-[38px]"
-                                                />
-                                            </div>
-                                            <div className="flex items-center gap-1.5 overflow-x-auto rounded-xl border border-slate-200/80 dark:border-white/10 bg-slate-100/80 dark:bg-black/30 p-1 text-xs scrollbar-none w-full sm:w-auto">
-                                                {[
-                                                    { id: '', label: 'Semua', icon: 'apps' },
-                                                    { id: 'hadir', label: 'Hadir', icon: 'check_circle' },
-                                                    { id: 'terlambat', label: 'Terlambat', icon: 'schedule' },
-                                                    { id: 'pulang', label: 'Pulang', icon: 'logout' },
-                                                    { id: 'izin', label: 'Izin', icon: 'clinical_notes' },
-                                                    { id: 'sakit', label: 'Sakit', icon: 'sick' },
-                                                    { id: 'failed', label: 'Ditolak', icon: 'cancel' },
-                                                ].map((tab) => (
-                                                    <button
-                                                        key={tab.id}
-                                                        type="button"
-                                                        onClick={() => setStatus(tab.id)}
-                                                        className={`relative shrink-0 inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-[11px] font-semibold transition-all ${
-                                                            status === tab.id
-                                                                ? 'text-white shadow-xs'
-                                                                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-white/40 dark:hover:bg-white/5'
-                                                        }`}
-                                                    >
-                                                        {status === tab.id && (
-                                                            <motion.div
-                                                                layoutId="historyStatusActiveFilterPill"
-                                                                transition={{ type: 'spring', stiffness: 500, damping: 35 }}
-                                                                className="absolute inset-0 rounded-lg bg-deep-navy dark:bg-sky-600 -z-10"
-                                                            />
-                                                        )}
-                                                        <span className={`material-symbols-outlined text-[15px] ${
-                                                            status === tab.id ? 'text-white' : 'text-slate-400 dark:text-slate-500'
-                                                        }`}>
-                                                            {tab.icon}
-                                                        </span>
-                                                        <span>{tab.label}</span>
-                                                    </button>
-                                                ))}
-                                            </div>
-                                        </>
+                                        <div className="w-full sm:w-auto">
+                                            <label htmlFor="history-date" className="sr-only">
+                                                Tanggal presensi
+                                            </label>
+                                            <input
+                                                id="history-date"
+                                                type="date"
+                                                value={date}
+                                                onChange={(e) => setDate(e.target.value)}
+                                                className="w-full sm:w-auto rounded-xl border border-slate-200/80 dark:border-white/10 bg-slate-50/70 dark:bg-slate-900/80 px-3 py-2 text-xs text-deep-navy dark:text-white shadow-xs focus:border-royal-blue dark:focus:border-sky-400 focus:ring-1 focus:ring-royal-blue min-h-[44px] lg:min-h-[38px]"
+                                            />
+                                        </div>
                                     )}
 
                                     <div className="flex items-center gap-2 w-full sm:w-auto">
@@ -1861,7 +1919,7 @@ export default function History({
                                             whileHover={{ scale: 1.02 }}
                                             whileTap={{ scale: 0.96 }}
                                             type="submit"
-                                            className="flex-1 sm:flex-none rounded-xl bg-deep-navy dark:bg-sky-600 px-4 py-2 text-xs font-bold text-white hover:bg-royal-blue transition-colors flex items-center justify-center gap-1.5 shadow-xs min-h-[38px]"
+                                            className="flex-1 sm:flex-none rounded-xl bg-deep-navy dark:bg-sky-600 px-4 py-2 text-xs font-bold text-white hover:bg-royal-blue transition-colors flex items-center justify-center gap-1.5 shadow-xs min-h-[44px] lg:min-h-[38px]"
                                         >
                                             <span className="material-symbols-outlined text-[16px]">
                                                 filter_list
@@ -1875,7 +1933,7 @@ export default function History({
                                                 whileTap={{ scale: 0.96 }}
                                                 type="button"
                                                 onClick={handleResetFilter}
-                                                className="rounded-xl border border-slate-200/80 dark:border-white/10 bg-slate-50 dark:bg-white/5 px-3 py-2 text-xs font-bold text-slate-600 dark:text-slate-300 hover:text-deep-navy dark:hover:text-white transition-colors min-h-[38px]"
+                                                className="rounded-xl border border-slate-200/80 dark:border-white/10 bg-slate-50 dark:bg-white/5 px-3 py-2 text-xs font-bold text-slate-600 dark:text-slate-300 hover:text-deep-navy dark:hover:text-white transition-colors min-h-[44px] lg:min-h-[38px]"
                                             >
                                                 Reset
                                             </motion.button>
@@ -1884,6 +1942,13 @@ export default function History({
                                 </form>
                             </div>
 
+                            <motion.div
+                                ref={listTopRef}
+                                aria-busy={navigating}
+                                animate={{ opacity: navigating ? 0.55 : 1 }}
+                                transition={{ duration: 0.2 }}
+                                className="scroll-mt-24"
+                            >
                             {/* TAB 1: PRESENSI RECORDS CONTENT */}
                             <AnimatePresence mode="wait">
                                 {currentTab === 'presensi' && (
@@ -1921,13 +1986,14 @@ export default function History({
                                                             animate={{ opacity: 1, scale: 1, y: 0 }}
                                                             exit={{ opacity: 0, scale: 0.96 }}
                                                             transition={{
-                                                                duration: 0.2,
-                                                                delay: Math.min(idx * 0.02, 0.3),
+                                                                ...SPRING_SOFT,
+                                                                delay: Math.min(idx * 0.03, 0.3),
                                                             }}
                                                             whileHover={{
-                                                                y: -2,
-                                                                transition: { duration: 0.15 },
+                                                                y: -3,
+                                                                transition: SPRING_SOFT,
                                                             }}
+                                                            whileTap={{ scale: 0.99 }}
                                                             className="group relative overflow-hidden rounded-2xl sm:rounded-3xl border border-slate-200/80 dark:border-white/[0.08] bg-white dark:bg-[#0B1528] p-4 sm:p-5 shadow-xs hover:border-slate-300 dark:hover:border-white/20 hover:shadow-md transition-all flex flex-col justify-between"
                                                         >
                                                             {/* Left Color Accent Bar */}
@@ -1951,13 +2017,11 @@ export default function History({
                                                             <div className="flex items-start justify-between gap-3 pl-2">
                                                                 <div className="flex items-center gap-3 min-w-0">
                                                                     <div className="relative shrink-0">
-                                                                        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-tr from-slate-100 to-slate-200 dark:from-slate-800 dark:to-slate-750 text-slate-800 dark:text-slate-100 font-black text-xs border border-slate-200/80 dark:border-white/10 shadow-xs">
-                                                                            {record.user?.embedding_id ||
-                                                                                record.user?.name
-                                                                                    ?.substring(0, 2)
-                                                                                    .toUpperCase() ||
-                                                                                'GU'}
-                                                                        </div>
+                                                                        <TeacherAvatar
+                                                                            name={record.user?.name ?? '?'}
+                                                                            url={record.user?.avatar_url}
+                                                                            className="h-11 w-11 rounded-2xl bg-gradient-to-tr from-slate-100 to-slate-200 dark:from-slate-800 dark:to-slate-700 text-slate-800 dark:text-slate-100 text-xs border border-slate-200/80 dark:border-white/10 shadow-xs"
+                                                                        />
                                                                         <span
                                                                             className={`absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full border-2 border-white dark:border-[#0B1528] ${
                                                                                 isSakit
@@ -2039,9 +2103,9 @@ export default function History({
                                                                         </span>
                                                                         <span>
                                                                             {isSakit
-                                                                                ? 'Sakit (Dokter)'
+                                                                                ? 'Sakit'
                                                                                 : isIzin
-                                                                                  ? 'Izin Dinas'
+                                                                                  ? 'Izin'
                                                                                   : isPulang
                                                                                     ? 'Presensi Pulang'
                                                                                     : isSuccess
@@ -2101,10 +2165,12 @@ export default function History({
                                                                             </span>
                                                                         </span>
                                                                     )}
-                                                                    <span className="font-mono text-[10px] bg-slate-100 dark:bg-white/5 text-slate-600 dark:text-slate-400 px-2 py-0.5 rounded-lg border border-slate-200/80 dark:border-white/10">
-                                                                        {meta.ear_blinks ?? 0}x kedip •{' '}
-                                                                        {meta.mar_mouths ?? 0}x mulut
-                                                                    </span>
+                                                                    {(meta.ear_blinks != null || meta.mar_mouths != null) && (
+                                                                        <span className="font-mono text-[10px] bg-slate-100 dark:bg-white/5 text-slate-600 dark:text-slate-400 px-2 py-0.5 rounded-lg border border-slate-200/80 dark:border-white/10">
+                                                                            {meta.ear_blinks != null ? `${meta.ear_blinks}x` : '–'} kedip •{' '}
+                                                                            {meta.mar_mouths != null ? `${meta.mar_mouths}x` : '–'} mulut
+                                                                        </span>
+                                                                    )}
                                                                 </div>
 
                                                                 {/* Bab 5 Scenario Mini Badges */}
@@ -2154,7 +2220,7 @@ export default function History({
                                                                     onClick={() =>
                                                                         setSelectedDetailRecord(record)
                                                                     }
-                                                                    className="inline-flex items-center gap-1 rounded-xl bg-royal-blue/10 dark:bg-sky-500/15 border border-royal-blue/20 dark:border-sky-500/25 px-2.5 py-1.5 text-[11px] font-bold text-royal-blue dark:text-sky-300 hover:bg-royal-blue/20 dark:hover:bg-sky-500/25 transition-all shadow-xs"
+                                                                    className="inline-flex min-h-[44px] sm:min-h-0 items-center gap-1 rounded-xl bg-royal-blue/10 dark:bg-sky-500/15 border border-royal-blue/20 dark:border-sky-500/25 px-2.5 py-1.5 text-[11px] font-bold text-royal-blue dark:text-sky-300 hover:bg-royal-blue/20 dark:hover:bg-sky-500/25 transition-all shadow-xs"
                                                                 >
                                                                     <span className="material-symbols-outlined text-[14px]">
                                                                         visibility
@@ -2168,8 +2234,9 @@ export default function History({
                                                                             'attendance.export.subject',
                                                                             record.id,
                                                                         )}
-                                                                        className="inline-flex items-center justify-center h-8 w-8 rounded-xl border border-sky-200 dark:border-sky-500/30 bg-sky-50/80 dark:bg-sky-500/10 text-sky-700 dark:text-sky-300 hover:bg-sky-100 dark:hover:bg-sky-500/20 transition-all shadow-xs"
+                                                                        className="inline-flex items-center justify-center h-11 w-11 lg:h-8 lg:w-8 rounded-xl border border-sky-200 dark:border-sky-500/30 bg-sky-50/80 dark:bg-sky-500/10 text-sky-700 dark:text-sky-300 hover:bg-sky-100 dark:hover:bg-sky-500/20 transition-all shadow-xs"
                                                                         title="Unduh CSV riwayat evaluasi subjek ini"
+                                                                        aria-label="Unduh CSV subjek ini"
                                                                     >
                                                                         <span className="material-symbols-outlined text-[15px]">
                                                                             download
@@ -2181,8 +2248,9 @@ export default function History({
                                                                             'attendance.show',
                                                                             record.id,
                                                                         )}
-                                                                        className="inline-flex items-center justify-center h-8 w-8 rounded-xl border border-slate-200/80 dark:border-white/10 bg-slate-50 dark:bg-white/5 text-deep-navy dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-white/10 transition-all shadow-xs"
+                                                                        className="inline-flex items-center justify-center h-11 w-11 lg:h-8 lg:w-8 rounded-xl border border-slate-200/80 dark:border-white/10 bg-slate-50 dark:bg-white/5 text-deep-navy dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-white/10 transition-all shadow-xs"
                                                                         title="Buka halaman detail lengkap"
+                                                                        aria-label="Buka detail presensi"
                                                                     >
                                                                         <span className="material-symbols-outlined text-[15px]">
                                                                             chevron_right
@@ -2192,7 +2260,7 @@ export default function History({
                                                                     <button
                                                                         type="button"
                                                                         onClick={() => promptDeleteRecord(record)}
-                                                                        className="inline-flex items-center justify-center h-8 w-8 rounded-xl border border-rose-200/80 dark:border-rose-500/30 bg-rose-50/80 dark:bg-rose-500/10 text-rose-600 dark:text-rose-400 hover:bg-rose-100 dark:hover:bg-rose-500/20 active:scale-95 transition-all shadow-xs cursor-pointer"
+                                                                        className="inline-flex items-center justify-center h-11 w-11 lg:h-8 lg:w-8 rounded-xl border border-rose-200/80 dark:border-rose-500/30 bg-rose-50/80 dark:bg-rose-500/10 text-rose-600 dark:text-rose-400 hover:bg-rose-100 dark:hover:bg-rose-500/20 active:scale-95 transition-all shadow-xs cursor-pointer"
                                                                         title="Hapus catatan presensi ini"
                                                                         aria-label="Hapus catatan"
                                                                     >
@@ -2249,13 +2317,11 @@ export default function History({
                                                                 {/* Subject & Teacher Info */}
                                                                 <td className="px-5 py-4">
                                                                     <div className="flex items-center gap-3">
-                                                                        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-tr from-slate-100 to-slate-200 dark:from-slate-700 dark:to-slate-800 text-deep-navy dark:text-white font-bold text-xs shadow-xs">
-                                                                            {record.user?.embedding_id ||
-                                                                                record.user?.name
-                                                                                    ?.substring(0, 2)
-                                                                                    .toUpperCase() ||
-                                                                                'S0'}
-                                                                        </div>
+                                                                        <TeacherAvatar
+                                                                            name={record.user?.name ?? '?'}
+                                                                            url={record.user?.avatar_url}
+                                                                            className="h-10 w-10 rounded-2xl bg-gradient-to-tr from-slate-100 to-slate-200 dark:from-slate-700 dark:to-slate-800 text-deep-navy dark:text-white text-xs shadow-xs"
+                                                                        />
                                                                         <div>
                                                                             <div className="flex items-center gap-1.5">
                                                                                 <span className="font-bold text-deep-navy dark:text-white text-sm">
@@ -2377,13 +2443,13 @@ export default function History({
                                                                         <span className="text-slate-500 dark:text-slate-400">
                                                                             EAR:{' '}
                                                                             <strong className="text-deep-navy dark:text-white">
-                                                                                {meta.ear_blinks ?? 0}x
+                                                                                {meta.ear_blinks != null ? `${meta.ear_blinks}x` : '–'}
                                                                             </strong>
                                                                         </span>
                                                                         <span className="text-slate-500 dark:text-slate-400">
                                                                             MAR:{' '}
                                                                             <strong className="text-deep-navy dark:text-white">
-                                                                                {meta.mar_mouths ?? 0}x
+                                                                                {meta.mar_mouths != null ? `${meta.mar_mouths}x` : '–'}
                                                                             </strong>
                                                                         </span>
                                                                         {meta.evaluation_bab5 && meta.evaluation_bab5.evaluated !== false && (
@@ -2525,41 +2591,11 @@ export default function History({
                                         )}
 
                                         {/* Pagination Controls */}
-                                        {records.links && records.links.length > 3 && (
-                                            <div className="mt-6 flex flex-col sm:flex-row items-center justify-between gap-4 border-t border-slate-200/70 dark:border-white/[0.08] pt-4">
-                                                <div className="text-xs text-slate-500 dark:text-slate-400">
-                                                    Menampilkan{' '}
-                                                    <span className="font-bold text-deep-navy dark:text-white">
-                                                        {records.from || 0}
-                                                    </span>{' '}
-                                                    sampai{' '}
-                                                    <span className="font-bold text-deep-navy dark:text-white">
-                                                        {records.to || 0}
-                                                    </span>{' '}
-                                                    dari{' '}
-                                                    <span className="font-bold text-deep-navy dark:text-white">
-                                                        {records.total}
-                                                    </span>{' '}
-                                                    riwayat presensi
-                                                </div>
-                                                <div className="flex flex-wrap gap-1.5">
-                                                    {records.links.map((link: any, i: number) => (
-                                                        <Link
-                                                            key={i}
-                                                            href={link.url || '#'}
-                                                            className={`rounded-xl px-3 py-1.5 text-xs font-semibold transition-colors ${
-                                                                link.active
-                                                                    ? 'bg-deep-navy dark:bg-sky-600 text-white shadow-sm'
-                                                                    : 'border border-slate-200/80 dark:border-white/10 bg-slate-50 dark:bg-white/5 text-deep-navy dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-white/10'
-                                                            } ${!link.url ? 'cursor-not-allowed opacity-50' : ''}`}
-                                                            dangerouslySetInnerHTML={{
-                                                                __html: link.label,
-                                                            }}
-                                                        />
-                                                    ))}
-                                                </div>
-                                            </div>
-                                        )}
+                                        <HistoryPagination
+                                            page={records}
+                                            noun="riwayat presensi"
+                                            onNavigated={() => scrollToTopOf(listTopRef.current)}
+                                        />
                                     </motion.div>
                                 )}
 
@@ -2593,7 +2629,7 @@ export default function History({
                                                             key={cat.id}
                                                             type="button"
                                                             onClick={() => handleQuickActivityEvent(cat.id)}
-                                                            className={`relative shrink-0 inline-flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-semibold transition-all min-h-[34px] ${
+                                                            className={`relative shrink-0 inline-flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-semibold transition-all min-h-[44px] lg:min-h-[34px] ${
                                                                 isActActive
                                                                     ? 'text-white shadow-xs'
                                                                     : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white bg-slate-100/80 dark:bg-white/5 hover:bg-slate-200/80 dark:hover:bg-white/10'
@@ -2630,7 +2666,7 @@ export default function History({
                                                         activity_event: activityEvent,
                                                         search,
                                                     })}
-                                                    className="inline-flex items-center gap-1.5 rounded-xl border border-royal-blue/30 dark:border-sky-500/30 bg-royal-blue/10 dark:bg-sky-500/10 px-3.5 py-1.5 text-xs font-bold text-royal-blue dark:text-sky-300 hover:bg-royal-blue/20 dark:hover:bg-sky-500/20 transition-all shadow-xs min-h-[34px]"
+                                                    className="inline-flex items-center gap-1.5 rounded-xl border border-royal-blue/30 dark:border-sky-500/30 bg-royal-blue/10 dark:bg-sky-500/10 px-3.5 py-1.5 text-xs font-bold text-royal-blue dark:text-sky-300 hover:bg-royal-blue/20 dark:hover:bg-sky-500/20 transition-all shadow-xs min-h-[44px] lg:min-h-[34px]"
                                                     title="Unduh seluruh catatan aktivitas audit sistem dalam format CSV"
                                                 >
                                                     <span className="material-symbols-outlined text-[16px]">
@@ -2642,9 +2678,9 @@ export default function History({
                                         </div>
 
                                         {/* Audit Table */}
-                                        <div className="overflow-x-auto rounded-2xl border border-slate-200/80 dark:border-white/10">
-                                            <table className="w-full whitespace-nowrap text-left text-xs text-gray-600 dark:text-slate-300">
-                                                <thead className="bg-slate-50/90 dark:bg-black/40 text-[11px] font-bold uppercase tracking-wider text-deep-navy dark:text-slate-300 border-b border-slate-200/80 dark:border-white/10">
+                                        <div className="md:overflow-x-auto md:rounded-2xl md:border md:border-slate-200/80 md:dark:border-white/10">
+                                            <table className="block md:table w-full md:whitespace-nowrap text-left text-xs text-gray-600 dark:text-slate-300">
+                                                <thead className="hidden md:table-header-group bg-slate-50/90 dark:bg-black/40 text-[11px] font-bold uppercase tracking-wider text-deep-navy dark:text-slate-300 border-b border-slate-200/80 dark:border-white/10">
                                                     <tr>
                                                         <th className="px-5 py-3.5">Waktu Kejadian</th>
                                                         <th className="px-5 py-3.5">
@@ -2657,7 +2693,12 @@ export default function History({
                                                         <th className="px-5 py-3.5 text-right">Aksi</th>
                                                     </tr>
                                                 </thead>
-                                                <tbody className="divide-y divide-slate-200/70 dark:divide-white/5">
+                                                <motion.tbody
+                                                    variants={containerVariants}
+                                                    initial="hidden"
+                                                    animate="show"
+                                                    className="block md:table-row-group space-y-2.5 md:space-y-0 md:divide-y md:divide-slate-200/70 md:dark:divide-white/5"
+                                                >
                                                     {activities?.data?.map((act: any) => {
                                                         const evLower = (act.event || act.log_name || '').toLowerCase();
                                                         const isPresensi =
@@ -2676,16 +2717,17 @@ export default function History({
                                                             evLower.includes('clear') ||
                                                             evLower.includes('hapus');
 
-                                                        const hasBab5 =
-                                                            act.properties?.s1 ||
-                                                            act.properties?.euclidean_distance !== undefined;
+                                                        const hasBab5 = ['s1', 's2', 's3'].some(
+                                                            (k) => act.properties?.[k] !== undefined && act.properties?.[k] !== null,
+                                                        );
 
                                                         return (
-                                                            <tr
+                                                            <motion.tr
                                                                 key={act.id}
-                                                                className="bg-white dark:bg-[#0F1B36] hover:bg-slate-50/80 dark:hover:bg-[#152345] transition-colors"
+                                                                variants={itemVariants}
+                                                                className="block md:table-row rounded-2xl md:rounded-none border md:border-0 border-slate-200/80 dark:border-white/10 p-3.5 md:p-0 bg-white dark:bg-[#0F1B36] hover:bg-slate-50/80 dark:hover:bg-[#152345] transition-colors"
                                                             >
-                                                                <td className="px-5 py-4 font-mono">
+                                                                <td className="block md:table-cell md:px-5 md:py-4 font-mono">
                                                                     <div className="font-bold text-deep-navy dark:text-white text-xs flex items-center gap-1">
                                                                         <span className="material-symbols-outlined text-[13px] text-slate-400 dark:text-slate-500">
                                                                             schedule
@@ -2696,9 +2738,9 @@ export default function History({
                                                                         {act.date} ({act.created_at_human})
                                                                     </div>
                                                                 </td>
-                                                                <td className="px-5 py-4 font-bold text-deep-navy dark:text-white">
+                                                                <td className="block md:table-cell pt-2 md:px-5 md:py-4 font-bold text-deep-navy dark:text-white">
                                                                     <div className="flex items-center gap-2">
-                                                                        <span className="material-symbols-outlined text-[16px] text-royal-blue dark:text-sky-400">
+                                                                        <span aria-hidden="true" className="material-symbols-outlined text-[16px] text-royal-blue dark:text-sky-400">
                                                                             account_circle
                                                                         </span>
                                                                         <div>
@@ -2711,7 +2753,7 @@ export default function History({
                                                                         </div>
                                                                     </div>
                                                                 </td>
-                                                                <td className="px-5 py-4">
+                                                                <td className="block md:table-cell pt-2 md:px-5 md:py-4">
                                                                     <div className="flex flex-col gap-1 items-start">
                                                                         <span
                                                                             className={`inline-flex items-center gap-1 rounded-lg px-2 py-0.5 font-mono text-[10px] font-bold border ${
@@ -2731,32 +2773,42 @@ export default function History({
                                                                         {hasBab5 && (
                                                                             <span className="text-[9px] font-mono text-slate-500 dark:text-slate-400">
                                                                                 Bab 5:{' '}
-                                                                                <strong className={act.properties.s1 === 'ACCEPT' ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}>
-                                                                                    S1:{act.properties.s1 === 'ACCEPT' ? 'ACC' : 'REJ'}
-                                                                                </strong>
-                                                                                {' • '}
-                                                                                <strong className={act.properties.s2 === 'ACCEPT' ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}>
-                                                                                    S2:{act.properties.s2 === 'ACCEPT' ? 'ACC' : 'REJ'}
-                                                                                </strong>
-                                                                                {' • '}
-                                                                                <strong className={act.properties.s3 === 'ACCEPT' ? 'text-sky-600 dark:text-sky-400' : 'text-rose-600 dark:text-rose-400'}>
-                                                                                    S3:{act.properties.s3 === 'ACCEPT' ? 'ACC' : 'REJ'}
-                                                                                </strong>
+                                                                                {(['s1', 's2', 's3'] as const).map((k, i) => {
+                                                                                    const verdict = bab5Verdict(act.properties?.[k]);
+                                                                                    return (
+                                                                                        <span key={k}>
+                                                                                            {i > 0 && ' • '}
+                                                                                            <strong
+                                                                                                className={
+                                                                                                    verdict === 'ACC'
+                                                                                                        ? k === 's3'
+                                                                                                            ? 'text-sky-600 dark:text-sky-400'
+                                                                                                            : 'text-emerald-600 dark:text-emerald-400'
+                                                                                                        : verdict === 'REJ'
+                                                                                                          ? 'text-rose-600 dark:text-rose-400'
+                                                                                                          : 'text-slate-500 dark:text-slate-400'
+                                                                                                }
+                                                                                            >
+                                                                                                {k.toUpperCase()}:{verdict}
+                                                                                            </strong>
+                                                                                        </span>
+                                                                                    );
+                                                                                })}
                                                                             </span>
                                                                         )}
                                                                     </div>
                                                                 </td>
-                                                                <td className="px-5 py-4 font-medium text-slate-700 dark:text-slate-200 max-w-xs truncate">
+                                                                <td className="block md:table-cell pt-2 md:px-5 md:py-4 font-medium text-slate-700 dark:text-slate-200 md:max-w-xs md:truncate">
                                                                     <span title={act.description}>
                                                                         {act.description}
                                                                     </span>
                                                                 </td>
-                                                                <td className="px-5 py-4 text-right">
+                                                                <td className="block md:table-cell pt-3 md:px-5 md:py-4 md:text-right">
                                                                     <div className="inline-flex items-center gap-2">
                                                                         <button
                                                                             type="button"
                                                                             onClick={() => setSelectedDetailActivity(act)}
-                                                                            className="inline-flex items-center gap-1 rounded-xl bg-royal-blue/10 dark:bg-sky-500/15 border border-royal-blue/20 dark:border-sky-500/25 px-2.5 py-1.5 text-xs font-bold text-royal-blue dark:text-sky-300 hover:bg-royal-blue/20 dark:hover:bg-sky-500/25 transition-all shadow-xs"
+                                                                            className="inline-flex min-h-[44px] md:min-h-0 items-center gap-1 rounded-xl bg-royal-blue/10 dark:bg-sky-500/15 border border-royal-blue/20 dark:border-sky-500/25 px-3 md:px-2.5 py-1.5 text-xs font-bold text-royal-blue dark:text-sky-300 hover:bg-royal-blue/20 dark:hover:bg-sky-500/25 transition-all shadow-xs"
                                                                             title="Lihat detail lengkap & raw JSON aktivitas ini"
                                                                         >
                                                                             <span className="material-symbols-outlined text-[15px]">
@@ -2767,7 +2819,7 @@ export default function History({
                                                                         <button
                                                                             type="button"
                                                                             onClick={() => promptDeleteActivity(act)}
-                                                                            className="inline-flex items-center gap-1 rounded-xl border border-rose-200/80 dark:border-rose-500/30 bg-rose-50 dark:bg-rose-500/10 px-2 py-1.5 text-xs font-bold text-rose-600 dark:text-rose-400 hover:bg-rose-100 dark:hover:bg-rose-500/20 transition-all shadow-xs"
+                                                                            className="inline-flex min-h-[44px] min-w-[44px] md:min-h-0 md:min-w-0 justify-center items-center gap-1 rounded-xl border border-rose-200/80 dark:border-rose-500/30 bg-rose-50 dark:bg-rose-500/10 px-2 py-1.5 text-xs font-bold text-rose-600 dark:text-rose-400 hover:bg-rose-100 dark:hover:bg-rose-500/20 transition-all shadow-xs"
                                                                             title="Hapus log aktivitas ini"
                                                                         >
                                                                             <span className="material-symbols-outlined text-[15px]">
@@ -2777,10 +2829,10 @@ export default function History({
                                                                         </button>
                                                                     </div>
                                                                 </td>
-                                                            </tr>
+                                                            </motion.tr>
                                                         );
                                                     })}
-                                                </tbody>
+                                                </motion.tbody>
                                             </table>
                                         </div>
 
@@ -2802,44 +2854,15 @@ export default function History({
                                         )}
 
                                         {/* Pagination for Audit */}
-                                        {activities?.links && activities.links.length > 3 && (
-                                            <div className="mt-6 flex flex-col sm:flex-row items-center justify-between gap-4 border-t border-slate-200/70 dark:border-white/[0.08] pt-4">
-                                                <div className="text-xs text-slate-500 dark:text-slate-400">
-                                                    Menampilkan{' '}
-                                                    <span className="font-bold text-deep-navy dark:text-white">
-                                                        {activities.from || 0}
-                                                    </span>{' '}
-                                                    sampai{' '}
-                                                    <span className="font-bold text-deep-navy dark:text-white">
-                                                        {activities.to || 0}
-                                                    </span>{' '}
-                                                    dari{' '}
-                                                    <span className="font-bold text-deep-navy dark:text-white">
-                                                        {activities.total}
-                                                    </span>{' '}
-                                                    log aktivitas
-                                                </div>
-                                                <div className="flex flex-wrap gap-1.5">
-                                                    {activities.links.map((link: any, i: number) => (
-                                                        <Link
-                                                            key={i}
-                                                            href={link.url || '#'}
-                                                            className={`rounded-xl px-3 py-1.5 text-xs font-semibold transition-colors ${
-                                                                link.active
-                                                                    ? 'bg-deep-navy dark:bg-sky-600 text-white shadow-sm'
-                                                                    : 'border border-slate-200/80 dark:border-white/10 bg-slate-50 dark:bg-white/5 text-deep-navy dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-white/10'
-                                                            } ${!link.url ? 'cursor-not-allowed opacity-50' : ''}`}
-                                                            dangerouslySetInnerHTML={{
-                                                                __html: link.label,
-                                                            }}
-                                                        />
-                                                    ))}
-                                                </div>
-                                            </div>
-                                        )}
+                                        <HistoryPagination
+                                            page={activities}
+                                            noun="log aktivitas"
+                                            onNavigated={() => scrollToTopOf(listTopRef.current)}
+                                        />
                                     </motion.div>
                                 )}
                             </AnimatePresence>
+                            </motion.div>
                         </div>
                     </div>
                 </div>
@@ -3068,6 +3091,7 @@ export default function History({
                     />
                 )}
             </AnimatePresence>
+            </MotionConfig>
         </AuthenticatedLayout>
     );
 }

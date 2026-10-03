@@ -1,12 +1,15 @@
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
+import { engineDistanceNoteLabel, recordedDistance } from '@/Utils/distanceCalibration';
 import { formatMeasured } from '@/Utils/sensorReading';
 import { Head, Link } from '@inertiajs/react';
 import { useState } from 'react';
 import { Bab5ScenarioCard } from '@/Components/Presensi/Bab5ScenarioCard';
+import { LightingSummaryView } from '@/Components/Presensi/LightingSummaryView';
 
-export default function Show({ record, isResearcher }: any) {
+export default function Show({ record, isResearcher, lighting }: any) {
     const [copied, setCopied] = useState(false);
     const meta = record.metadata || {};
+    const recorded = recordedDistance(meta);
 
     const dist =
         meta.euclidean_distance !== null && meta.euclidean_distance !== undefined
@@ -296,16 +299,34 @@ export default function Show({ record, isResearcher }: any) {
                                 straight
                             </span>
                             <span>
-                                Jarak Kamera: <strong className="text-deep-navy dark:text-white font-bold">{formatMeasured(meta.distance_cm, 'cm')}</strong>
+                                Jarak Kamera: <strong className="text-deep-navy dark:text-white font-bold">{formatMeasured(recorded.distanceCm, 'cm', 1)}</strong>
+                                {recorded.category && <> · {recorded.category}</>}
+                                {recorded.source && <span className="block text-[11px] font-sans">Sumber: {recorded.source}</span>}
+                                {(meta.browser_distance_cm != null || meta.engine_distance_cm != null) && (
+                                    <span className="block text-[11px] font-sans">
+                                        Browser {formatMeasured(meta.browser_distance_cm, 'cm', 1)} · Engine{' '}
+                                        {formatMeasured(meta.engine_distance_cm, 'cm', 1)}
+                                        {meta.engine_distance_cm == null && engineDistanceNoteLabel(meta.engine_distance_note) && (
+                                            <> ({engineDistanceNoteLabel(meta.engine_distance_note)})</>
+                                        )}
+                                        {meta.distance_mismatch_cm != null && <> · selisih {formatMeasured(meta.distance_mismatch_cm, 'cm', 1)}</>}
+                                    </span>
+                                )}
                             </span>
                         </div>
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-start gap-2">
                             <span className="material-symbols-outlined text-[18px] text-amber-500">
                                 light_mode
                             </span>
-                            <span>
-                                Intensitas Cahaya: <strong className="text-deep-navy dark:text-white font-bold">{formatMeasured(meta.lux, 'Lux')}</strong>
-                            </span>
+                            {lighting ? (
+                                <div className="min-w-0 flex-1 font-sans">
+                                    <LightingSummaryView summary={lighting} />
+                                </div>
+                            ) : (
+                                <span>
+                                    Intensitas Cahaya: <strong className="text-deep-navy dark:text-white font-bold">{formatMeasured(meta.lux, 'Lux')}</strong>
+                                </span>
+                            )}
                         </div>
                         <div className="flex items-center gap-2">
                             <span className="material-symbols-outlined text-[18px] text-sky-500">

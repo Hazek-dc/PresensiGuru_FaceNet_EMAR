@@ -2,6 +2,8 @@ import React from 'react';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
 import { Head, Link } from '@inertiajs/react';
 import { motion } from 'motion/react';
+import { positionLabel } from '@/Utils/staffProfile';
+import { TeacherAvatar } from '@/Components/Admin/TeacherAvatar';
 
 interface TeacherShowProps {
     teacher: {
@@ -10,6 +12,9 @@ interface TeacherShowProps {
         email: string;
         embedding_id: string | null;
         role: string;
+        position?: string | null;
+        subjects?: string[] | null;
+        avatar_url?: string | null;
         deleted_at: string | null;
         created_at: string;
     };
@@ -77,9 +82,11 @@ export default function Show({ teacher, history, biometricStats, subjectEvaluati
                     >
                         <div className="flex flex-col md:flex-row gap-6 items-start md:items-center justify-between">
                             <div className="flex items-center gap-4">
-                                <div className="h-16 w-16 rounded-full bg-indigo-100 dark:bg-indigo-900/30 flex items-center justify-center text-indigo-600 dark:text-indigo-400 font-bold text-2xl shrink-0">
-                                    {teacher.name.charAt(0)}
-                                </div>
+                                <TeacherAvatar
+                                    name={teacher.name}
+                                    url={teacher.avatar_url}
+                                    className="h-16 w-16 rounded-full bg-indigo-100 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 text-2xl"
+                                />
                                 <div>
                                     <h3 className="text-xl font-bold text-deep-navy dark:text-white flex items-center gap-2">
                                         {teacher.name}
@@ -90,6 +97,19 @@ export default function Show({ teacher, history, biometricStats, subjectEvaluati
                                         )}
                                     </h3>
                                     <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">{teacher.email}</p>
+                                    <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
+                                        {positionLabel(teacher.position) ? (
+                                            <span className="font-semibold text-deep-navy dark:text-white">{positionLabel(teacher.position)}</span>
+                                        ) : (
+                                            'Jabatan belum diisi'
+                                        )}
+                                        {teacher.position === 'guru' && (
+                                            <span>
+                                                {' · '}
+                                                {teacher.subjects?.length ? teacher.subjects.join(', ') : 'bidang studi belum diisi'}
+                                            </span>
+                                        )}
+                                    </p>
                                 </div>
                             </div>
                             <div className="flex flex-col gap-2 min-w-[200px]">

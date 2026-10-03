@@ -1,11 +1,12 @@
+import { LightingStatsCard, LuxMeasurementStatus } from '@/Components/Presensi/LightingStatsCard';
 import ConfirmHideActivityModal, {
     PreviewData,
 } from '@/Components/Presensi/ConfirmHideActivityModal';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
 import { Head, Link, router, usePage } from '@inertiajs/react';
 import axios from 'axios';
-import { AnimatePresence, motion } from 'motion/react';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { AnimatePresence, motion, MotionConfig, useReducedMotion } from 'motion/react';
+import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
 
 // Framer Motion Animation Variants
 const containerVariants = {
@@ -33,6 +34,9 @@ const cardItemVariants = {
     },
 };
 
+/** Jumlah item feed yang langsung tampil di ponsel/tablet sebelum "Tampilkan semua". */
+const FEED_PREVIEW = 5;
+
 // =========================================================================
 // LUXURY ENTERPRISE GRADE UI PRIMITIVES
 // =========================================================================
@@ -43,12 +47,13 @@ const cardItemVariants = {
 function AnimatedCounter({ value, duration = 900 }: { value: number; duration?: number }) {
     const [displayValue, setDisplayValue] = useState<number>(Number(value) || 0);
     const prevValueRef = useRef<number>(Number(value) || 0);
+    const reduceMotion = useReducedMotion();
 
     useEffect(() => {
         const startVal = prevValueRef.current;
         const endVal = Number(value) || 0;
         prevValueRef.current = endVal;
-        if (startVal === endVal) {
+        if (startVal === endVal || reduceMotion) {
             setDisplayValue(endVal);
             return;
         }
@@ -73,9 +78,30 @@ function AnimatedCounter({ value, duration = 900 }: { value: number; duration?: 
 
         frameId = requestAnimationFrame(updateCount);
         return () => cancelAnimationFrame(frameId);
-    }, [value, duration]);
+    }, [value, duration, reduceMotion]);
 
     return <span className="tabular-nums font-mono">{displayValue}</span>;
+}
+
+const formatClock = () =>
+    new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
+
+/**
+ * Jam yang berdetak tiap detik. Disimpan di komponen sendiri agar hanya teks jam
+ * yang dirender ulang, bukan seluruh Dashboard.
+ */
+function LiveClock({ suffix = '' }: { suffix?: string }) {
+    const [time, setTime] = useState(formatClock);
+    useEffect(() => {
+        const id = window.setInterval(() => setTime(formatClock()), 1000);
+        return () => window.clearInterval(id);
+    }, []);
+    return (
+        <>
+            {time}
+            {suffix}
+        </>
+    );
 }
 
 /**
@@ -146,8 +172,9 @@ export default function Dashboard({
     recent_history,
     recent_activities,
     subjects_list,
-    latest_evaluations,
+    clear_all_summary,
     distance_stats,
+    lighting_stats,
     timezone,
     today_date,
     schedule_session,
@@ -155,25 +182,7 @@ export default function Dashboard({
 }: any) {
     const { user } = (usePage().props.auth as any) || {};
 
-    // Live WIB Clock State with Smooth Second Counter
-    const [currentTime, setCurrentTime] = useState<string>('');
     const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
-
-    useEffect(() => {
-        const updateClock = () => {
-            const now = new Date();
-            const timeStr = now.toLocaleTimeString('id-ID', {
-                hour: '2-digit',
-                minute: '2-digit',
-                second: '2-digit',
-                hour12: false,
-            });
-            setCurrentTime(timeStr);
-        };
-        updateClock();
-        const interval = setInterval(updateClock, 1000);
-        return () => clearInterval(interval);
-    }, []);
 
     const todayFormatted = useMemo(() => {
         return new Date().toLocaleDateString('id-ID', {
@@ -198,7 +207,11 @@ export default function Dashboard({
 
     // Filter & Search states for Recent Activity feed
     const [statusFilter, setStatusFilter] = useState<'ALL' | 'HADIR' | 'TERLAMBAT' | 'PULANG' | 'IZIN_SAKIT' | 'GAGAL'>('ALL');
+    // Di bawah lg feed tidak punya kotak gulir sendiri, jadi hanya FEED_PREVIEW item pertama yang tampil.
+    const [feedExpanded, setFeedExpanded] = useState(false);
     const [searchQuery, setSearchQuery] = useState('');
+    // Daftar disaring dengan nilai tertunda: ketikan tetap responsif walau daftar dirender ulang.
+    const deferredSearch = useDeferredValue(searchQuery);
 
     // Dropdown "More Actions" popover
     const [moreMenuOpen, setMoreMenuOpen] = useState(false);
@@ -215,32 +228,9 @@ export default function Dashboard({
         return () => document.removeEventListener('mousedown', handleClickOutside);
     }, [moreMenuOpen]);
 
-    // Pre-Flight Session Parameter Form States (Skenario Jarak 30 cm)
-    const default18Teachers = useMemo(
-        () => [
-            { id: 1, name: 'Nur Holis', embedding_id: 'S01', email: 'gurupresensi1@gmail.com', has_embedding: true },
-            { id: 2, name: 'Viky Widiyanti', embedding_id: 'S02', email: 'gurupresensi2@gmail.com', has_embedding: true },
-            { id: 3, name: 'Mauludin', embedding_id: 'S03', email: 'gurupresensi3@gmail.com', has_embedding: true },
-            { id: 4, name: 'Ahmad Fauzi', embedding_id: 'S04', email: 'gurupresensi4@gmail.com', has_embedding: true },
-            { id: 5, name: 'Merli Yanti', embedding_id: 'S05', email: 'gurupresensi5@gmail.com', has_embedding: true },
-            { id: 6, name: 'Karmila Milla', embedding_id: 'S06', email: 'gurupresensi6@gmail.com', has_embedding: true },
-            { id: 7, name: 'Reynaldi Surya', embedding_id: 'S07', email: 'gurupresensi7@gmail.com', has_embedding: true },
-            { id: 8, name: 'Taufik Hidayat', embedding_id: 'S08', email: 'gurupresensi8@gmail.com', has_embedding: true },
-            { id: 9, name: 'Wery Saputra', embedding_id: 'S09', email: 'gurupresensi9@gmail.com', has_embedding: true },
-            { id: 10, name: 'Hendra Wijaya', embedding_id: 'S10', email: 'gurupresensi10@gmail.com', has_embedding: true },
-            { id: 11, name: 'Susi Lisnasari', embedding_id: 'S11', email: 'gurupresensi11@gmail.com', has_embedding: true },
-            { id: 12, name: 'Ponco Prastio', embedding_id: 'S12', email: 'gurupresensi12@gmail.com', has_embedding: true },
-            { id: 13, name: 'Yulisma Shinta', embedding_id: 'S13', email: 'gurupresensi13@gmail.com', has_embedding: true },
-            { id: 14, name: 'Arie Lazido', embedding_id: 'S14', email: 'gurupresensi14@gmail.com', has_embedding: true },
-            { id: 15, name: 'Bambang Susanto', embedding_id: 'S15', email: 'gurupresensi15@gmail.com', has_embedding: true },
-            { id: 16, name: 'Sri Wahyuni', embedding_id: 'S16', email: 'gurupresensi16@gmail.com', has_embedding: true },
-            { id: 17, name: 'Dedi Irawan', embedding_id: 'S17', email: 'gurupresensi17@gmail.com', has_embedding: true },
-            { id: 18, name: 'Eka Prasetya', embedding_id: 'S18', email: 'gurupresensi18@gmail.com', has_embedding: true },
-        ],
-        [],
-    );
 
-    const teachers = subjects_list && subjects_list.length > 0 ? subjects_list : default18Teachers;
+    // Hanya data guru dari server; daftar cadangan tetap dulu menandai semua guru sudah punya template.
+    const teachers = subjects_list ?? [];
     const [selectedSubjectId, setSelectedSubjectId] = useState<string>('S01');
     const [luxValue, setLuxValue] = useState<number>(300);
     const [selectedDistance, setSelectedDistance] = useState<number>(30); // 30cm Baku, 45cm Sedang, 60cm Jauh
@@ -336,8 +326,8 @@ export default function Dashboard({
             if (statusFilter === 'GAGAL' && !isFail) return false;
 
             // Search Query Filter
-            if (searchQuery.trim()) {
-                const q = searchQuery.toLowerCase();
+            if (deferredSearch.trim()) {
+                const q = deferredSearch.toLowerCase();
                 const teacherName = (item.teacher?.name || '').toLowerCase();
                 const desc = (item.description || '').toLowerCase();
                 const time = (item.time || '').toLowerCase();
@@ -347,15 +337,15 @@ export default function Dashboard({
 
             return true;
         });
-    }, [recent_history, statusFilter, searchQuery]);
+    }, [recent_history, statusFilter, deferredSearch]);
 
     // Filtered System & Teacher Activities (Audit Log)
     const filteredActivities = useMemo(() => {
         if (!recent_activities) return [];
 
         return recent_activities.filter((act: any) => {
-            if (searchQuery.trim()) {
-                const q = searchQuery.toLowerCase();
+            if (deferredSearch.trim()) {
+                const q = deferredSearch.toLowerCase();
                 const desc = (act.description || '').toLowerCase();
                 const causer = (act.causer_name || '').toLowerCase();
                 const event = (act.event || '').toLowerCase();
@@ -363,7 +353,7 @@ export default function Dashboard({
             }
             return true;
         });
-    }, [recent_activities, searchQuery]);
+    }, [recent_activities, deferredSearch]);
 
     // Modal handlers
     const handleOpenHideModal = useCallback(async () => {
@@ -505,6 +495,8 @@ export default function Dashboard({
         <AuthenticatedLayout>
             <Head title="Dashboard Presensi & Analisis Biometrik" />
 
+            {/* Animasi mengikuti setelan "kurangi gerakan" perangkat. */}
+            <MotionConfig reducedMotion="user">
             <div className="mx-auto w-full max-w-[1536px] px-3 sm:px-6 md:px-8 py-3.5 sm:py-6 md:py-7">
                 {/* ======================================================== */}
                 {/* SUCCESS NOTIFICATION BANNER                              */}
@@ -572,14 +564,14 @@ export default function Dashboard({
                                         Sistem Aktif
                                     </span>
 
-                                    {currentTime && (
-                                        <span className="inline-flex items-center gap-1.5 rounded-md border border-slate-200/80 dark:border-white/10 bg-slate-50 dark:bg-white/5 px-2 py-0.5 text-[9px] sm:text-[10px] font-mono font-medium text-slate-700 dark:text-slate-200">
-                                            <span className="material-symbols-outlined text-[12px] text-royal-blue dark:text-sky-400">
-                                                schedule
-                                            </span>
-                                            <span>{currentTime} WIB</span>
+                                    <span className="inline-flex items-center gap-1.5 rounded-md border border-slate-200/80 dark:border-white/10 bg-slate-50 dark:bg-white/5 px-2 py-0.5 text-[9px] sm:text-[10px] font-mono font-medium tabular-nums text-slate-700 dark:text-slate-200">
+                                        <span className="material-symbols-outlined text-[12px] text-royal-blue dark:text-sky-400">
+                                            schedule
                                         </span>
-                                    )}
+                                        <span>
+                                            <LiveClock suffix=" WIB" />
+                                        </span>
+                                    </span>
 
                                     <span className="hidden sm:inline-flex rounded-md bg-slate-100 dark:bg-white/10 px-2 py-0.5 text-[9px] sm:text-[10px] font-medium text-slate-600 dark:text-slate-300">
                                         {timezone || 'Asia/Jakarta'}
@@ -674,7 +666,7 @@ export default function Dashboard({
                                 Rasio Kehadiran Pengajar Hari Ini
                             </span>
                             <span className="inline-flex items-center gap-1 rounded-md bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 font-mono text-[10px] font-extrabold px-2 py-0.5 shadow-xs">
-                                <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                                <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 motion-safe:animate-pulse"></span>
                                 <AnimatedCounter value={attendanceRate} />% Tercatat
                             </span>
                         </div>
@@ -704,7 +696,7 @@ export default function Dashboard({
                             <div className="flex items-start justify-between gap-2">
                                 <div className="min-w-0">
                                     <div className="flex items-center gap-1.5">
-                                        <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                                        <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 motion-safe:animate-pulse"></span>
                                         <span className="text-[10px] sm:text-xs font-bold uppercase tracking-wider text-emerald-700 dark:text-emerald-400 block truncate">
                                             Hadir Tepat
                                         </span>
@@ -935,8 +927,8 @@ export default function Dashboard({
                                         {/* 2. Lux Meter Input */}
                                         <div className="flex flex-col gap-1">
                                             <label className="text-xs font-bold text-slate-800 dark:text-slate-200 flex items-center justify-between">
-                                                <span>2. Intensitas Cahaya (Lux)</span>
-                                                <span className="text-[10px] text-royal-blue dark:text-sky-300 font-semibold">Sensor Lux</span>
+                                                <span>2. Target Cahaya (Lux)</span>
+                                                <span className="text-[10px] text-royal-blue dark:text-sky-300 font-semibold">Target skenario</span>
                                             </label>
                                             <div className="relative">
                                                 <input
@@ -968,6 +960,7 @@ export default function Dashboard({
                                                     </button>
                                                 ))}
                                             </div>
+                                            <LuxMeasurementStatus stats={lighting_stats} />
                                         </div>
 
                                         {/* 3. Jarak Pengujian (30cm Baku, 45cm Sedang, 60cm Jauh) */}
@@ -1104,7 +1097,7 @@ export default function Dashboard({
                                                     : 'Log Aktivitas Guru & Sistem'}
                                             </h3>
                                             {feedTab === 'presensi' && (
-                                                <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-500/10 dark:bg-emerald-500/20 px-2.5 py-0.5 text-[9px] font-bold text-emerald-700 dark:text-emerald-300 border border-emerald-500/20 shadow-xs">
+                                                <span className="inline-flex shrink-0 whitespace-nowrap items-center gap-1.5 rounded-full bg-emerald-500/10 dark:bg-emerald-500/20 px-2.5 py-0.5 text-[9px] font-bold text-emerald-700 dark:text-emerald-300 border border-emerald-500/20 shadow-xs">
                                                     <BreathingBeacon color="emerald" size="xs" />
                                                     LIVE FEED
                                                 </span>
@@ -1128,6 +1121,17 @@ export default function Dashboard({
                                     >
                                         <span className="material-symbols-outlined text-[16px]">download</span>
                                         <span className="hidden sm:inline">CSV Terakhir</span>
+                                    </a>
+
+                                    {/* Satu CSV: semua riwayat presensi + log aktivitas */}
+                                    <a
+                                        href={route('attendance.export.all')}
+                                        className="inline-flex items-center gap-1.5 rounded-xl border border-emerald-200 dark:border-emerald-500/30 bg-emerald-50 dark:bg-emerald-500/10 px-2.5 py-1.5 text-xs font-bold text-emerald-700 dark:text-emerald-300 hover:bg-emerald-100 dark:hover:bg-emerald-500/20 transition-colors shadow-xs"
+                                        title="Unduh semua riwayat presensi dan log aktivitas dalam satu berkas CSV"
+                                        aria-label="Unduh CSV lengkap riwayat presensi dan log aktivitas"
+                                    >
+                                        <span className="material-symbols-outlined text-[16px]">description</span>
+                                        <span className="hidden sm:inline">CSV Lengkap</span>
                                     </a>
 
                                     <Link
@@ -1195,6 +1199,8 @@ export default function Dashboard({
                                                                     setModalError(null);
                                                                     setClearConfirmationChecked(false);
                                                                     setIsClearAllModalOpen(true);
+                                                                    // Jumlah sebenarnya yang akan dihapus, dihitung server saat ini.
+                                                                    router.reload({ only: ['clear_all_summary'] });
                                                                 }}
                                                                 className="w-full flex items-center gap-2.5 rounded-xl px-3 py-2 text-xs font-semibold text-rose-700 dark:text-rose-300 hover:bg-rose-50 dark:hover:bg-rose-500/10 transition-colors"
                                                             >
@@ -1295,7 +1301,7 @@ export default function Dashboard({
 
                                 {/* Status Sub-Filter with Counts & Icons (Only for Presensi Tab) */}
                                 {feedTab === 'presensi' && (
-                                    <div className="flex items-center gap-1.5 overflow-x-auto rounded-xl border border-slate-200/80 dark:border-white/10 bg-slate-100/80 dark:bg-black/30 p-1 text-xs scrollbar-none w-full sm:w-auto">
+                                    <div className="flex items-center gap-1.5 overflow-x-auto rounded-xl border border-slate-200/80 dark:border-white/10 bg-slate-100/80 dark:bg-black/30 p-1 text-xs [scrollbar-width:none] [&::-webkit-scrollbar]:hidden w-full sm:w-auto">
                                         {[
                                             { id: 'ALL', label: 'Semua', count: statusCounts.ALL, icon: 'apps' },
                                             { id: 'HADIR', label: 'Hadir', count: statusCounts.HADIR, icon: 'check_circle' },
@@ -1342,7 +1348,8 @@ export default function Dashboard({
                         </div>
 
                         {/* Activity List Body */}
-                        <div className="flex-1 overflow-y-auto p-3 sm:p-5 flex flex-col gap-2.5 max-h-[580px] min-h-[360px]">
+                        {/* Di layar kecil daftar ikut menggulir halaman; kotak gulir sendiri hanya di desktop. */}
+                        <div className="flex-1 p-3 sm:p-5 flex flex-col gap-2.5 lg:overflow-y-auto lg:max-h-[580px] lg:min-h-[360px]">
                             <AnimatePresence mode="popLayout">
                                 {feedTab === 'presensi' ? (
                                     filteredHistory.length > 0 ? (
@@ -1381,7 +1388,9 @@ export default function Dashboard({
                                                         delay: Math.min(idx * 0.03, 0.25),
                                                         ease: [0.16, 1, 0.3, 1],
                                                     }}
-                                                    className="group relative shrink-0 rounded-2xl border border-slate-200/90 dark:border-white/[0.08] bg-white dark:bg-[#0B1528] p-3 sm:p-4 hover:border-royal-blue/40 dark:hover:border-sky-400/40 hover:bg-slate-50/70 dark:hover:bg-[#111F3C] hover:shadow-xs transition-all overflow-hidden"
+                                                    className={`group relative shrink-0 rounded-2xl border border-slate-200/90 dark:border-white/[0.08] bg-white dark:bg-[#0B1528] p-3 sm:p-4 hover:border-royal-blue/40 dark:hover:border-sky-400/40 hover:bg-slate-50/70 dark:hover:bg-[#111F3C] hover:shadow-xs transition-all overflow-hidden ${
+                                                        !feedExpanded && idx >= FEED_PREVIEW ? 'hidden lg:block' : ''
+                                                    }`}
                                                 >
                                                     {/* Left Status Accent Bar */}
                                                     <div
@@ -1705,7 +1714,9 @@ export default function Dashboard({
                                                         delay: Math.min(idx * 0.03, 0.25),
                                                         ease: [0.16, 1, 0.3, 1],
                                                     }}
-                                                    className="group relative shrink-0 flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-2xl border border-slate-200/90 dark:border-white/[0.08] bg-white dark:bg-[#0B1528] p-3.5 sm:p-4 hover:border-royal-blue/40 dark:hover:border-sky-400/40 hover:bg-slate-50/70 dark:hover:bg-[#111F3C] hover:shadow-xs transition-all overflow-hidden"
+                                                    className={`group relative shrink-0 flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-2xl border border-slate-200/90 dark:border-white/[0.08] bg-white dark:bg-[#0B1528] p-3.5 sm:p-4 hover:border-royal-blue/40 dark:hover:border-sky-400/40 hover:bg-slate-50/70 dark:hover:bg-[#111F3C] hover:shadow-xs transition-all overflow-hidden ${
+                                                        !feedExpanded && idx >= FEED_PREVIEW ? 'hidden lg:flex' : ''
+                                                    }`}
                                                 >
                                                     <div
                                                         className={`absolute left-0 top-0 bottom-0 w-1.5 ${
@@ -1789,6 +1800,20 @@ export default function Dashboard({
                                     )
                                 )}
                             </AnimatePresence>
+                            {(() => {
+                                const hiddenCount =
+                                    (feedTab === 'presensi' ? filteredHistory.length : filteredActivities.length) - FEED_PREVIEW;
+                                return !feedExpanded && hiddenCount > 0 ? (
+                                    <button
+                                        type="button"
+                                        onClick={() => setFeedExpanded(true)}
+                                        className="lg:hidden inline-flex min-h-[44px] w-full items-center justify-center gap-1.5 rounded-xl border border-slate-200/80 dark:border-white/10 bg-slate-50 dark:bg-white/5 text-xs font-bold text-royal-blue dark:text-sky-400 hover:bg-slate-100 dark:hover:bg-white/10 transition-colors"
+                                    >
+                                        <span className="material-symbols-outlined text-[18px]">expand_more</span>
+                                        Tampilkan {hiddenCount} lainnya
+                                    </button>
+                                ) : null;
+                            })()}
                         </div>
 
                         {/* Feed Footer Navigation & Counter */}
@@ -1823,7 +1848,8 @@ export default function Dashboard({
                     {/* RIGHT AREA: SOP Timeline, Quick Actions, Telemetry   */}
                     {/* Responsive: 1-col mobile, 2-col tablet, 1-col desktop*/}
                     {/* ---------------------------------------------------- */}
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-1 gap-5 lg:col-span-4">
+                    {/* Kartu kanan bertumpuk per kolom (2 kolom di tablet) agar tinggi yang berbeda tidak meninggalkan celah. */}
+                    <div className="lg:col-span-4 columns-1 sm:columns-2 lg:columns-1 gap-5 [&>*]:break-inside-avoid [&>*:not(:last-child)]:mb-5">
                         {/* 0. Standar Operasional Presensi Guru (SMK Al-Madani) Widget */}
                         <motion.div
                             initial={{ opacity: 0, y: 15 }}
@@ -1831,7 +1857,7 @@ export default function Dashboard({
                             transition={{ duration: 0.35, delay: 0.15 }}
                             className="rounded-2xl sm:rounded-3xl border border-slate-200/80 dark:border-white/[0.08] bg-white dark:bg-[#0F1B36] p-4 sm:p-5 shadow-xs overflow-hidden"
                         >
-                            <div className="flex items-center justify-between mb-3.5 pb-2.5 border-b border-slate-200/70 dark:border-white/[0.08]">
+                            <div className="flex flex-wrap items-center justify-between gap-2 mb-3.5 pb-2.5 border-b border-slate-200/70 dark:border-white/[0.08]">
                                 <div className="flex items-center gap-2.5">
                                     <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-slate-100 dark:bg-white/[0.06] text-slate-700 dark:text-slate-200 border border-slate-200/60 dark:border-white/10">
                                         <span className="material-symbols-outlined text-[18px]">school</span>
@@ -1848,7 +1874,9 @@ export default function Dashboard({
                                 <div className="flex items-center gap-2">
                                     <div className="flex items-center gap-1.5 font-mono text-xs font-semibold text-slate-700 dark:text-slate-200 bg-slate-100 dark:bg-white/[0.06] px-2.5 py-1 rounded-lg border border-slate-200/60 dark:border-white/10 shadow-xs">
                                         <BreathingBeacon color="emerald" size="xs" />
-                                        <span>{currentTime || 'WIB'}</span>
+                                        <span className="tabular-nums">
+                                            <LiveClock />
+                                        </span>
                                     </div>
                                     <button
                                         type="button"
@@ -1932,7 +1960,7 @@ export default function Dashboard({
                                                         <div key={idx} className="relative">
                                                             {/* Timeline dot */}
                                                             <div className={`absolute -left-5 top-2.5 flex items-center justify-center ${isActive ? 'h-5 w-5 -ml-[4px]' : 'h-3 w-3 -ml-[0px]'}`}>
-                                                                <div className={`rounded-full ${dotColor} ${isActive ? 'h-3.5 w-3.5 ring-4 animate-pulse' : 'h-2.5 w-2.5'} ${isActive ? ringColor : ''} transition-all`}></div>
+                                                                <div className={`rounded-full ${dotColor} ${isActive ? 'h-3.5 w-3.5 ring-4 motion-safe:animate-pulse' : 'h-2.5 w-2.5'} ${isActive ? ringColor : ''} transition-all`}></div>
                                                             </div>
 
                                                             <div
@@ -2094,6 +2122,8 @@ export default function Dashboard({
                             </div>
                         </motion.div>
 
+                        <LightingStatsCard stats={lighting_stats} />
+
                         {/* 2.5 Multi-Distance Benchmark Evaluation Widget */}
                         <motion.div
                             initial={{ opacity: 0, y: 15 }}
@@ -2218,7 +2248,7 @@ export default function Dashboard({
                             animate={{ opacity: 1, scale: 1, y: 0 }}
                             exit={{ opacity: 0, scale: 0.94, y: 16 }}
                             transition={{ type: 'spring' as const, stiffness: 380, damping: 28 }}
-                            className="w-full max-w-md overflow-hidden rounded-3xl border border-rose-500/30 bg-white dark:bg-[#0F1B36] p-5 sm:p-6 shadow-2xl"
+                            className="w-full max-w-md max-h-[92vh] overflow-y-auto rounded-3xl border border-rose-500/30 bg-white dark:bg-[#0F1B36] p-5 sm:p-6 shadow-2xl"
                             onClick={(e) => e.stopPropagation()}
                         >
                             <div className="flex items-center gap-3 text-rose-600 dark:text-rose-400 mb-4">
@@ -2377,21 +2407,30 @@ export default function Dashboard({
 
                             {/* Deletion Summary Card */}
                             <div className="space-y-1.5 rounded-2xl border border-slate-200/60 dark:border-white/5 bg-slate-50/80 dark:bg-slate-900/60 p-3 text-xs mb-3.5">
-                                <div className="flex justify-between text-slate-500 dark:text-slate-400 text-[11px]">
-                                    <span>Total Log Presensi:</span>
-                                    <span className="font-mono font-bold text-slate-900 dark:text-white">{recent_history?.length || 0} entri</span>
-                                </div>
-                                <div className="flex justify-between text-slate-500 dark:text-slate-400 text-[11px]">
-                                    <span>Total Log Aktivitas:</span>
-                                    <span className="font-mono font-bold text-slate-900 dark:text-white">{recent_activities?.length || 0} entri</span>
-                                </div>
-                                {user?.role === 'admin' && (
-                                    <div className="flex justify-between text-slate-500 dark:text-slate-400 text-[11px]">
-                                        <span>Matriks Evaluasi Uji:</span>
-                                        <span className="font-mono font-bold text-slate-900 dark:text-white">{latest_evaluations?.length || 0} entri</span>
-                                    </div>
-                                )}
+                                {[
+                                    { label: 'Rekaman presensi', value: clear_all_summary?.attendance, show: true },
+                                    { label: 'Matriks evaluasi uji', value: clear_all_summary?.evaluations, show: user?.role === 'admin' },
+                                    { label: 'Log aktivitas presensi', value: clear_all_summary?.activities, show: user?.role === 'admin' },
+                                ]
+                                    .filter((row) => row.show)
+                                    .map((row) => (
+                                        <div key={row.label} className="flex justify-between text-slate-500 dark:text-slate-400 text-[11px]">
+                                            <span>{row.label}:</span>
+                                            <span className="font-mono font-bold text-slate-900 dark:text-white">
+                                                {typeof row.value === 'number' ? `${row.value} entri` : 'Menghitung…'}
+                                            </span>
+                                        </div>
+                                    ))}
                             </div>
+
+                            {/* Salinan sebelum dihapus */}
+                            <a
+                                href={route('attendance.export.all')}
+                                className="mb-3.5 flex items-center gap-2 rounded-xl border border-emerald-200 dark:border-emerald-500/30 bg-emerald-50 dark:bg-emerald-500/10 px-3 py-2 text-[11px] sm:text-xs font-semibold text-emerald-700 dark:text-emerald-300 hover:bg-emerald-100 dark:hover:bg-emerald-500/20 transition-colors"
+                            >
+                                <span className="material-symbols-outlined text-[16px]">download</span>
+                                <span>Unduh CSV lengkap dulu (riwayat presensi + log aktivitas)</span>
+                            </a>
 
                             {/* Error Message */}
                             {modalError && (
@@ -2444,6 +2483,7 @@ export default function Dashboard({
                     </div>
                 )}
             </AnimatePresence>
+            </MotionConfig>
         </AuthenticatedLayout>
     );
 }

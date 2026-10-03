@@ -499,4 +499,47 @@ class ManualEnrollmentTest extends TestCase
         Http::assertNotSent(fn (HttpRequest $r) => self::path($r) === '/enroll/commit');
         $this->assertNull($teacher->fresh()->embedding_id);
     }
+
+    public function test_tambah_sampel_diteruskan_ke_mesin_tanpa_konfirmasi_ganti(): void
+    {
+        // Sampel di cahaya/jarak lain ditambahkan ke template; tidak ada yang diganti.
+        $teacher = User::factory()->create(['role' => 'teacher', 'embedding_id' => 'emb_TEST-QALWANI-001']);
+        $this->fakeEngine(
+            $this->enginePreviewOk('emb_TEST-QALWANI-001', ['distance_to_current' => 0.42, 'mode' => 'append']),
+            $this->engineCommitOk('emb_TEST-QALWANI-001', ['n_sessions' => 2, 'mode' => 'append']),
+        );
+
+        $token = $this->actingAs($teacher)->post('/api/presensi/enroll/preview', [
+            'subject_id' => $teacher->id,
+            'files' => $this->photos(3),
+            'mode' => 'append',
+        ] + self::CONSENT, ['Accept' => 'application/json'])
+            ->assertOk()
+            ->assertJsonPath('preview_data.mode', 'append')
+            ->json('preview_token');
+
+        Http::assertSent(fn (HttpRequest $r) => self::path($r) === '/enroll/preview'
+            && self::multipartValue($r, 'mode') === 'append');
+
+        $this->commit($teacher, $teacher, $token, false)
+            ->assertOk()
+            ->assertJsonPath('mode', 'append')
+            ->assertJsonPath('n_sessions', 2);
+        $this->assertSame('emb_TEST-QALWANI-001', $teacher->fresh()->embedding_id);
+    }
+
+    public function test_mode_pendaftaran_tidak_dikenal_ditolak(): void
+    {
+        $teacher = User::factory()->create(['role' => 'teacher']);
+        Http::fake();
+
+        $this->actingAs($teacher)->post('/api/presensi/enroll/preview', [
+            'subject_id' => $teacher->id,
+            'files' => $this->photos(3),
+            'mode' => 'gabung',
+        ] + self::CONSENT, ['Accept' => 'application/json'])
+            ->assertStatus(422)
+            ->assertJsonValidationErrors('mode');
+        Http::assertNothingSent();
+    }
 }

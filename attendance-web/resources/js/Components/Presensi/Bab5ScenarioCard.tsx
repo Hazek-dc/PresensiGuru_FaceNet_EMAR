@@ -43,12 +43,30 @@ interface Bab5ScenarioCardProps {
     className?: string;
 }
 
+/**
+ * Latar kartu. Teks di dalam kartu memakai varian dark: dari tema halaman, jadi
+ * tanpa prop isDark latar juga mengikuti tema. Sebelumnya bawaannya selalu gelap,
+ * sehingga di tema terang teksnya gelap di atas latar gelap.
+ */
+const PANEL_SURFACE = {
+    dark: 'border-white/10 bg-slate-900/95 text-white',
+    light: 'border-slate-200 bg-white text-slate-800',
+    theme: 'border-slate-200 bg-white text-slate-800 dark:border-white/10 dark:bg-slate-900/95 dark:text-white',
+} as const;
+
+const GRID_SURFACE = {
+    dark: 'border-white/10 bg-slate-900/80 text-white',
+    light: 'border-slate-200 bg-slate-50/90 text-slate-800',
+    theme: 'border-slate-200 bg-slate-50/90 text-slate-800 dark:border-white/10 dark:bg-slate-900/80 dark:text-white',
+} as const;
+
 export function Bab5ScenarioCard({
     data,
-    isDark = true,
+    isDark,
     variant = 'modal',
     className = '',
 }: Bab5ScenarioCardProps) {
+    const surface = isDark === undefined ? 'theme' : isDark ? 'dark' : 'light';
     const [isExpanded, setIsExpanded] = useState<boolean>(true);
     const [isDownloading, setIsDownloading] = useState<boolean>(false);
 
@@ -93,11 +111,7 @@ export function Bab5ScenarioCard({
     if (notEvaluated) {
         return (
             <div
-                className={`w-full rounded-2xl border p-3.5 transition-colors ${
-                    isDark
-                        ? 'border-white/10 bg-slate-900/95 text-white'
-                        : 'border-slate-200 bg-white text-slate-800'
-                } ${className}`}
+                className={`w-full rounded-2xl border p-3.5 transition-colors ${PANEL_SURFACE[surface]} ${className}`}
                 role="region"
                 aria-label="Panel Evaluasi Bab 5 Cochran Q"
             >
@@ -117,11 +131,7 @@ export function Bab5ScenarioCard({
     if (variant === 'sidebar') {
         return (
             <div
-                className={`w-full rounded-2xl border transition-colors overflow-hidden ${
-                    isDark
-                        ? 'border-white/10 bg-slate-900/95 text-white'
-                        : 'border-slate-200 bg-white text-slate-800'
-                } ${className}`}
+                className={`w-full rounded-2xl border transition-colors overflow-hidden ${PANEL_SURFACE[surface]} ${className}`}
                 role="region"
                 aria-label="Panel Evaluasi Bab 5 Cochran Q"
             >
@@ -234,11 +244,7 @@ export function Bab5ScenarioCard({
     // Modal or Full variant (detailed 3 scenario grid)
     return (
         <div
-            className={`w-full rounded-2xl border p-3.5 sm:p-4 transition-all ${
-                isDark
-                    ? 'border-white/10 bg-slate-900/80 text-white'
-                    : 'border-slate-200 bg-slate-50/90 text-slate-800'
-            } ${className}`}
+            className={`w-full rounded-2xl border p-3.5 sm:p-4 transition-all ${GRID_SURFACE[surface]} ${className}`}
         >
             {/* Header with Title & Badges */}
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-3 border-b border-slate-200 dark:border-white/10">

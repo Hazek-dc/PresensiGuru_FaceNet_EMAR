@@ -23,8 +23,10 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
     CALIBRATION_PROFILES,
     CalibrationProfile,
-    calculatePhotometricLux,
+    sampleCameraPhotometry,
     getLuxCategory,
+    isUsablePhotometry,
+    luxEstimateDetail,
     loadLuxCalibration,
     LuxCategory,
     LuxSensorSmoother,
@@ -56,6 +58,11 @@ export interface LuxometerWidgetProps {
     faceROI?: NormalizedFaceROI | null;
     isScanning?: boolean;
     isDark?: boolean;
+    /** Kalibrasi lux aktif (luxmeter); bila ada, mode Kamera memakai sampel terkalibrasi. */
+    luxCalibration?: { id: number; referenceLabel: string | null } | null;
+    /** Sampel kamera terkalibrasi terakhir, sama dengan panel Pencahayaan. */
+    calibratedReading?: { lux: number | null; measuredAt: number; note: string | null } | null;
+    onCalibrate?: () => void;
 }
 
 export { getLuxCategory };
@@ -70,6 +77,9 @@ export function LuxometerWidget({
     faceROI,
     isScanning = false,
     isDark = true,
+    luxCalibration = null,
+    calibratedReading = null,
+    onCalibrate,
 }: LuxometerWidgetProps) {
     const [mode, setMode] = useState<LuxSourceMode>('camera');
     const [isHardwareConnected, setIsHardwareConnected] = useState<boolean>(false);
@@ -93,56 +103,36 @@ export function LuxometerWidget({
     const cameraSampleRef = useRef<any>(null);
     const luxSmootherRef = useRef<LuxSensorSmoother>(new LuxSensorSmoother(0.30, 0.75));
     const modeRef = useRef<LuxSourceMode>(mode);
+    const faceROIRef = useRef(faceROI);
+    faceROIRef.current = faceROI;
 
-    const category = useMemo(() => (currentLux === null ? null : getLuxCategory(currentLux)), [currentLux]);
+    const isCalibrated = luxCalibration !== null;
+    // Dengan kalibrasi, mode Kamera menampilkan sampel terkalibrasi (sama dengan
+    // panel Pencahayaan), bukan perkiraan fotometri.
+    const displayLux = mode === 'camera' && isCalibrated ? calibratedReading?.lux ?? null : currentLux;
+    const category = useMemo(() => (displayLux === null ? null : getLuxCategory(displayLux)), [displayLux]);
 
     /* ---- 1. Camera Optical Photometry Sampling (Human Face & Room Light) ---- */
     const sampleCameraLuminance = useCallback(() => {
-        if (!videoRef?.current || videoRef.current.readyState < 2) {
-            return;
-        }
-
         try {
             if (!offscreenCanvasRef.current) {
                 offscreenCanvasRef.current = document.createElement('canvas');
-                offscreenCanvasRef.current.width = 64;
-                offscreenCanvasRef.current.height = 48;
             }
-
-            const canvas = offscreenCanvasRef.current;
-            const ctx = canvas.getContext('2d', { willReadFrequently: true });
-            if (!ctx) return;
-
-            ctx.drawImage(videoRef.current, 0, 0, 64, 48);
-            const imgData = ctx.getImageData(0, 0, 64, 48).data;
-
-            // Query MediaStreamTrack settings for hardware exposure / ISO if supported
-            let cameraSettings: any = undefined;
-            try {
-                const stream = videoRef.current.srcObject as MediaStream | null;
-                const track = stream?.getVideoTracks?.()[0];
-                if (track && typeof track.getSettings === 'function') {
-                    cameraSettings = track.getSettings();
-                }
-            } catch {
-                // Ignore track settings error
-            }
-
-            const analysis = calculatePhotometricLux(
-                imgData,
-                64,
-                48,
-                faceROI,
-                cameraSettings,
-                calibration.factor,
-                calibration.offset,
-            );
+            const analysis = sampleCameraPhotometry(videoRef?.current, offscreenCanvasRef.current, faceROIRef.current, calibration);
+            if (!analysis) return;
 
             setAnalysisDetail(analysis);
+            // Frame hitam/jenuh tidak dicatat sebagai batas model; bacaan lama kedaluwarsa sendiri.
+            if (!isUsablePhotometry(analysis)) return;
 
             // Filter micro-jitter & fluorescent 50Hz/60Hz AC flicker
             const smoothed = luxSmootherRef.current.update(analysis.calibratedLux);
-            onLuxChange({ value: smoothed, source: 'camera', measuredAt: Date.now() });
+            onLuxChange({
+                value: smoothed,
+                source: 'camera',
+                measuredAt: Date.now(),
+                estimate: luxEstimateDetail(analysis, calibration),
+            });
 
             if (analysis.method === 'apex_exposure') {
                 setActiveMethodDesc('APEX Optik Fisik (Hardware Shutter)');
@@ -159,7 +149,7 @@ export function LuxometerWidget({
         } catch {
             // Optical sampling fallback
         }
-    }, [videoRef, onLuxChange, calibration, faceROI]);
+    }, [videoRef, onLuxChange, calibration]);
 
     /* ---- 2. Hardware Luxometer API Polling (Serial COM / External) ---- */
     // Angka luxmeter dipakai apa adanya (tanpa smoothing) dan hanya bila server
@@ -209,6 +199,10 @@ export function LuxometerWidget({
     /* ---- 3. Mode Effect Management ---- */
     useEffect(() => {
         if (mode === 'camera') {
+            if (isCalibrated) {
+                onLuxChange(null);
+                return;
+            }
             sampleCameraLuminance();
             cameraSampleRef.current = setInterval(sampleCameraLuminance, 1000);
             return () => {
@@ -221,7 +215,7 @@ export function LuxometerWidget({
                 if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
             };
         }
-    }, [mode, sampleCameraLuminance, fetchHardwareLux]);
+    }, [mode, isCalibrated, onLuxChange, sampleCameraLuminance, fetchHardwareLux]);
 
     /* ---- Calibration Handlers ---- */
     const handleSelectProfile = (profileId: string) => {
@@ -280,7 +274,7 @@ export function LuxometerWidget({
     const targetCategory = targetLux === null ? null : getLuxCategory(targetLux);
 
     // Calculate percentage for gauge (0 - 1000 Lux)
-    const gaugePercent = currentLux === null ? 0 : Math.min(100, Math.max(0, (currentLux / 1000) * 100));
+    const gaugePercent = displayLux === null ? 0 : Math.min(100, Math.max(0, (displayLux / 1000) * 100));
 
     return (
         <div
@@ -381,6 +375,33 @@ export function LuxometerWidget({
                         exit={{ opacity: 0, height: 0 }}
                         className="overflow-hidden mt-3 rounded-2xl border border-sky-500/30 bg-sky-500/10 dark:bg-sky-500/5 p-3.5 space-y-3 text-xs"
                     >
+                        {isCalibrated ? (
+                            <div className="space-y-2">
+                                <p className="font-bold text-royal-blue dark:text-sky-300">Kalibrasi lux aktif #{luxCalibration.id}</p>
+                                <p className="text-[11px] leading-snug text-slate-600 dark:text-slate-300">
+                                    Angka mode Kamera berasal dari sampel kamera terkalibrasi
+                                    {luxCalibration.referenceLabel ? ` (acuan ${luxCalibration.referenceLabel.toLowerCase()})` : ''}, sama dengan panel
+                                    Pencahayaan dan yang dicatat bersama presensi.
+                                </p>
+                                {onCalibrate && (
+                                    <button type="button" onClick={onCalibrate} className="rounded-lg bg-royal-blue px-3 py-1.5 text-[11px] font-bold text-white hover:bg-deep-navy dark:bg-sky-600 dark:hover:bg-sky-500">
+                                        Kalibrasi ulang
+                                    </button>
+                                )}
+                            </div>
+                        ) : (
+                            <>
+                                <div className="space-y-1.5 rounded-xl border border-amber-500/30 bg-amber-500/10 p-2.5 text-[11px] leading-snug text-amber-900 dark:text-amber-200">
+                                    <p>
+                                        Alat di bawah hanya menyetel perkiraan kamera (belum dikalibrasi). Untuk lux terukur, kalibrasi kamera
+                                        dengan luxmeter.
+                                    </p>
+                                    {onCalibrate && (
+                                        <button type="button" onClick={onCalibrate} className="rounded-lg bg-royal-blue px-3 py-1.5 text-[11px] font-bold text-white hover:bg-deep-navy dark:bg-sky-600 dark:hover:bg-sky-500">
+                                            Kalibrasi lux
+                                        </button>
+                                    )}
+                                </div>
                         <div className="flex items-center justify-between border-b border-sky-500/20 pb-2">
                             <div className="flex items-center gap-1.5 font-bold text-royal-blue dark:text-sky-300">
                                 <Sparkles className="h-4 w-4 text-amber-400" />
@@ -508,6 +529,8 @@ export function LuxometerWidget({
                                 </div>
                             </div>
                         )}
+                            </>
+                        )}
                     </motion.div>
                 )}
             </AnimatePresence>
@@ -563,17 +586,23 @@ export function LuxometerWidget({
                                         Intensitas Cahaya Ruangan:
                                     </span>
                                     <span className="text-[9px] font-mono font-bold px-1.5 py-0.2 rounded bg-royal-blue/10 dark:bg-sky-400/15 text-royal-blue dark:text-sky-300">
-                                        {mode === 'camera' ? activeMethodDesc : mode === 'hardware' ? 'Luxmeter' : 'Tanpa pengukuran'}
+                                        {mode === 'camera'
+                                            ? isCalibrated
+                                                ? `Kamera terkalibrasi #${luxCalibration.id}`
+                                                : 'Perkiraan (belum dikalibrasi)'
+                                            : mode === 'hardware'
+                                              ? 'Luxmeter'
+                                              : 'Tanpa pengukuran'}
                                     </span>
                                 </div>
-                                {currentLux === null ? (
+                                {displayLux === null ? (
                                     <div className="mt-0.5 font-mono text-xl font-black text-slate-500 dark:text-slate-400 tracking-tight">
                                         {NOT_MEASURED_LABEL}
                                     </div>
                                 ) : (
                                     <div className="flex items-baseline gap-2 mt-0.5">
                                         <span className="font-mono text-3xl font-black text-deep-navy dark:text-white tracking-tight">
-                                            {Math.round(currentLux)}
+                                            {Math.round(displayLux)}
                                         </span>
                                         <span className="font-bold text-sm text-slate-500 dark:text-slate-400">
                                             Lux
@@ -585,8 +614,8 @@ export function LuxometerWidget({
                                         Target uji: <span className="font-mono font-bold">{formatMeasured(targetLux, 'Lux')}</span> (bukan hasil ukur)
                                     </div>
                                 )}
-                                {mode === 'camera' && (
-                                    <div className="flex items-center gap-1.5 mt-1 text-[9.5px]">
+                                {mode === 'camera' && !isCalibrated && (
+                                    <div className="flex items-center gap-1.5 mt-1 text-[9.5px]" title={activeMethodDesc}>
                                         <span className={`inline-block h-1.5 w-1.5 rounded-full ${faceROI?.isDetected ? 'bg-emerald-500 animate-pulse' : 'bg-slate-400'}`} />
                                         <span className="text-slate-500 dark:text-slate-400 font-medium">
                                             {faceROI?.isDetected ? 'Cahaya Ruangan pada Wajah (Terkunci)' : 'Mencari Objek Manusia...'}
@@ -670,7 +699,11 @@ export function LuxometerWidget({
                                           : 'Menunggu bacaan luxmeter.'
                                       : mode === 'manual'
                                         ? 'Preset hanya menetapkan target uji. Lux presensi dikirim kosong.'
-                                        : 'Belum ada bacaan kamera. Lux presensi dikirim kosong.'}
+                                        : isCalibrated
+                                          ? calibratedReading?.note
+                                              ? `${calibratedReading.note}.`
+                                              : 'Menunggu sampel kamera terkalibrasi (saat kamera siap, tiap 30 detik, dan saat hitung mundur).'
+                                          : 'Belum ada bacaan kamera. Lux presensi dikirim kosong.'}
                             </span>
                         </p>
                     </div>

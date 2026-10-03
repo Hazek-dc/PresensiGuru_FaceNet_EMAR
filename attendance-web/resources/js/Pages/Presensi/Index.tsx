@@ -1,7 +1,8 @@
 import DynamicBackdrop from '@/Components/DynamicBackdrop';
 import ThemeSwitcher from '@/Components/ThemeSwitcher';
+import { useAutoCameraLux } from '@/Hooks/useAutoCameraLux';
 import { useTheme } from '@/Hooks/useTheme';
-import { Head, Link } from '@inertiajs/react';
+import { Head, Link, router } from '@inertiajs/react';
 import axios from 'axios';
 import {
     Activity,
@@ -34,27 +35,56 @@ import {
     X,
 } from 'lucide-react';
 import { AnimatePresence, motion } from 'motion/react';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { DistanceMeterWidget } from '../../Components/Presensi/DistanceMeterWidget';
 import { FaceScannerContainer } from '../../Components/Presensi/FaceScannerContainer';
 import { LuxometerWidget } from '../../Components/Presensi/LuxometerWidget';
+import { BiometricStatusPanel, LightingMonitorPanel } from '../../Components/Presensi/LightingMonitorPanel';
 import { ManualEnrollmentModal } from '../../Components/Presensi/ManualEnrollmentModal';
 import { QalwaniResearchPanel } from '../../Components/Presensi/QalwaniResearchPanel';
 import { QualityChecklist } from '../../Components/Presensi/QualityChecklist';
 import { Bab5ScenarioCard } from '../../Components/Presensi/Bab5ScenarioCard';
+import {
+    ActiveCalibration,
+    calibrationAppliesTo,
+    CalibrationMatch,
+    cameraFormFields,
+    CameraInfo,
+    categoryLabel,
+    classifyDistance,
+    distanceSourceLabel,
+    formatFps,
+    formatResolution,
+    parseCurrentCalibration,
+} from '../../Utils/distanceCalibration';
 import { offerReenrollment } from '../../Utils/enrollmentPreview';
-import { getDistanceCategory } from '../../Utils/faceDistance';
+import { readinessOf, StudioSubject } from '../../Utils/templateReadiness';
+import { checkDistanceTarget, checkLuxTarget, TargetCheck } from '../../Utils/testParameters';
+import {
+    LuxCalibrationContract,
+    LuxCalibrationSetup,
+    LUX_PROBE_MAX_AGE_MS,
+    LuxProbeResult,
+    luxProbeFormFields,
+    luxReadingForSubmit,
+    REFERENCE_DEVICE_LABEL,
+} from '../../Utils/luxCalibration';
+import { AutoCalibrationSection, CameraAutoCalibrationModal } from '../../Components/Presensi/CameraAutoCalibrationModal';
+import { FaceRatioSample } from '../../Components/Presensi/DistanceAutoCalibration';
+import { lightingCsvRows, LightingSummaryView } from '../../Components/Presensi/LightingSummaryView';
 import { l2ThresholdCaption } from '../../Utils/faceMatchDisplay';
 import { getLuxCategory, NormalizedFaceROI } from '../../Utils/luxMeasurement';
 import {
+    CameraDistanceSource,
     DistanceSource,
+    formatLux,
     formatMeasured,
     freshReading,
+    luxSourceLabel,
     LuxSource,
     parseTargetParam,
     SensorReading,
     sensorFormFields,
-    sourceLabel,
 } from '../../Utils/sensorReading';
 
 /* ------------------------------------------------------------------ */
@@ -122,6 +152,107 @@ function ToastContainer({
     );
 }
 
+const UNKNOWN_LABEL = 'Tidak diketahui';
+
+/** Nilai dari track kamera yang sedang dipakai pemindai, bukan spesifikasi webcam. */
+function CameraSensorPanel({
+    camera,
+    calibration,
+    match,
+    calibrationLoad,
+    canCalibrate,
+    onCalibrate,
+}: {
+    camera: CameraInfo | null;
+    calibration: ActiveCalibration | null;
+    match: CalibrationMatch;
+    calibrationLoad: 'loading' | 'done' | 'failed';
+    canCalibrate: boolean;
+    /** Kalibrasi otomatis jarak + lux di Studio; tanpa ini tautan ke halaman Kalibrasi Jarak. */
+    onCalibrate?: () => void;
+}) {
+    const rows: Array<[string, string | null]> = [
+        ['Perangkat', camera?.label ?? null],
+        ['Resolusi', formatResolution(camera)],
+        ['Frame rate', formatFps(camera?.fps)],
+    ];
+
+    let calibrationText: string;
+    let calibrated = false;
+    if (calibrationLoad === 'loading') {
+        calibrationText = 'Memuat status kalibrasi...';
+    } else if (calibrationLoad === 'failed') {
+        calibrationText = 'Status kalibrasi tidak dapat dimuat. Jarak berupa estimasi dan tidak menahan pemindaian.';
+    } else if (!calibration) {
+        calibrationText = 'Belum dikalibrasi. Jarak berupa estimasi dan tidak menahan pemindaian.';
+    } else if (!match.applies) {
+        calibrationText = `${match.reason}. Jarak berupa estimasi dan tidak menahan pemindaian.`;
+    } else {
+        calibrated = true;
+        const residual = calibration.browser.max_residual_cm;
+        calibrationText =
+            `Aktif, kalibrasi #${calibration.id}.` +
+            (residual !== null && Number.isFinite(residual) ? ` Selisih model maks ${residual.toFixed(1)} cm.` : '') +
+            ' Pemindaian mulai hanya pada 30-40, 45-55 atau 60-70 cm.';
+    }
+
+    return (
+        <section
+            aria-label="Sensor kamera"
+            className="rounded-3xl border border-outline-variant/60 dark:border-white/10 bg-surface-container-lowest/90 dark:bg-[#0F1B36]/90 p-3.5 sm:p-4 shadow-sm backdrop-blur-xl"
+        >
+            <div className="flex flex-wrap items-center justify-between gap-2 mb-2.5 text-xs font-bold">
+                <span className="flex items-center gap-1.5 text-deep-navy dark:text-white">
+                    <span className="material-symbols-outlined text-[15px] text-royal-blue dark:text-sky-400">videocam</span>
+                    <span>Sensor Kamera</span>
+                </span>
+                {canCalibrate && onCalibrate && (
+                    <button
+                        type="button"
+                        onClick={onCalibrate}
+                        className="min-h-[32px] rounded-lg px-2 text-[11px] font-bold text-royal-blue hover:underline dark:text-sky-400"
+                    >
+                        Kalibrasi otomatis
+                    </button>
+                )}
+                {canCalibrate && !onCalibrate && (
+                    <Link
+                        href="/admin/kalibrasi-jarak"
+                        className="text-[11px] text-royal-blue dark:text-sky-400 hover:underline flex items-center gap-0.5 font-bold"
+                    >
+                        <span>Kalibrasi jarak</span>
+                        <span className="material-symbols-outlined text-[13px]">arrow_forward</span>
+                    </Link>
+                )}
+            </div>
+            <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-1.5 text-xs">
+                {rows.map(([label, value]) => (
+                    <Fragment key={label}>
+                        <dt className="text-on-surface-variant dark:text-slate-400">{label}</dt>
+                        <dd
+                            className={`break-words font-semibold ${
+                                value ? 'text-deep-navy dark:text-white' : 'text-on-surface-variant dark:text-slate-400'
+                            }`}
+                        >
+                            {value ?? UNKNOWN_LABEL}
+                        </dd>
+                    </Fragment>
+                ))}
+            </dl>
+            <p
+                className={`mt-2.5 rounded-xl border px-2.5 py-2 text-[11px] leading-snug ${
+                    calibrated
+                        ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-800 dark:text-emerald-300'
+                        : 'border-amber-500/30 bg-amber-500/10 text-amber-800 dark:text-amber-300'
+                }`}
+            >
+                <span className="block font-bold">Kalibrasi jarak</span>
+                {calibrationText}
+            </p>
+        </section>
+    );
+}
+
 interface User {
     id: number;
     name: string;
@@ -135,34 +266,96 @@ interface Props {
     user?: User;
     schedule_session?: any;
     schedule_matrix?: any[];
+    subjects?: StudioSubject[];
+    template_status_available?: boolean;
+    /** Isi `calibration` dari GET /api/biometric/calibration/current. */
+    distance_calibration?: unknown;
+    lux_calibration?: LuxCalibrationContract | null;
+    /** Hanya untuk Admin/Peneliti: kalibrasi lux langsung dari Studio. */
+    lux_calibration_setup?: LuxCalibrationSetup | null;
 }
 
-const DEFAULT_SUBJECTS = [
-    { id: 'S01', name: 'Nur Holis', email: 'gurupresensi1@gmail.com' },
-    { id: 'S02', name: 'Viky Widiyanti', email: 'gurupresensi2@gmail.com' },
-    { id: 'S03', name: 'Mauludin', email: 'gurupresensi3@gmail.com' },
-    { id: 'S04', name: 'Ahmad Fauzi', email: 'gurupresensi4@gmail.com' },
-    { id: 'S05', name: 'Merli Yanti', email: 'gurupresensi5@gmail.com' },
-    { id: 'S06', name: 'Karmila Milla', email: 'gurupresensi6@gmail.com' },
-    { id: 'S07', name: 'Reynaldi Surya', email: 'gurupresensi7@gmail.com' },
-    { id: 'S08', name: 'Taufik Hidayat', email: 'gurupresensi8@gmail.com' },
-    { id: 'S09', name: 'Wery Saputra', email: 'gurupresensi9@gmail.com' },
-    { id: 'S10', name: 'Hendra Wijaya', email: 'gurupresensi10@gmail.com' },
-    { id: 'S11', name: 'Susi Lisnasari', email: 'gurupresensi11@gmail.com' },
-    { id: 'S12', name: 'Ponco Prastio', email: 'gurupresensi12@gmail.com' },
-    { id: 'S13', name: 'Yulisma Shinta', email: 'gurupresensi13@gmail.com' },
-    { id: 'S14', name: 'Arie Lazido', email: 'gurupresensi14@gmail.com' },
-    { id: 'S15', name: 'Bambang Susanto', email: 'gurupresensi15@gmail.com' },
-    { id: 'S16', name: 'Sri Wahyuni', email: 'gurupresensi16@gmail.com' },
-    { id: 'S17', name: 'Dedi Irawan', email: 'gurupresensi17@gmail.com' },
-    { id: 'S18', name: 'Eka Prasetya', email: 'gurupresensi18@gmail.com' },
-];
+
+const READINESS_STYLE: Record<string, string> = {
+    ready: 'border-emerald-500/40 bg-emerald-500/10 text-emerald-800 dark:text-emerald-300',
+    photo: 'border-amber-500/40 bg-amber-500/10 text-amber-800 dark:text-amber-300',
+    none: 'border-rose-500/40 bg-rose-500/10 text-rose-800 dark:text-rose-300',
+    unknown: 'border-slate-400/40 bg-slate-400/10 text-slate-700 dark:text-slate-300',
+};
+
+function SubjectReadinessBadge({ subject, available }: { subject: StudioSubject; available: boolean }) {
+    const r = readinessOf(subject.template, available);
+    return (
+        <span className={`mt-1 inline-block rounded-md border px-1.5 py-0.5 text-[10px] font-bold ${READINESS_STYLE[r.level]}`}>
+            {r.label}
+        </span>
+    );
+}
+
+/** Penanda kesesuaian hasil ukur dengan parameter uji Studio; tidak menahan pemindaian. */
+function TargetCheckTag({ check }: { check: TargetCheck | null }) {
+    if (!check) return null;
+    const style =
+        check.met === true
+            ? 'bg-emerald-600 text-white'
+            : check.met === false
+              ? 'bg-rose-600 text-white'
+              : 'bg-slate-500/20 text-slate-700 dark:text-slate-300';
+    return (
+        <span className={`rounded-md px-1.5 py-0.5 text-[10px] font-bold ${style}`}>
+            {check.met === true ? '✓ ' : check.met === false ? '✗ ' : ''}
+            {check.text}
+        </span>
+    );
+}
+
+/** Status wajah guru terpilih di Studio, dengan tombol daftar dari kamera ini. */
+function SubjectReadinessNotice({
+    subject,
+    available,
+    canEnroll,
+    onEnroll,
+}: {
+    subject: StudioSubject;
+    available: boolean;
+    canEnroll: boolean;
+    onEnroll: (mode: 'replace' | 'append') => void;
+}) {
+    const r = readinessOf(subject.template, available);
+    return (
+        <div className={`mt-2 rounded-xl border px-3 py-2 text-[11px] leading-snug ${READINESS_STYLE[r.level]}`}>
+            <p className="font-bold">
+                {subject.id} {subject.name}: {r.label}
+            </p>
+            <p className="mt-0.5">{r.hint}</p>
+            {canEnroll && r.level !== 'unknown' && (
+                <button
+                    type="button"
+                    onClick={() => onEnroll(r.enrollMode)}
+                    className="mt-1.5 rounded-lg bg-royal-blue px-3 py-1.5 text-[11px] font-bold text-white hover:bg-deep-navy min-h-[36px] dark:bg-sky-600"
+                >
+                    {r.enrollMode === 'append' ? 'Tambah sampel wajah' : 'Daftarkan wajah dari kamera ini'}
+                </button>
+            )}
+        </div>
+    );
+}
 
 /* ------------------------------------------------------------------ */
 /*  Page Component                                                     */
 /* ------------------------------------------------------------------ */
 
-export default function Presensi({ user, schedule_session, schedule_matrix }: Props) {
+export default function Presensi({
+    user,
+    schedule_session,
+    schedule_matrix,
+    subjects,
+    template_status_available = false,
+    distance_calibration = null,
+    lux_calibration = null,
+    lux_calibration_setup = null,
+}: Props) {
+    const studioSubjects = useMemo<StudioSubject[]>(() => subjects ?? [], [subjects]);
     /* ---- Theme ---- */
     const { isDark } = useTheme();
 
@@ -302,16 +495,56 @@ export default function Presensi({ user, schedule_session, schedule_matrix }: Pr
         parseTargetParam(searchParams?.get('distance_cm')),
     );
     const [distanceReading, setDistanceReading] = useState<SensorReading<DistanceSource> | null>(null);
-    const [cameraDistanceReading, setCameraDistanceReading] = useState<SensorReading<'camera'> | null>(null);
+    const [cameraDistanceReading, setCameraDistanceReading] = useState<SensorReading<CameraDistanceSource> | null>(null);
     const [faceROI, setFaceROI] = useState<NormalizedFaceROI | null>(null);
+    const [cameraInfo, setCameraInfo] = useState<CameraInfo | null>(null);
+    // Kalibrasi jarak dan lux datang bersama halaman (props), tanpa permintaan susulan.
+    // Kalibrasi jarak dapat disimpan dari Studio dan langsung dipakai pemindai.
+    const [distanceCalibration, setDistanceCalibration] = useState<ActiveCalibration | null>(() =>
+        parseCurrentCalibration({ calibrated: !!distance_calibration, calibration: distance_calibration }),
+    );
+    const calibrationLoad = 'done' as const;
+    // Kalibrasi lux dapat disimpan dari Studio; nilainya langsung dipakai tanpa muat ulang.
+    const [luxCalibration, setLuxCalibration] = useState<LuxCalibrationContract | null>(lux_calibration ?? null);
+    const luxCalibrationLoad = 'done' as const;
+    const [luxProbe, setLuxProbe] = useState<LuxProbeResult | null>(null);
+    // Bagian kalibrasi otomatis yang sedang berjalan; null = jendela tertutup.
+    const [calSections, setCalSections] = useState<AutoCalibrationSection[] | null>(null);
+    // Draf kalibrasi lux disimpan di server; dimuat ulang agar jendela yang dibuka
+    // lagi menampilkan kondisi yang sudah direkam.
+    const openCalibration = useCallback((sections: AutoCalibrationSection[]) => {
+        router.reload({ only: ['lux_calibration_setup'], onFinish: () => setCalSections(sections) });
+    }, []);
+    const openLuxCalibration = useCallback(() => openCalibration(['lux']), [openCalibration]);
+    const openFullCalibration = useCallback(() => openCalibration(['distance', 'lux']), [openCalibration]);
+    const closeCalibration = useCallback(() => setCalSections(null), []);
+    const handleLuxCalibrated = useCallback((calibration: LuxCalibrationContract) => {
+        setLuxCalibration(calibration);
+        setLuxProbe(null);
+    }, []);
+    // Rasio lebar wajah terakhir dari pemindai, dibaca wizard kalibrasi jarak.
+    const faceRatioRef = useRef<FaceRatioSample>({ ratio: null, t: 0 });
+    const handleFaceWidthRatio = useCallback((ratio: number | null) => {
+        faceRatioRef.current = { ratio, t: performance.now() };
+    }, []);
+
+    const calibrationMatch = useMemo(
+        () => calibrationAppliesTo(distanceCalibration, cameraInfo),
+        [distanceCalibration, cameraInfo],
+    );
+    const activeCalibrationId = calibrationMatch.applies && distanceCalibration ? distanceCalibration.id : null;
+    const canCalibrate = user?.role === 'admin' || user?.role === 'researcher';
 
     const handleDistanceChange = useCallback((reading: SensorReading<DistanceSource> | null) => {
         setDistanceReading(reading);
     }, []);
 
-    const handleDistanceLiveUpdate = useCallback((distCm: number) => {
-        setCameraDistanceReading({ value: distCm, source: 'camera', measuredAt: Date.now() });
-    }, []);
+    const handleDistanceLiveUpdate = useCallback(
+        (distCm: number, _isValid: boolean, _category: string, source: CameraDistanceSource) => {
+            setCameraDistanceReading({ value: distCm, source, measuredAt: Date.now() });
+        },
+        [],
+    );
 
     // Jam 1 s agar bacaan yang melewati SENSOR_MAX_AGE_S langsung tampil "Tidak terukur".
     const [sensorNow, setSensorNow] = useState<number>(() => Date.now());
@@ -333,6 +566,7 @@ export default function Presensi({ user, schedule_session, schedule_matrix }: Pr
     const [kioskId, setKioskId] = useState(subjectId);
     const [isEnrollModalOpen, setIsEnrollModalOpen] = useState(false);
     const [enrollPreselect, setEnrollPreselect] = useState<string | null>(null);
+    const [enrollMode, setEnrollMode] = useState<'replace' | 'append'>('replace');
 
     /* ---- User-Friendly Helper, Research HUD & Teacher Picker States ---- */
     const [isResearchHudOpen, setIsResearchHudOpen] = useState(false);
@@ -341,29 +575,72 @@ export default function Presensi({ user, schedule_session, schedule_matrix }: Pr
     const [subjectSearchQuery, setSubjectSearchQuery] = useState('');
     const [sidebarTab, setSidebarTab] = useState<'operasional' | 'riset'>('operasional');
 
+    // Di luar tab Riset (tempat widget luxometer mengukur), Studio memperkirakan lux
+    // dari kamera pemindai tiap detik tanpa kalibrasi. Sampel kamera terkalibrasi yang
+    // segar tetap didahulukan (luxReadingForSubmit), jadi perkiraan ini hanya cadangan
+    // bila kalibrasi belum ada atau sampelnya gagal.
+    useAutoCameraLux({
+        videoRef: scannerVideoRef,
+        faceROI,
+        enabled: sidebarTab !== 'riset',
+        onReading: handleLuxChange,
+    });
+
     // Widget jarak hanya terpasang di panel riset dan di sana menentukan sumbernya
     // (kamera, sensor, atau preset tanpa ukuran). Di luar panel itu sumbernya
-    // estimasi kamera pemindai. Lux hanya terukur selama luxometer berjalan.
+    // estimasi kamera pemindai. Lux diukur widget luxometer di tab Riset, sampel
+    // terkalibrasi bila ada kalibrasi, atau perkiraan kamera otomatis.
     const distanceSubmitReading = sidebarTab === 'riset' ? distanceReading : cameraDistanceReading;
     const measuredLux = freshReading(luxReading, sensorNow);
     const measuredDistance = freshReading(distanceSubmitReading, sensorNow);
     const freshCameraDistance = freshReading(cameraDistanceReading, sensorNow);
     const luxValue = measuredLux?.value ?? null;
     const luxCondition = luxValue === null ? null : getLuxCategory(luxValue).label;
+    // Lux yang ditampilkan sama dengan yang akan dicatat: luxmeter, lalu sampel
+    // kamera terkalibrasi, baru perkiraan kamera tanpa kalibrasi.
+    const submitLuxReading = luxReadingForSubmit(measuredLux, luxProbe, sensorNow);
+    // Sampel terkalibrasi hanya ikut terkirim selama umurnya <= LUX_PROBE_MAX_AGE_MS
+    // (luxProbeFormFields), jadi yang lebih tua juga tidak ditampilkan sebagai lux tercatat.
+    const freshLuxProbe =
+        luxProbe && luxProbe.lux !== null && luxProbe.calibrationId !== null && sensorNow - luxProbe.measuredAt <= LUX_PROBE_MAX_AGE_MS
+            ? luxProbe
+            : null;
+    const recordedLux = submitLuxReading?.value ?? freshLuxProbe?.lux ?? null;
+    const recordedLuxSource = submitLuxReading?.source ?? (freshLuxProbe ? 'camera_calibrated' : null);
+    const recordedLuxLabel =
+        recordedLux === null ? null : `${getLuxCategory(recordedLux).label} · ${luxSourceLabel(recordedLuxSource)}`;
     const distanceCm = measuredDistance?.value ?? null;
-    const distanceCategory = distanceCm === null ? null : getDistanceCategory(distanceCm).label;
+    const distanceClass = distanceCm === null ? null : classifyDistance(distanceCm, true);
+    const distanceCategory = distanceClass ? categoryLabel(distanceClass.category) : null;
+    const distanceSourceText = measuredDistance ? distanceSourceLabel(measuredDistance.source) : null;
 
     // Dibaca saat submit, bukan dari closure: pemindai menangkap callback submit
     // di awal perekaman 8 s, sehingga state di closure sudah basi saat dikirim.
-    const sensorSubmitRef = useRef({ luxReading, distanceSubmitReading, luxTarget, distanceTarget });
+    const sensorSubmitRef = useRef({
+        luxReading,
+        distanceSubmitReading,
+        luxTarget,
+        distanceTarget,
+        cameraInfo,
+        activeCalibrationId,
+        luxProbe,
+    });
     useEffect(() => {
-        sensorSubmitRef.current = { luxReading, distanceSubmitReading, luxTarget, distanceTarget };
+        sensorSubmitRef.current = {
+            luxReading,
+            distanceSubmitReading,
+            luxTarget,
+            distanceTarget,
+            cameraInfo,
+            activeCalibrationId,
+            luxProbe,
+        };
     });
 
     const filteredSubjects = useMemo(() => {
-        if (!subjectSearchQuery.trim()) return DEFAULT_SUBJECTS;
+        if (!subjectSearchQuery.trim()) return studioSubjects;
         const q = subjectSearchQuery.toLowerCase();
-        return DEFAULT_SUBJECTS.filter(
+        return studioSubjects.filter(
             (s) =>
                 s.id.toLowerCase().includes(q) ||
                 s.name.toLowerCase().includes(q) ||
@@ -417,10 +694,11 @@ export default function Presensi({ user, schedule_session, schedule_matrix }: Pr
     /* ---- Current Subject Info ---- */
     const currentSubjectInfo = useMemo(() => {
         return (
-            DEFAULT_SUBJECTS.find((s) => s.id === subjectId) || {
+            studioSubjects.find((s) => s.id === subjectId) || {
                 id: subjectId,
                 name: user?.name || 'Pengajar / Subjek Uji',
                 email: user?.email || '',
+                template: undefined,
             }
         );
     }, [subjectId, user]);
@@ -461,13 +739,25 @@ export default function Presensi({ user, schedule_session, schedule_matrix }: Pr
             formData.append('subject_id', subjectId);
             const sensors = sensorSubmitRef.current;
             for (const [key, value] of sensorFormFields({
-                lux: sensors.luxReading,
+                lux: luxReadingForSubmit(sensors.luxReading, sensors.luxProbe, Date.now()),
                 distance: sensors.distanceSubmitReading,
                 luxTarget: sensors.luxTarget,
                 distanceTarget: sensors.distanceTarget,
                 nowMs: Date.now(),
             })) {
                 formData.append(key, value);
+            }
+            // Id kalibrasi hanya menyertai jarak yang memang dihitung dengan model kalibrasi.
+            const readingCalibrationId =
+                sensors.distanceSubmitReading?.source === 'camera_calibrated' ? sensors.activeCalibrationId : null;
+            for (const [key, value] of cameraFormFields(sensors.cameraInfo, readingCalibrationId)) {
+                formData.append(key, value);
+            }
+            // Bacaan luxmeter di panel Riset didahulukan; sampel kamera tetap dikirim
+            // agar mesin dapat mengukur ulang lux-nya.
+            for (const [key, value, filename] of luxProbeFormFields(sensors.luxProbe, formData.has('lux_value'), Date.now())) {
+                if (value instanceof Blob) formData.append(key, value, filename);
+                else formData.append(key, value);
             }
             formData.append('session_type', sessionType);
             formData.append('sample_type', sampleType);
@@ -584,7 +874,7 @@ export default function Presensi({ user, schedule_session, schedule_matrix }: Pr
             newUrl.searchParams.set('claimed_id', nextId);
             window.history.replaceState({}, '', newUrl.toString());
         }
-        const nextSub = DEFAULT_SUBJECTS.find((s) => s.id === nextId);
+        const nextSub = studioSubjects.find((s) => s.id === nextId);
         addToast(
             'info',
             `Beralih ke subjek: ${nextId}${nextSub ? ` (${nextSub.name})` : ''}`,
@@ -604,7 +894,7 @@ export default function Presensi({ user, schedule_session, schedule_matrix }: Pr
                 newUrl.searchParams.set('claimed_id', newId);
                 window.history.replaceState({}, '', newUrl.toString());
             }
-            const s = DEFAULT_SUBJECTS.find((sub) => sub.id === newId);
+            const s = studioSubjects.find((sub) => sub.id === newId);
             addToast('info', `Subjek dipilih: ${newId}${s ? ` (${s.name})` : ''}`, 'badge');
         },
         [handleReset, addToast],
@@ -636,7 +926,8 @@ export default function Presensi({ user, schedule_session, schedule_matrix }: Pr
             `Gerakan_Mulut_MAR,${evaluationData.mar_mouths},Jumlah Gerakan Mulut Terdeteksi (MAR >= 0.10)`,
             `Kestabilan_Wajah_Pct,${evaluationData.face_detected_pct}%,Persentase Frame Wajah Terlacak Stabil (Min 80.0%)`,
             `Jarak_Pengujian_cm,${formatMeasured(evaluationData.distance_cm, 'cm', 1)},Jarak Kamera ke Wajah (${evaluationData.distance_source || 'none'})`,
-            `Intensitas_Cahaya_Lux,${formatMeasured(evaluationData.lux_value, 'Lux', 1)},Kondisi Pencahayaan Lingkungan Uji (${evaluationData.lux_source || 'none'})`,
+            `Intensitas_Cahaya_Lux,${formatMeasured(evaluationData.lux_value, 'Lux', 1)},Kondisi Pencahayaan Lingkungan Uji (${evaluationData.lighting?.source_label ?? evaluationData.lux_source ?? 'none'})`,
+            ...lightingCsvRows(evaluationData.lighting),
             `Durasi_Scan_Detik,${evaluationData.scan_duration_s || 8.0} Detik,Jendela Waktu Pemindaian Biometrik`,
             `Pesan_Evaluasi,"${(evaluationData.message || statusText || '').replace(/"/g, '""')}",Penjelasan Keputusan Engine Biometrik`,
         ].join('\n');
@@ -677,8 +968,9 @@ export default function Presensi({ user, schedule_session, schedule_matrix }: Pr
 
     const showReenrollOffer = offerReenrollment(evaluationData, mode, user?.embedding_id);
 
-    const openEnrollment = (embeddingId: string | null) => {
+    const openEnrollment = (embeddingId: string | null, modeToUse: 'replace' | 'append' = 'replace') => {
         setEnrollPreselect(embeddingId);
+        setEnrollMode(modeToUse);
         setIsEnrollModalOpen(true);
     };
 
@@ -1120,13 +1412,20 @@ export default function Presensi({ user, schedule_session, schedule_matrix }: Pr
                                                 onChange={(e) => handleChangeSubject(e.target.value)}
                                                 className="bg-transparent font-mono font-bold text-xs text-deep-navy dark:text-white focus:outline-none cursor-pointer"
                                             >
-                                                {DEFAULT_SUBJECTS.map((s) => (
+                                                {studioSubjects.map((s) => (
                                                     <option key={s.id} value={s.id} className="dark:bg-slate-900">
                                                         {s.id} - {s.name}
+                                                        {readinessOf(s.template, template_status_available).level === 'ready' ? '' : ' (belum siap)'}
                                                     </option>
                                                 ))}
                                             </select>
                                         </div>
+                                        <SubjectReadinessNotice
+                                            subject={currentSubjectInfo}
+                                            available={template_status_available}
+                                            canEnroll={canCalibrate}
+                                            onEnroll={(m) => openEnrollment(currentSubjectInfo.id, m)}
+                                        />
 
                                         {/* Simulated SOP Time Select */}
                                         <div className="flex items-center gap-1.5 rounded-xl border border-outline-variant/50 dark:border-white/10 bg-surface-container-low dark:bg-slate-900/60 px-2.5 py-1.5">
@@ -1147,46 +1446,48 @@ export default function Presensi({ user, schedule_session, schedule_matrix }: Pr
 
                                         {/* Lux Value & Category */}
                                         <div className={`flex items-center gap-1.5 rounded-xl border px-2.5 py-1.5 text-xs font-bold transition-colors ${
-                                            luxValue === null
+                                            recordedLux === null
                                                 ? 'border-slate-400/40 bg-slate-500/10 text-slate-700 dark:text-slate-300'
-                                                : luxValue < 100
+                                                : recordedLux < 100
                                                   ? 'border-amber-500/40 bg-amber-500/10 text-amber-800 dark:text-amber-300'
-                                                  : luxValue <= 300
+                                                  : recordedLux <= 300
                                                     ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-800 dark:text-emerald-300'
                                                     : 'border-sky-500/40 bg-sky-500/10 text-sky-800 dark:text-sky-300'
                                         }`}>
                                             <Sun className="h-3.5 w-3.5 text-amber-500" />
                                             <span>Cahaya:</span>
-                                            <span className="font-mono">{formatMeasured(luxValue, 'Lux')}</span>
-                                            {measuredLux && (
+                                            <span className="font-mono">{formatLux(recordedLux, recordedLuxSource)}</span>
+                                            {recordedLuxLabel && (
                                                 <span className="rounded-md px-1.5 py-0.5 text-[9px] uppercase font-mono font-bold bg-black/10 dark:bg-white/10">
-                                                    {luxCondition} · {sourceLabel(measuredLux.source)}
+                                                    {recordedLuxLabel}
                                                 </span>
                                             )}
                                             {luxTarget !== null && (
                                                 <span className="text-[10px] font-medium opacity-80">Target {formatMeasured(luxTarget, 'Lux')}</span>
                                             )}
+                                            <TargetCheckTag check={checkLuxTarget(luxTarget, recordedLux, recordedLuxSource === 'camera')} />
                                         </div>
 
                                         {/* Distance Setting & Readout */}
                                         <div className={`flex items-center gap-1.5 rounded-xl border px-2.5 py-1.5 text-xs font-bold transition-colors ${
-                                            distanceCm === null
+                                            distanceClass === null
                                                 ? 'border-slate-400/40 bg-slate-500/10 text-slate-700 dark:text-slate-300'
-                                                : getDistanceCategory(distanceCm).isValidDistance
+                                                : distanceClass.allow_verification
                                                   ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-800 dark:text-emerald-300'
-                                                  : 'border-sky-500/40 bg-sky-500/10 text-sky-800 dark:text-sky-300'
+                                                  : 'border-amber-500/40 bg-amber-500/10 text-amber-800 dark:text-amber-300'
                                         }`}>
                                             <span className="material-symbols-outlined text-[14px]">straighten</span>
                                             <span>Jarak:</span>
-                                            <span className="font-mono">{formatMeasured(distanceCm, 'cm')}</span>
+                                            <span className="font-mono">{formatMeasured(distanceCm, 'cm', 1)}</span>
                                             {measuredDistance && (
-                                                <span className="rounded-md px-1.5 py-0.5 text-[9px] uppercase font-mono font-bold bg-black/10 dark:bg-white/10">
-                                                    {distanceCategory} · {sourceLabel(measuredDistance.source)}
+                                                <span className="rounded-md px-1.5 py-0.5 text-[10px] font-semibold bg-black/10 dark:bg-white/10">
+                                                    {distanceCategory} · {distanceSourceText}
                                                 </span>
                                             )}
                                             {distanceTarget !== null && (
                                                 <span className="text-[10px] font-medium opacity-80">Target {formatMeasured(distanceTarget, 'cm')}</span>
                                             )}
+                                            <TargetCheckTag check={checkDistanceTarget(distanceTarget, distanceCm)} />
                                         </div>
 
                                         {/* Session Type */}
@@ -1259,7 +1560,18 @@ export default function Presensi({ user, schedule_session, schedule_matrix }: Pr
                                 onVideoRefReady={handleVideoRefReady}
                                 onDistanceUpdate={handleDistanceLiveUpdate}
                                 onFaceROIUpdate={setFaceROI}
-                                paused={isEnrollModalOpen}
+                                paused={isEnrollModalOpen || calSections !== null}
+                                distanceCalibration={distanceCalibration}
+                                onCameraInfoChange={setCameraInfo}
+                                luxCalibration={luxCalibration}
+                                onLuxProbe={setLuxProbe}
+                                onFaceWidthRatio={handleFaceWidthRatio}
+                                luxOverlay={{
+                                    lux: recordedLux,
+                                    source: recordedLuxSource,
+                                    calibrated: luxCalibration !== null,
+                                    note: luxProbe?.note ?? null,
+                                }}
                             />
 
                             {/* Status Feedback Card */}
@@ -1477,9 +1789,10 @@ export default function Presensi({ user, schedule_session, schedule_matrix }: Pr
                                                     onChange={(e) => handleChangeSubject(e.target.value)}
                                                     className="w-full rounded-2xl border border-outline-variant/60 dark:border-white/10 bg-white dark:bg-slate-900 px-3 py-2.5 text-xs font-bold text-deep-navy dark:text-white focus:border-royal-blue dark:focus:border-sky-400 focus:outline-none transition cursor-pointer shadow-xs min-h-[42px]"
                                                 >
-                                                    {DEFAULT_SUBJECTS.map((s) => (
+                                                    {studioSubjects.map((s) => (
                                                         <option key={s.id} value={s.id} className="dark:bg-slate-900">
                                                             [{s.id}] {s.name}
+                                                            {readinessOf(s.template, template_status_available).level === 'ready' ? '' : ' (belum siap)'}
                                                         </option>
                                                     ))}
                                                 </select>
@@ -1515,12 +1828,8 @@ export default function Presensi({ user, schedule_session, schedule_matrix }: Pr
                                         status === 'success' ||
                                         quality > 0.1
                                     }
-                                    isAligned={
-                                        quality > 0.35 &&
-                                        distanceCm !== null &&
-                                        getDistanceCategory(distanceCm).isValidDistance
-                                    }
-                                    isLightingGood={luxValue !== null && luxValue >= 100 && luxValue <= 300}
+                                    isAligned={quality > 0.35 && distanceClass !== null && distanceClass.allow_verification}
+                                    isLightingGood={recordedLux !== null && recordedLux >= 100 && recordedLux <= 300}
                                     isLivenessPassed={
                                         status === 'success' || (ear >= 0.20 && mar >= 0.10)
                                     }
@@ -1550,13 +1859,27 @@ export default function Presensi({ user, schedule_session, schedule_matrix }: Pr
                                                 <span className="material-symbols-outlined text-[13px] text-emerald-500">straighten</span>
                                             </div>
                                             <p className="mt-0.5 font-mono font-bold text-deep-navy dark:text-white text-sm">
-                                                {formatMeasured(distanceCm, 'cm')}
+                                                {formatMeasured(distanceCm, 'cm', 1)}
                                             </p>
-                                            <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-semibold truncate block">
-                                                {measuredDistance
-                                                    ? `${distanceCategory} · ${sourceLabel(measuredDistance.source)}`
+                                            <span
+                                                className={`text-[10px] font-semibold block ${
+                                                    distanceClass && !distanceClass.allow_verification
+                                                        ? 'text-amber-700 dark:text-amber-300'
+                                                        : 'text-emerald-700 dark:text-emerald-400'
+                                                }`}
+                                            >
+                                                {distanceClass
+                                                    ? distanceClass.allow_verification
+                                                        ? distanceCategory
+                                                        : distanceClass.message
                                                     : 'Wajah belum terdeteksi'}
                                             </span>
+                                            {distanceSourceText && (
+                                                <span className="text-[10px] text-on-surface-variant dark:text-slate-400 block">
+                                                    {distanceSourceText}
+                                                </span>
+                                            )}
+                                            <TargetCheckTag check={checkDistanceTarget(distanceTarget, distanceCm)} />
                                         </div>
                                         <div className="rounded-2xl border border-outline-variant/30 dark:border-white/10 bg-surface-container-low/70 dark:bg-slate-900/60 p-2.5">
                                             <div className="flex items-center justify-between text-[10px] text-on-surface-variant dark:text-slate-400">
@@ -1564,19 +1887,55 @@ export default function Presensi({ user, schedule_session, schedule_matrix }: Pr
                                                 <Sun className="h-3.5 w-3.5 text-amber-500" />
                                             </div>
                                             <p className="mt-0.5 font-mono font-bold text-deep-navy dark:text-white text-sm">
-                                                {formatMeasured(luxValue, 'Lux')}
+                                                {formatLux(recordedLux, recordedLuxSource)}
                                             </p>
-                                            <span className="text-[10px] text-amber-600 dark:text-amber-400 font-semibold truncate block">
-                                                {measuredLux
-                                                    ? `${luxCondition} · ${sourceLabel(measuredLux.source)}`
-                                                    : 'Buka Panel Riset untuk mengukur'}
+                                            <span className="text-[10px] text-amber-600 dark:text-amber-400 font-semibold block break-words">
+                                                {recordedLuxLabel ?? 'Menunggu kamera untuk estimasi otomatis'}
                                             </span>
+                                            <TargetCheckTag check={checkLuxTarget(luxTarget, recordedLux, recordedLuxSource === 'camera')} />
                                         </div>
                                     </div>
                                 </div>
+
+                                <CameraSensorPanel
+                                    camera={cameraInfo}
+                                    calibration={distanceCalibration}
+                                    match={calibrationMatch}
+                                    calibrationLoad={calibrationLoad}
+                                    canCalibrate={canCalibrate}
+                                    onCalibrate={lux_calibration_setup ? openFullCalibration : undefined}
+                                />
+                                <LightingMonitorPanel
+                                    calibration={luxCalibration}
+                                    calibrationLoad={luxCalibrationLoad}
+                                    probe={luxProbe}
+                                    recorded={{ lux: recordedLux, source: recordedLuxSource }}
+                                    autoEstimate
+                                    canCalibrate={canCalibrate}
+                                    onCalibrate={lux_calibration_setup ? openLuxCalibration : undefined}
+                                />
+                                <BiometricStatusPanel evaluation={evaluationData} />
                             </>
                         ) : (
                             <>
+                                <CameraSensorPanel
+                                    camera={cameraInfo}
+                                    calibration={distanceCalibration}
+                                    match={calibrationMatch}
+                                    calibrationLoad={calibrationLoad}
+                                    canCalibrate={canCalibrate}
+                                    onCalibrate={lux_calibration_setup ? openFullCalibration : undefined}
+                                />
+                                <LightingMonitorPanel
+                                    calibration={luxCalibration}
+                                    calibrationLoad={luxCalibrationLoad}
+                                    probe={luxProbe}
+                                    recorded={{ lux: recordedLux, source: recordedLuxSource }}
+                                    autoEstimate={false}
+                                    canCalibrate={canCalibrate}
+                                    onCalibrate={lux_calibration_setup ? openLuxCalibration : undefined}
+                                />
+                                <BiometricStatusPanel evaluation={evaluationData} />
                                 {/* 1. Luxometer Biometrik Widget */}
                                 <LuxometerWidget
                                     currentLux={luxValue}
@@ -1587,6 +1946,22 @@ export default function Presensi({ user, schedule_session, schedule_matrix }: Pr
                                     faceROI={faceROI}
                                     isScanning={status === 'verifying'}
                                     isDark={isDark}
+                                    luxCalibration={
+                                        luxCalibration
+                                            ? {
+                                                  id: luxCalibration.id,
+                                                  referenceLabel: luxCalibration.reference_device
+                                                      ? REFERENCE_DEVICE_LABEL[luxCalibration.reference_device]
+                                                      : null,
+                                              }
+                                            : null
+                                    }
+                                    calibratedReading={
+                                        luxProbe && luxCalibration && luxProbe.calibrationId === luxCalibration.id
+                                            ? { lux: luxProbe.lux, measuredAt: luxProbe.measuredAt, note: luxProbe.note }
+                                            : null
+                                    }
+                                    onCalibrate={lux_calibration_setup ? openLuxCalibration : undefined}
                                 />
 
                                 {/* 2. Distance Meter Rangefinder Widget */}
@@ -1622,8 +1997,9 @@ export default function Presensi({ user, schedule_session, schedule_matrix }: Pr
                                         ear={ear}
                                         mar={mar}
                                         quality={quality}
-                                        lux={luxValue}
-                                        luxCondition={luxCondition}
+                                        lux={recordedLux}
+                                        luxSource={recordedLuxSource}
+                                        luxCondition={recordedLux === null ? null : getLuxCategory(recordedLux).label}
                                         distanceCm={distanceCm}
                                         distanceCategory={distanceCategory}
                                         facenetScore={facenetScore}
@@ -1634,6 +2010,21 @@ export default function Presensi({ user, schedule_session, schedule_matrix }: Pr
                                     />
                                 )}
                             </>
+                        )}
+
+                        {calSections && canCalibrate && (
+                            <CameraAutoCalibrationModal
+                                sections={calSections}
+                                scannerVideoRef={scannerVideoRef}
+                                ratioRef={faceRatioRef}
+                                camera={cameraInfo}
+                                luxSetup={lux_calibration_setup}
+                                activeLux={luxCalibration}
+                                activeDistance={distanceCalibration}
+                                onLuxCalibrated={handleLuxCalibrated}
+                                onDistanceCalibrated={setDistanceCalibration}
+                                onClose={closeCalibration}
+                            />
                         )}
 
                         {/* Manual Enrollment Modal */}
@@ -1647,6 +2038,7 @@ export default function Presensi({ user, schedule_session, schedule_matrix }: Pr
                                 currentUserId={user.id}
                                 currentUserRole={user.role || 'teacher'}
                                 preselectEmbeddingId={enrollPreselect}
+                                defaultMode={enrollMode}
                             />
                         )}
                     </div>
@@ -1764,19 +2156,20 @@ export default function Presensi({ user, schedule_session, schedule_matrix }: Pr
                                                 <p className="mt-1 text-xs leading-relaxed text-amber-900/90 dark:text-amber-100/90">
                                                     Kedipan dan gerak mulut terdeteksi, tetapi jarak wajah melewati batas
                                                     {faceMatchL2Caption ? ` (${faceMatchL2Caption})` : ''}. Bila ini wajah
-                                                    Anda dan template dibuat dari kamera lain, daftarkan ulang dari kamera
-                                                    presensi ini. Template lama dicadangkan otomatis.
+                                                    Anda, tambahkan sampel dari kondisi cahaya dan jarak saat ini ke
+                                                    template. Sampel lama tetap dipakai; galeri dicadangkan otomatis.
                                                 </p>
                                             </div>
                                             <button
                                                 type="button"
                                                 onClick={() => {
                                                     setIsEvalModalOpen(false);
-                                                    openEnrollment(evaluationData.subject_id ?? null);
+                                                    // Gagal karena kondisi cahaya/jarak berbeda: tambah sampel, jangan ganti.
+                                                    openEnrollment(evaluationData.subject_id ?? null, 'append');
                                                 }}
                                                 className="shrink-0 rounded-xl bg-amber-600 hover:bg-amber-700 px-4 py-2.5 text-sm font-bold text-white min-h-[44px] cursor-pointer focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-700"
                                             >
-                                                Daftar ulang wajah dari kamera ini
+                                                Tambah sampel untuk kondisi ini
                                             </button>
                                         </div>
                                     )}
@@ -2052,16 +2445,38 @@ export default function Presensi({ user, schedule_session, schedule_matrix }: Pr
                                                             </span>
                                                         </div>
                                                         <span className="text-[10px] text-slate-500 dark:text-slate-400 block mt-0.5">
-                                                            {formatMeasured(evaluationData.distance_cm, 'cm')} • {formatMeasured(evaluationData.lux_value, 'Lux')}
+                                                            {evaluationData.distance_source === 'camera' && evaluationData.distance_cm != null ? '~' : ''}
+                                                            {formatMeasured(evaluationData.distance_cm, 'cm')} •{' '}
+                                                            {formatLux(evaluationData.lux_value, evaluationData.lux_source)}
                                                         </span>
                                                     </div>
                                                     <span className="text-[10px] text-slate-500 dark:text-slate-400 leading-tight">
-                                                        {evaluationData.distance_cm == null || evaluationData.lux_value == null
-                                                            ? 'Jarak atau cahaya tidak terukur pada pemindaian ini.'
-                                                            : 'Jarak dan cahaya terukur saat pemindaian.'}
+                                                        {[
+                                                            evaluationData.distance_cm == null ? 'Jarak tidak terukur.' : null,
+                                                            evaluationData.lux_value == null ? 'Cahaya tidak terukur.' : null,
+                                                            (evaluationData.distance_cm != null && evaluationData.distance_source === 'camera') ||
+                                                            (evaluationData.lux_value != null && evaluationData.lux_source === 'camera')
+                                                                ? 'Nilai bertanda ~ adalah estimasi kamera (belum dikalibrasi).'
+                                                                : null,
+                                                        ]
+                                                            .filter(Boolean)
+                                                            .join(' ') || 'Jarak dan cahaya terukur saat pemindaian.'}
                                                     </span>
                                                 </div>
                                             </div>
+
+                                            {evaluationData.lighting && (
+                                                <section
+                                                    aria-label="Pencahayaan presensi ini"
+                                                    className="rounded-2xl border border-outline-variant/40 dark:border-white/10 bg-surface-container-low/40 dark:bg-slate-900/40 p-3 sm:p-3.5"
+                                                >
+                                                    <p className="mb-2 flex items-center gap-1.5 text-xs font-bold text-deep-navy dark:text-white">
+                                                        <span className="material-symbols-outlined text-[15px] text-amber-500">light_mode</span>
+                                                        Pencahayaan
+                                                    </p>
+                                                    <LightingSummaryView summary={evaluationData.lighting} />
+                                                </section>
+                                            )}
 
                                             {/* Expandable Technical Accordion (Bab 5 Skripsi) */}
                                             <div className="rounded-2xl border border-outline-variant/40 dark:border-white/10 bg-surface-container-low/40 dark:bg-slate-900/40 overflow-hidden">
@@ -2372,6 +2787,7 @@ export default function Presensi({ user, schedule_session, schedule_matrix }: Pr
                                                             <p className="truncate font-mono text-[10px] text-on-surface-variant dark:text-slate-400">
                                                                 {s.email}
                                                             </p>
+                                                            <SubjectReadinessBadge subject={s} available={template_status_available} />
                                                         </div>
                                                     </motion.button>
                                                 );
@@ -2383,7 +2799,7 @@ export default function Presensi({ user, schedule_session, schedule_matrix }: Pr
                                 {/* Footer */}
                                 <div className="border-t border-outline-variant/30 dark:border-white/10 p-3 sm:p-4 bg-surface-container-low/50 dark:bg-white/[0.02] flex items-center justify-between">
                                     <span className="text-[11px] text-on-surface-variant dark:text-slate-400 font-semibold">
-                                        Total: {filteredSubjects.length} dari {DEFAULT_SUBJECTS.length} Guru
+                                        Total: {filteredSubjects.length} dari {studioSubjects.length} Guru
                                     </span>
                                     <button
                                         type="button"

@@ -294,7 +294,7 @@ class TestFlaskVerify:
             writer.write(np.zeros((48, 64, 3), dtype=np.uint8))
         writer.release()
 
-        def build(face_found=True, enrolled=True, live_frames=None):
+        def build(face_found=True, enrolled=True, live_frames=None, jaw_px=None):
             calls = {"timestamps": []}
 
             class StubEmar:
@@ -302,7 +302,9 @@ class TestFlaskVerify:
                     calls["timestamps"].clear()
 
                 def measure(self, frame):
-                    return frame
+                    if jaw_px is None:
+                        return frame
+                    return fes.FrameMeasurement(None, 0.3, 0.3, 0.0, jaw_px, frame.shape[1])
 
                 def push_measurement(self, m, timestamp=None):
                     calls["timestamps"].append(timestamp)
@@ -380,6 +382,23 @@ class TestFlaskVerify:
         assert body["liveness_passed"] is True
         assert body["emar_score"] == pytest.approx(1.0)
         assert body["blink_cycles"] == 1
+
+    def test_respons_memuat_rasio_lebar_wajah(self, make_client):
+        """Jarak kamera hanya dicatat: status dan jarak FaceNet tetap sama."""
+        post, _ = make_client(jaw_px=16.0)
+        body = post().get_json()
+        assert body["face_width_ratio"] == pytest.approx(0.25)
+        assert body["face_width_frames"] == 30
+        assert (body["frame_width"], body["frame_height"]) == (64, 48)
+        assert body["distance"] == pytest.approx(0.45)
+        assert body["status"] == "failed"
+
+    def test_tanpa_landmark_rasio_lebar_wajah_null(self, make_client):
+        post, _ = make_client()
+        body = post().get_json()
+        assert body["face_width_ratio"] is None
+        assert body["face_width_frames"] == 0
+        assert (body["frame_width"], body["frame_height"]) == (64, 48)
 
 
 class TestGaleriBersama:

@@ -50,12 +50,18 @@ interface PreviewData {
     distance_to_current: number | null;
     has_existing_template: boolean;
     existing_embedding_id?: string | null;
+    mode?: EnrollMode;
 }
+
+/** replace: ganti template; append: tambah sesi (cahaya/jarak lain) ke template yang ada. */
+export type EnrollMode = 'replace' | 'append';
 
 interface CommitResult {
     embedding_id: string;
     template_hash: string | null;
     backup: string | null;
+    mode: EnrollMode;
+    n_sessions: number | null;
 }
 
 interface Sample {
@@ -71,6 +77,8 @@ interface ManualEnrollmentModalProps {
     currentUserRole: string;
     /** Pilih otomatis subjek ini (embedding_id), mis. dari hasil presensi yang gagal. */
     preselectEmbeddingId?: string | null;
+    /** Mode awal saat dibuka; tombol dari hasil presensi gagal memakai 'append'. */
+    defaultMode?: EnrollMode;
 }
 
 type Step =
@@ -91,6 +99,7 @@ export function ManualEnrollmentModal({
     currentUserId,
     currentUserRole,
     preselectEmbeddingId = null,
+    defaultMode = 'replace',
 }: ManualEnrollmentModalProps) {
     const [step, setStep] = useState<Step>('SUBJECT_SELECT');
     const [subjects, setSubjects] = useState<Subject[]>([]);
@@ -102,6 +111,7 @@ export function ManualEnrollmentModal({
 
     // Consent State
     const [consentChecked, setConsentChecked] = useState(false);
+    const [mode, setMode] = useState<EnrollMode>(defaultMode);
     const consentVersion = 'v1.0-2026-BIOMETRIC-EMAR';
 
     // Camera & Capture State
@@ -143,6 +153,7 @@ export function ManualEnrollmentModal({
             setStep('SUBJECT_SELECT');
             setSelectedSubject(null);
             setConsentChecked(false);
+            setMode(defaultMode);
             clearSamples();
             setErrorMsg(null);
             clearPreview();
@@ -358,6 +369,9 @@ export function ManualEnrollmentModal({
         });
     };
 
+    // Tambah sampel hanya bila subjek sudah punya template; pendaftaran pertama selalu mengganti.
+    const effectiveMode: EnrollMode = selectedSubject?.embedding_id ? mode : 'replace';
+
     const handleSubmitPreview = async () => {
         if (!selectedSubject || !canRequestPreview(samples.length, isSubmitting)) return;
         setIsSubmitting(true);
@@ -369,6 +383,7 @@ export function ManualEnrollmentModal({
             formData.append('subject_id', String(selectedSubject.id));
             formData.append('consent_checked', consentChecked ? '1' : '0');
             formData.append('consent_version', consentVersion);
+            formData.append('mode', effectiveMode);
 
             samples.forEach((sample, idx) => {
                 formData.append('files[]', sample.blob, `sample_${idx + 1}.jpg`);
@@ -425,6 +440,8 @@ export function ManualEnrollmentModal({
                     embedding_id: res.data.embedding_id,
                     template_hash: res.data.template_hash ?? null,
                     backup: res.data.backup ?? null,
+                    mode: res.data.mode === 'append' ? 'append' : 'replace',
+                    n_sessions: typeof res.data.n_sessions === 'number' ? res.data.n_sessions : null,
                 });
                 clearSamples();
                 setStep('SUCCESS');
@@ -810,6 +827,37 @@ export function ManualEnrollmentModal({
                     {/* STEP 3: CAPTURING SAMPLES */}
                     {step === 'CAPTURING' && (
                         <div className="space-y-4">
+                            {selectedSubject?.embedding_id && (
+                                <fieldset className="grid gap-2 sm:grid-cols-2">
+                                    <legend className="sr-only">Cara menyimpan sampel</legend>
+                                    {([
+                                        ['append', 'Tambah sampel ke template', 'Untuk kondisi cahaya atau jarak lain (pagi, malam, 45 cm). Template lama tetap dipakai dan dirata-rata dengan sampel ini.'],
+                                        ['replace', 'Ganti template', 'Template lama diganti seluruhnya oleh sampel ini.'],
+                                    ] as const).map(([value, title, desc]) => (
+                                        <label
+                                            key={value}
+                                            className={`flex cursor-pointer items-start gap-2.5 rounded-xl border p-3 ${
+                                                mode === value
+                                                    ? 'border-indigo-400 bg-indigo-500/10'
+                                                    : 'border-slate-700 bg-slate-900/40'
+                                            }`}
+                                        >
+                                            <input
+                                                type="radio"
+                                                name="enroll-mode"
+                                                value={value}
+                                                checked={mode === value}
+                                                onChange={() => setMode(value)}
+                                                className="mt-0.5 h-4 w-4 border-slate-600 bg-slate-900 text-indigo-500 focus:ring-indigo-500 focus:ring-offset-slate-900"
+                                            />
+                                            <span>
+                                                <span className="block text-sm font-semibold text-slate-100">{title}</span>
+                                                <span className="block text-xs leading-relaxed text-slate-400">{desc}</span>
+                                            </span>
+                                        </label>
+                                    ))}
+                                </fieldset>
+                            )}
                             <div className="flex flex-col gap-4 md:flex-row">
                                 {/* Camera Stream Preview */}
                                 <div className="relative flex aspect-video flex-1 items-center justify-center overflow-hidden rounded-xl border border-slate-800 bg-slate-950">
@@ -1061,6 +1109,15 @@ export function ManualEnrollmentModal({
                                     </div>
                                 </dl>
 
+                                {previewData.mode === 'append' && (
+                                    <p className="rounded-xl border border-indigo-500/30 bg-indigo-500/10 p-4 text-xs leading-relaxed text-indigo-100">
+                                        Sampel ini akan ditambahkan sebagai sesi baru. Template wajah
+                                        menjadi rata-rata semua sesi, masing-masing berbobot sama, sehingga
+                                        presensi di kondisi cahaya ini ikut dikenali. Galeri lama
+                                        dicadangkan otomatis sebelum disimpan.
+                                    </p>
+                                )}
+
                                 {previewData.has_existing_template && (
                                     <div className="space-y-3 rounded-xl border border-amber-500/30 bg-amber-500/10 p-4">
                                         <div className="flex items-start gap-2.5 text-amber-300">
@@ -1191,6 +1248,14 @@ export function ManualEnrollmentModal({
                                             {commitResult.backup ?? 'Tidak ada'}
                                         </dd>
                                     </div>
+                                    {commitResult.mode === 'append' && (
+                                        <div className="flex flex-wrap justify-between gap-x-3">
+                                            <dt className="text-slate-400">Sesi dalam template</dt>
+                                            <dd className="font-mono text-slate-300">
+                                                {commitResult.n_sessions ?? '—'}
+                                            </dd>
+                                        </div>
+                                    )}
                                 </dl>
                             )}
 

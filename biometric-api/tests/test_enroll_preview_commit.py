@@ -271,3 +271,110 @@ def test_verifikasi_setelah_commit_memakai_template_baru(env):
     result = env.facenet.verify(_image(RED), "emb_S01")
     assert result.is_verified
     assert result.distance == pytest.approx(0.0, abs=1e-6)
+
+
+# ---- Template multi-sesi (tambah sampel di cahaya/jarak lain) -----------------
+
+BLUE_MORNING, BLUE_NIGHT = (170, 70, 40), (200, 40, 80)   # dekat BLUE: d ~0,18
+
+
+def _append_preview(env, colors, subject="S01"):
+    return env.client.post("/enroll/preview", files=_files(*colors),
+                           data={"subject_id": subject, "name": "Guru", "mode": "append"})
+
+
+def _commit(env, token, subject="S01"):
+    return env.client.post("/enroll/commit", json={"preview_token": token, "subject_id": subject})
+
+
+def test_tambah_sampel_menggabungkan_sesi_berbobot_sama(env):
+    old = _seed_s01(env)
+    before = env.gallery.read_bytes()
+
+    p = _append_preview(env, (BLUE_MORNING,) * 3).json()
+    assert p["success"] is True and p["mode"] == "append"
+    assert env.gallery.read_bytes() == before            # pratinjau tetap tidak menulis
+    r = _commit(env, p["preview_token"]).json()
+    assert r["success"] is True and r["n_sessions"] == 2
+
+    saved = _saved(env)
+    morning = _expected_template(BLUE_MORNING)
+    expected = (old + morning) / np.linalg.norm(old + morning)
+    for key in ("S01", "emb_S01"):
+        assert np.allclose(saved[key]["embedding"], expected, atol=1e-6)
+        assert len(saved[key]["sessions"]) == 2
+    assert saved["S01"]["session"] == "multisesi(2)"
+    assert saved["S02"]["embedding"] is not None and np.allclose(saved["S02"]["embedding"], old)
+    assert [b.read_bytes() for b in _backups(env)] == [before]
+
+    # Sesi ketiga: rata-rata tiga sesi berbobot sama, bukan berbobot jumlah foto.
+    p2 = _append_preview(env, (BLUE_NIGHT,) * 5).json()
+    _commit(env, p2["preview_token"])
+    night = _expected_template(BLUE_NIGHT)
+    three = old + morning + night
+    assert np.allclose(_saved(env)["S01"]["embedding"], three / np.linalg.norm(three), atol=1e-6)
+    assert _saved(env)["S01"]["n_frames"] == 3 + 5 + 0  # sesi lama tanpa n_frames
+
+
+def test_tambah_sampel_ditolak_bila_terlalu_jauh_dari_template(env):
+    _seed_s01(env)
+    before = env.gallery.read_bytes()
+    r = _append_preview(env, (RED, RED, RED))
+    assert r.status_code == 422
+    body = r.json()
+    assert body["error"] == "APPEND_TOO_FAR" and body["distance_to_current"] > 0.80
+    assert env.enrollment._previews == {}
+    assert env.gallery.read_bytes() == before
+
+
+def test_tambah_sampel_butuh_template_yang_ada(env):
+    r = _append_preview(env, (BLUE,) * 3, subject="S09")
+    assert r.status_code == 422 and r.json()["error"] == "NO_TEMPLATE_TO_APPEND"
+    assert not env.gallery.exists()
+
+
+def test_mode_tidak_dikenal_ditolak(env):
+    r = env.client.post("/enroll/preview", files=_files(BLUE, BLUE, BLUE),
+                        data={"subject_id": "S01", "mode": "gabung"})
+    assert r.status_code == 400 and r.json()["error"] == "BAD_MODE"
+
+
+def test_mode_ganti_tetap_sama_dengan_hash_pratinjau(env):
+    _seed_s01(env)
+    p = _preview(env).json()
+    r = _commit(env, p["preview_token"]).json()
+    assert r["template_hash"] == p["template_hash"] and r["n_sessions"] == 1 and r["mode"] == "replace"
+    assert "sessions" not in _saved(env)["S01"]
+
+
+# ---- Status kesiapan template (GET /gallery/status) ---------------------------
+
+def test_status_galeri_membedakan_webcam_foto_dan_belum_terdaftar(env):
+    old = _fake_embedding(_image(BLUE))
+    _seed(env, {
+        "S01": {"subject_id": "S01", "embedding": old, "session": "enrollment", "n_frames": 1},
+        "emb_S02": {"subject_id": "emb_S02", "embedding": old, "session": "web_enrollment", "n_frames": 5},
+    })
+    before = env.gallery.read_bytes()
+    # Tambah sesi webcam ke template foto S01: sumbernya menjadi webcam (2 sesi, 1 webcam).
+    p = _append_preview(env, (BLUE_MORNING,) * 3).json()
+    _commit(env, p["preview_token"])
+
+    r = env.client.get("/gallery/status", params={"ids": "S01,S02,S04"}).json()
+    by_id = {s["id"]: s for s in r["subjects"]}
+    assert by_id["S01"]["source"] == "webcam" and by_id["S01"]["n_sessions"] == 2
+    assert by_id["S01"]["webcam_sessions"] == 1
+    assert by_id["S02"] == {**by_id["S02"], "enrolled": True, "key": "emb_S02", "source": "webcam", "n_sessions": 1}
+    assert by_id["S04"]["enrolled"] is False and by_id["S04"]["source"] is None
+    assert "embedding" not in str(r)
+    assert env.gallery.read_bytes() != before   # hanya commit yang menulis; status tidak
+
+
+def test_status_galeri_foto_saja_dan_validasi(env):
+    _seed(env, {"S07": {"subject_id": "S07", "embedding": _fake_embedding(_image(BLUE)),
+                        "session": "enrollment", "n_frames": 1}})
+    before = env.gallery.read_bytes()
+    r = env.client.get("/gallery/status", params={"ids": "emb_S07"}).json()
+    assert r["subjects"][0]["source"] == "photo" and r["subjects"][0]["key"] == "S07"
+    assert env.gallery.read_bytes() == before
+    assert env.client.get("/gallery/status").status_code == 400

@@ -22,6 +22,12 @@ Route::post('/api/lux/update', [\App\Http\Controllers\LuxController::class, 'upd
 Route::get('/api/distance/current', [\App\Http\Controllers\DistanceController::class, 'current'])->name('api.distance.current');
 Route::post('/api/distance/update', [\App\Http\Controllers\DistanceController::class, 'update'])->name('api.distance.update');
 
+// Pra-cek jarak dan model kalibrasi aktif dipakai juga oleh mode kiosk yang tidak
+// login (sama seperti /api/presensi). Isinya hanya koefisien kamera, tanpa data pribadi.
+Route::get('/api/biometric/calibration/current', [\App\Http\Controllers\DistanceCalibrationController::class, 'current'])->name('api.biometric.calibration.current');
+Route::post('/api/biometric/distance-check', \App\Http\Controllers\DistanceCheckController::class)->name('api.biometric.distance-check');
+Route::get('/api/biometric/lux-calibration/current', [\App\Http\Controllers\LuxCalibrationController::class, 'current'])->name('api.biometric.lux-calibration.current');
+
 Route::get('/dashboard', [\App\Http\Controllers\DashboardController::class, 'index'])->middleware(['auth', 'verified'])->name('dashboard');
 
 Route::middleware('auth')->group(function () {
@@ -50,6 +56,7 @@ Route::middleware('auth')->group(function () {
     Route::get('/attendance/export/latest', [\App\Http\Controllers\AttendanceHistoryController::class, 'exportLatest'])->name('attendance.export.latest');
     Route::get('/attendance/export/pdf-data', [\App\Http\Controllers\AttendanceHistoryController::class, 'exportPdfData'])->name('attendance.export.pdf-data');
     Route::get('/attendance/export/activities', [\App\Http\Controllers\AttendanceHistoryController::class, 'exportActivities'])->name('attendance.export.activities');
+    Route::get('/attendance/export/all', [\App\Http\Controllers\AttendanceHistoryController::class, 'exportAll'])->name('attendance.export.all');
     Route::get('/attendance/export/print', [\App\Http\Controllers\AttendanceHistoryController::class, 'printReport'])->name('attendance.export.print');
     Route::get('/attendance/history/{id}', [\App\Http\Controllers\AttendanceHistoryController::class, 'show'])->name('attendance.show');
     Route::delete('/attendance/history/{id}', [\App\Http\Controllers\AttendanceHistoryController::class, 'destroy'])->name('attendance.destroy');
@@ -61,6 +68,18 @@ Route::middleware('auth')->group(function () {
     Route::delete('/profile', [ProfileController::class, 'destroy'])->name('profile.destroy');
     Route::delete('/profile/revoke-biometric', [ProfileController::class, 'revokeBiometric'])->name('profile.revoke-biometric');
 
+    // Kalibrasi jarak kamera: Admin dan Peneliti (dicek di controller karena
+    // middleware admin menolak peran researcher).
+    Route::get('/admin/kalibrasi-jarak', [\App\Http\Controllers\DistanceCalibrationController::class, 'index'])->name('admin.distance-calibration');
+    Route::post('/api/biometric/calibration/point', [\App\Http\Controllers\DistanceCalibrationController::class, 'storePoint'])->name('api.biometric.calibration.point');
+    Route::post('/api/biometric/calibration/commit', [\App\Http\Controllers\DistanceCalibrationController::class, 'commit'])->name('api.biometric.calibration.commit');
+
+    // Kalibrasi lux kamera terhadap luxmeter: Admin dan Peneliti.
+    Route::get('/admin/kalibrasi-lux', [\App\Http\Controllers\LuxCalibrationController::class, 'index'])->name('admin.lux-calibration');
+    Route::post('/api/biometric/lux-calibration/point', [\App\Http\Controllers\LuxCalibrationController::class, 'storePoint'])->name('api.biometric.lux-calibration.point');
+    Route::post('/api/biometric/lux-calibration/reset', [\App\Http\Controllers\LuxCalibrationController::class, 'reset'])->name('api.biometric.lux-calibration.reset');
+    Route::post('/api/biometric/lux-calibration/commit', [\App\Http\Controllers\LuxCalibrationController::class, 'commit'])->name('api.biometric.lux-calibration.commit');
+
     // Admin Only Routes
     Route::middleware('admin')->group(function () {
         // Admin Enrollment
@@ -70,6 +89,9 @@ Route::middleware('auth')->group(function () {
         // Admin Teachers Management
         Route::resource('admin/teachers', \App\Http\Controllers\Admin\TeacherController::class)->names('admin.teachers');
         Route::post('admin/teachers/{teacher}/restore', [\App\Http\Controllers\Admin\TeacherController::class, 'restore'])->name('admin.teachers.restore');
+        Route::get('admin/teachers/{teacher}/avatar', [\App\Http\Controllers\Admin\TeacherAvatarController::class, 'show'])->name('admin.teachers.avatar');
+        Route::post('admin/teachers/{teacher}/avatar', [\App\Http\Controllers\Admin\TeacherAvatarController::class, 'store'])->name('admin.teachers.avatar.store');
+        Route::delete('admin/teachers/{teacher}/avatar', [\App\Http\Controllers\Admin\TeacherAvatarController::class, 'destroy'])->name('admin.teachers.avatar.destroy');
 
         // Researcher Settings
         Route::get('/admin/settings', [\App\Http\Controllers\SettingsController::class, 'index'])->name('admin.settings');

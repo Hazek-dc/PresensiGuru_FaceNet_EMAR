@@ -180,8 +180,7 @@ FACENET_MIN_FACE_SIZE      = 40     # px minimum untuk MTCNN
 FACENET_MIN_CONFIDENCE     = 0.90   # Confidence minimum MTCNN detection
 D_REF                      = 1.20   # Jarak referensi untuk skor P_face [0,1]
 # FACENET_GALLERY_PATH dipakai tes agar tidak pernah menulis galeri asli.
-GALLERY_PATH               = Path(os.environ.get("FACENET_GALLERY_PATH")
-                                  or BASE_DIR / "gallery" / "face_gallery.pkl")
+GALLERY_PATH               = Path(os.environ.get("FACENET_GALLERY_PATH") or BASE_DIR / "gallery" / "face_gallery.pkl")
 DEVICE                     = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 # ---- Parameter EMAR ----------------------------------------------------------
@@ -265,6 +264,9 @@ class FrameMeasurement(NamedTuple):
     ear_left:  float
     ear_right: float
     mar:       float
+    # Lebar rahang (landmark 0-16) dan lebar frame dalam px, untuk jarak kamera.
+    face_width_px: Optional[float] = None
+    frame_width:   Optional[int] = None
 
 @dataclass
 class FaceNetResult:
@@ -548,23 +550,59 @@ class FaceNetModule:
         n_frames: int,
         session_tag: str = "enrollment",
         aliases: Iterable[str] = (),
+        append: bool = False,
     ) -> Dict:
         """
         Simpan template yang sudah dihitung di bawah subject_id dan setiap alias.
         Berkas galeri lama selalu dicadangkan lebih dulu bila ada.
 
+        append=True menambahkan embedding ini sebagai sesi baru ke template yang
+        ada (mis. cahaya pagi/malam). Template = rata-rata sesi berbobot sama lalu
+        dinormalisasi L2, sehingga satu sesi dengan banyak foto tidak mendominasi.
+
         Returns:
-            Dict berisi subject_id, keys, n_frames, template_hash, backup (nama berkas atau None)
+            Dict berisi subject_id, keys, n_frames, n_sessions, template_hash, backup
         """
         keys = list(dict.fromkeys([subject_id, *aliases]))
-        record = self._template_record(subject_id, name, dept, embedding, n_frames, session_tag)
-        backup = self._store_record(record, keys)
-        logger.info(f"Template disimpan: {', '.join(keys)} ({name}) — {n_frames} frames")
+        with _GALLERY_WRITE_LOCK:
+            self.refresh_gallery()
+            sessions = []
+            if append:
+                existing_key = self.resolve_id(subject_id)
+                if existing_key is None:
+                    raise ValueError(f"Belum ada template untuk {subject_id}; tidak ada yang bisa ditambah.")
+                existing = self.gallery[existing_key]
+                sessions = [dict(s) for s in existing.get("sessions") or [{
+                    "embedding": np.asarray(existing["embedding"]),
+                    "n_frames": existing.get("n_frames"),
+                    "session": existing.get("session"),
+                    "enrolled_at": existing.get("enrolled_at"),
+                }]]
+            sessions.append({
+                "embedding": np.asarray(embedding),
+                "n_frames": n_frames,
+                "session": session_tag,
+                "enrolled_at": datetime.now().isoformat(),
+            })
+            if len(sessions) == 1:
+                # Mode ganti: template persis hasil pratinjau (hash sama dengan pratinjau).
+                record = self._template_record(subject_id, name, dept, embedding, n_frames, session_tag)
+                total_frames = n_frames
+            else:
+                merged = np.mean([s["embedding"] for s in sessions], axis=0)
+                merged = merged / np.linalg.norm(merged)
+                total_frames = sum(int(s["n_frames"] or 0) for s in sessions)
+                record = self._template_record(subject_id, name, dept, merged, total_frames,
+                                               f"multisesi({len(sessions)})")
+                record["sessions"] = sessions
+            backup = self._store_record(record, keys)
+        logger.info(f"Template disimpan: {', '.join(keys)} ({name}) — {len(sessions)} sesi, {total_frames} frames")
         return {
             "success": True,
             "subject_id": subject_id,
             "keys": keys,
-            "n_frames": n_frames,
+            "n_frames": total_frames,
+            "n_sessions": len(sessions),
             "template_hash": record["template_hash"],
             "backup": backup,
         }
@@ -624,12 +662,16 @@ class FaceNetModule:
         try:
             img_rgb = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2RGB)
             # Deteksi wajah dengan confidence filtering (min_conf)
-            boxes, probs = self.mtcnn.detect(img_rgb)
+            boxes, probs, points = self.mtcnn.detect(img_rgb, landmarks=True)
             if (boxes is None or len(boxes) == 0
                     or probs is None or probs[0] is None
                     or float(probs[0]) < FACENET_MIN_CONFIDENCE):
                 return None
-            face_tensor = self.mtcnn(img_rgb)
+            # Sama dengan self.mtcnn(img_rgb) (MTCNN.forward), tetapi memakai
+            # hasil deteksi di atas: deteksi kedua pada frame 1080p makan ~0,3 s.
+            boxes, probs, points = self.mtcnn.select_boxes(
+                boxes, probs, points, img_rgb, method=self.mtcnn.selection_method)
+            face_tensor = self.mtcnn.extract(img_rgb, boxes, None)
             if face_tensor is None:
                 return None
             face_tensor = face_tensor.unsqueeze(0).to(self.device)
@@ -797,6 +839,7 @@ class EMARModule:
     LEFT_EYE   = [36, 37, 38, 39, 40, 41]   # [kiri, atas1, atas2, kanan, bawah2, bawah1]
     RIGHT_EYE  = [42, 43, 44, 45, 46, 47]   # [kiri, atas1, atas2, kanan, bawah2, bawah1]
     INNER_MOUTH = [60, 61, 62, 63, 64, 65, 66, 67] # 8 titik inner mouth
+    JAW_OUTER  = (0, 16)                    # ujung rahang kiri dan kanan
 
     def __init__(
         self,
@@ -972,11 +1015,15 @@ class EMARModule:
         if not faces or len(faces) == 0:
             return None
         landmarks = self._predictor(gray, faces[0])
+        jaw_left, jaw_right = self.JAW_OUTER
         return FrameMeasurement(
             landmarks=landmarks,
             ear_left=self.compute_ear(self.LEFT_EYE, landmarks),
             ear_right=self.compute_ear(self.RIGHT_EYE, landmarks),
             mar=self.compute_mar(self.INNER_MOUTH, landmarks),
+            face_width_px=float(np.linalg.norm(
+                self._pt(landmarks, jaw_left) - self._pt(landmarks, jaw_right))),
+            frame_width=int(img_bgr.shape[1]),
         )
 
     def push_measurement(
@@ -2347,6 +2394,191 @@ def _ordered_parallel_map(
             yield pending.popleft().result()
 
 
+def face_width_ratio(m: Any) -> Optional[float]:
+    """
+    Lebar rahang dibagi lebar frame (0..1), sehingga tidak bergantung resolusi.
+    Jarak dalam cm dihitung Laravel dari rasio ini dengan model kalibrasi kamera;
+    mesin tidak menaksir cm. None bila frame tanpa wajah.
+    """
+    width_px = getattr(m, "face_width_px", None)
+    frame_w = getattr(m, "frame_width", None)
+    if width_px is None or frame_w is None or width_px <= 0 or frame_w <= 0:
+        return None
+    return float(width_px) / float(frame_w)
+
+
+class FaceWidthTally:
+    """
+    Kumpulkan rasio lebar wajah dari hasil EMARModule.measure() yang sudah ada,
+    agar /verify tidak mendeteksi wajah dua kali.
+    """
+
+    def __init__(self) -> None:
+        self.ratios: List[float] = []
+        self.n_frames = 0
+        self._sizes: set = set()
+
+    def frames(self, frames: Iterable[np.ndarray]) -> Iterator[np.ndarray]:
+        for frame in frames:
+            self.n_frames += 1
+            self._sizes.add(tuple(frame.shape[:2]))
+            yield frame
+
+    def add(self, m: Any) -> None:
+        ratio = face_width_ratio(m)
+        if ratio is not None:
+            self.ratios.append(ratio)
+
+    def summary(self) -> Dict[str, Any]:
+        # Ukuran frame hanya dilaporkan bila seragam; gambar kiriman bisa
+        # beragam ukurannya dan tidak ada satu angka yang benar untuk semuanya.
+        height, width = next(iter(self._sizes)) if len(self._sizes) == 1 else (None, None)
+        return {
+            "face_width_ratio": round(float(np.median(self.ratios)), 5) if self.ratios else None,
+            "face_width_frames": len(self.ratios),
+            "frame_width": width,
+            "frame_height": height,
+        }
+
+
+# Kecerahan dihitung pada salinan selebar 320 px, sama dengan
+# attendance-web/resources/js/Utils/luxCalibration.ts, agar murah dan tidak
+# bergantung pada resolusi kamera.
+LUMA_SAMPLE_WIDTH = 320
+LUMA_SATURATED = 250.0
+LUMA_DARK = 5.0
+
+
+def frame_luma_stats(img_bgr: np.ndarray) -> Tuple[float, float, float]:
+    """(rata-rata luma Rec.601 0-255, fraksi piksel jenuh, fraksi piksel gelap) satu bingkai."""
+    h, w = img_bgr.shape[:2]
+    if w > LUMA_SAMPLE_WIDTH:
+        img_bgr = cv2.resize(img_bgr, (LUMA_SAMPLE_WIDTH, max(1, round(h * LUMA_SAMPLE_WIDTH / w))),
+                             interpolation=cv2.INTER_AREA)
+    b, g, r = cv2.split(img_bgr.astype(np.float32))
+    y = 0.299 * r + 0.587 * g + 0.114 * b
+    return float(y.mean()), float((y >= LUMA_SATURATED).mean()), float((y <= LUMA_DARK).mean())
+
+
+def measure_brightness(frames: Iterable[np.ndarray]) -> Dict[str, Any]:
+    """
+    Kecerahan bingkai untuk estimasi lux terkalibrasi: median luma rata-rata per
+    bingkai. Tanpa model biometrik dan tanpa galeri. Konversi ke lux dilakukan
+    Laravel dengan model kalibrasi luxmeter; di sini tidak ada angka lux.
+    """
+    lumas, saturated, dark, sizes = [], [], [], set()
+    for frame in frames:
+        if frame is None or frame.size == 0:
+            continue
+        mean, sat, drk = frame_luma_stats(frame)
+        lumas.append(mean)
+        saturated.append(sat)
+        dark.append(drk)
+        sizes.add((int(frame.shape[1]), int(frame.shape[0])))
+    size = next(iter(sizes)) if len(sizes) == 1 else (None, None)
+    return {
+        "luma": round(float(np.median(lumas)), 3) if lumas else None,
+        "saturated_fraction": round(float(np.mean(saturated)), 4) if saturated else None,
+        "dark_fraction": round(float(np.mean(dark)), 4) if dark else None,
+        "n_frames": len(lumas),
+        "frame_width": size[0],
+        "frame_height": size[1],
+    }
+
+
+def measure_face_width(system_or_emar: Any, frames: Iterable[np.ndarray]) -> Dict[str, Any]:
+    """
+    Median rasio lebar wajah dari sekumpulan frame, untuk kalibrasi jarak kamera.
+    Hanya memanggil EMARModule.measure(): state temporal EMAR dan galeri tidak
+    tersentuh, jadi aman berjalan bersamaan dengan verifikasi.
+    """
+    emar = getattr(system_or_emar, "emar", system_or_emar)
+    tally = FaceWidthTally()
+    for m in _ordered_parallel_map(emar.measure, tally.frames(frames),
+                                   workers=EMAR_WORKERS, max_in_flight=2 * EMAR_WORKERS):
+        tally.add(m)
+    summary = tally.summary()
+    return {
+        "face_width_ratio": summary["face_width_ratio"],
+        "n_frames": tally.n_frames,
+        "n_frames_with_face": summary["face_width_frames"],
+        "frame_width": summary["frame_width"],
+        "frame_height": summary["frame_height"],
+    }
+
+
+# Posisi frame kandidat FaceNet di sepanjang video. Selama tantangan liveness
+# (kedip/buka mulut) ekspresi di tengah video bisa terdistorsi dan menaikkan
+# jarak Euclidean (> 0,40), jadi beberapa frame dievaluasi dan dipilih jarak
+# terendah (wajah paling netral/frontal). 0,50 harus tetap ada: hasil frame
+# tengah dipakai bila tidak ada kandidat yang memuat wajah.
+FACENET_CANDIDATE_RATIOS = (0.10, 0.20, 0.30, 0.40, 0.50, 0.60, 0.70, 0.80, 0.90)
+# Kandidat dengan jarak <= nilai ini sudah memenuhi ambang kecocokan frontal
+# (<= 0,40); kandidat berikutnya tidak dievaluasi.
+FACENET_EARLY_EXIT_DISTANCE = 0.35
+
+
+def _candidate_indices(n_frames: int) -> List[int]:
+    """Indeks frame kandidat FaceNet untuk video n_frames frame, naik tanpa duplikat."""
+    indices: List[int] = []
+    for r in FACENET_CANDIDATE_RATIOS:
+        idx = int(n_frames * r)
+        if 0 <= idx < n_frames and idx not in indices:
+            indices.append(idx)
+    return indices or [n_frames // 2]
+
+
+def _count_video_packets(cap: Any) -> Optional[int]:
+    """
+    Jumlah paket video tanpa mendekode (mode mentah FFmpeg), None bila tidak
+    didukung. Rekaman MediaRecorder tidak menyimpan durasi, dan
+    CAP_PROP_FRAME_COUNT-nya tidak bermakna (terukur 7903 untuk 154 frame).
+    Hanya perkiraan: indeks kandidat tetap dihitung dari frame hasil dekode.
+    """
+    try:
+        if not cap.set(cv2.CAP_PROP_FORMAT, -1):
+            return None
+        n = 0
+        while cap.grab():
+            n += 1
+        return n
+    except Exception:
+        return None
+
+
+def _read_frames_at(video_path: str, indices: Iterable[int]) -> Iterator[Tuple[int, np.ndarray]]:
+    """
+    (indeks, frame) untuk indeks yang diminta, urut naik. Frame lain hanya
+    di-grab tanpa konversi warna, dan pembacaan berhenti setelah indeks
+    terakhir. Frame yang dikembalikan sama dengan cap.read() pada indeks itu,
+    karena read() adalah grab() lalu retrieve().
+    """
+    wanted = set(indices)
+    if not wanted:
+        return
+    last = max(wanted)
+    try:
+        cap = cv2.VideoCapture(video_path)
+    except Exception as e:
+        raise ValueError(f"Gagal membaca video: {e}") from e
+    try:
+        for idx in range(last + 1):
+            ok, frame = True, None
+            try:
+                if not cap.grab():
+                    return
+                if idx in wanted:
+                    ok, frame = cap.retrieve()
+            except Exception as e:
+                raise ValueError(f"Gagal membaca video: {e}") from e
+            if not ok:
+                return
+            if frame is not None:
+                yield idx, frame
+    finally:
+        cap.release()
+
+
 def verify_video_file(system: "FaceEMARSystem", video_path: str, user_id: str) -> Dict[str, Any]:
     """
     Verifikasi satu rekaman presensi: FaceNet 1:1 + liveness EMAR 8 detik.
@@ -2354,7 +2586,8 @@ def verify_video_file(system: "FaceEMARSystem", video_path: str, user_id: str) -
     Dipakai Flask /verify dan biometric-api /verify agar keduanya menjalankan
     logika yang sama. Tidak pernah mengisi nilai pengganti: bila wajah tidak
     terdeteksi atau subjek belum terdaftar, "distance" bernilai None dan
-    "fta_reason" menjelaskan sebabnya.
+    "fta_reason" menjelaskan sebabnya. "face_width_ratio" adalah median rasio
+    lebar wajah atas frame yang memuat landmark, None bila tidak ada.
 
     Raises:
         ValueError: video tidak dapat dibaca atau tidak memuat frame.
@@ -2367,6 +2600,7 @@ def _verify_video_file(system: "FaceEMARSystem", video_path: str, user_id: str) 
     try:
         cap = cv2.VideoCapture(video_path)
         video_fps = cap.get(cv2.CAP_PROP_FPS) or 0.0
+        predicted_frames = _count_video_packets(cap)
         cap.release()
     except Exception as e:
         raise ValueError(f"Gagal membaca video: {e}") from e
@@ -2381,15 +2615,34 @@ def _verify_video_file(system: "FaceEMARSystem", video_path: str, user_id: str) 
     # frame terakhir video.
     res_emar = EMARResult()
     n_frames = 0
+    face_width = FaceWidthTally()
+    # Frame di indeks kandidat (menurut jumlah paket) disimpan selama pass EMAR,
+    # paling banyak 9 frame (~56 MB pada 1080p), agar video tidak perlu
+    # didekode ulang untuk FaceNet.
+    keep = set(_candidate_indices(predicted_frames)) if predicted_frames else set()
+    kept: Dict[int, np.ndarray] = {}
+
+    def frames_keeping_candidates() -> Iterator[np.ndarray]:
+        for idx, frame in enumerate(_iter_video_frames(video_path)):
+            if idx in keep:
+                kept[idx] = frame
+            yield frame
+
     measurements = _ordered_parallel_map(
-        system.emar.measure, _iter_video_frames(video_path),
+        system.emar.measure, face_width.frames(frames_keeping_candidates()),
         workers=EMAR_WORKERS, max_in_flight=2 * EMAR_WORKERS,
     )
-    for idx, m in enumerate(measurements):
-        res = system.emar.push_measurement(m, timestamp=idx / fps)
-        if res.landmark_count > 0:
-            res_emar = res
-        n_frames += 1
+    try:
+        for idx, m in enumerate(measurements):
+            res = system.emar.push_measurement(m, timestamp=idx / fps)
+            face_width.add(m)
+            if res.landmark_count > 0:
+                res_emar = res
+            n_frames += 1
+    except BaseException:
+        # Traceback menahan frame fungsi ini; frame tersimpan dilepas lebih dulu.
+        kept.clear()
+        raise
     if n_frames == 0:
         raise ValueError("Video tidak mengandung frame")
 
@@ -2399,47 +2652,46 @@ def _verify_video_file(system: "FaceEMARSystem", video_path: str, user_id: str) 
     system.facenet.refresh_gallery()
     actual_user_id = system.facenet.resolve_id(user_id) or user_id
 
-    # Evaluasi FaceNet multi-frame:
-    # Selama tantangan liveness aktif (seperti membuka mulut atau berkedip),
-    # ekspresi wajah di tengah video (len(frames)//2) mengalami distorsi ekstrem (mulut terbuka lebar/mata terpejam),
-    # yang dapat meningkatkan jarak Euclidean secara artifisial (> 0.40).
-    # Oleh karena itu, evaluasi frame kandidat yang tersebar di sepanjang video,
-    # dan pilih frame dengan jarak Euclidean terendah (wajah paling netral/frontal) di mana wajah terdeteksi.
-    candidate_ratios = [0.10, 0.20, 0.30, 0.40, 0.50, 0.60, 0.70, 0.80, 0.90]
-    candidate_indices = []
-    for r in candidate_ratios:
-        idx = int(n_frames * r)
-        if 0 <= idx < n_frames and idx not in candidate_indices:
-            candidate_indices.append(idx)
-    if not candidate_indices:
-        candidate_indices = [n_frames // 2]
-
-    # Pembacaan kedua hanya menyimpan frame kandidat.
-    wanted = set(candidate_indices) | {n_frames // 2}
-    frames: Dict[int, np.ndarray] = {}
-    for idx, frame in enumerate(_iter_video_frames(video_path)):
-        if idx in wanted:
-            frames[idx] = frame
-            if len(frames) == len(wanted):
-                break
+    # Evaluasi FaceNet multi-frame (lihat FACENET_CANDIDATE_RATIOS): kandidat
+    # dievaluasi urut indeks naik, dan jarak <= FACENET_EARLY_EXIT_DISTANCE
+    # menghentikan evaluasi. Indeks dihitung dari jumlah frame hasil dekode;
+    # frame yang tersimpan dari pass EMAR identik dengan hasil dekode ulang.
+    candidate_indices = _candidate_indices(n_frames)
+    if all(idx in kept for idx in candidate_indices):
+        candidate_frames = ((idx, kept[idx]) for idx in candidate_indices)
+    else:
+        # Jumlah paket tidak tersedia atau berbeda: baca ulang hanya sampai kandidat.
+        kept.clear()
+        candidate_frames = _read_frames_at(video_path, candidate_indices)
 
     best_facenet_res = None
+    mid_res = None
     min_dist = float("inf")
-    for c_idx in candidate_indices:
-        if c_idx not in frames:
-            continue
-        res_c = system.facenet.verify(frames[c_idx], actual_user_id)
-        if res_c.embedding is not None and res_c.distance < min_dist:
-            min_dist = res_c.distance
-            best_facenet_res = res_c
-            if min_dist <= 0.35:
-                # Sudah memenuhi ambang kecocokan frontal (<= 0.40), hentikan lebih awal untuk efisiensi
+    try:
+        for idx, frame in candidate_frames:
+            res_c = system.facenet.verify(frame, actual_user_id)
+            if idx == n_frames // 2:
+                mid_res = res_c
+            if res_c.embedding is not None and res_c.distance < min_dist:
+                min_dist = res_c.distance
+                best_facenet_res = res_c
+                if min_dist <= FACENET_EARLY_EXIT_DISTANCE:
+                    break
+            if res_c.embedding is not None and system.facenet.resolve_id(actual_user_id) is None:
+                # Subjek belum terdaftar: selama galeri tidak berubah di tengah
+                # permintaan ini, kandidat lain tidak bisa mengubah hasil
+                # (SUBJECT_NOT_ENROLLED dari kandidat berwajah pertama ini).
                 break
+    finally:
+        candidate_frames.close()
+        kept.clear()
 
     if best_facenet_res is not None:
         facenet_res = best_facenet_res
-    elif n_frames // 2 in frames:
-        facenet_res = system.facenet.verify(frames[n_frames // 2], actual_user_id)
+    elif mid_res is not None:
+        # Tidak ada kandidat berwajah. Frame tengah selalu kandidat
+        # (int(n * 0,5) == n // 2), jadi hasil verify()-nya dipakai lagi.
+        facenet_res = mid_res
     else:
         facenet_res = FaceNetResult(claimed_id=actual_user_id)
 
@@ -2481,6 +2733,8 @@ def _verify_video_file(system: "FaceEMARSystem", video_path: str, user_id: str) 
         "blink_cycles": res_emar.blink_cycles,
         "mouth_cycles": res_emar.mouth_cycles,
         "video_seconds": round(n_frames / fps, 3),
+        # Jarak kamera hanya dicatat; S1/S2/S3 di atas tidak memakainya.
+        **face_width.summary(),
         "request_id": str(uuid.uuid4()),
     }
 

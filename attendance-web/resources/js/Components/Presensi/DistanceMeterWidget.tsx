@@ -16,8 +16,9 @@ import {
 } from 'lucide-react';
 import { AnimatePresence, motion } from 'motion/react';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { getDistanceCategory } from '../../Utils/faceDistance';
+import { categoryLabel, classifyDistance, UNCALIBRATED_NOTE } from '../../Utils/distanceCalibration';
 import {
+    CameraDistanceSource,
     DistanceSource,
     evaluateHardwareReading,
     formatMeasured,
@@ -34,7 +35,7 @@ export interface DistanceMeterWidgetProps {
     currentDistance: number | null;
     /** Kamera: estimasi pemindai; hardware: sensor aktif; preset: selalu null. */
     onDistanceChange: (reading: SensorReading<DistanceSource> | null) => void;
-    liveCameraReading?: SensorReading<'camera'> | null;
+    liveCameraReading?: SensorReading<CameraDistanceSource> | null;
     /** Target skenario uji (preset), terpisah dari hasil ukur. */
     targetDistance?: number | null;
     onTargetChange?: (cm: number | null) => void;
@@ -61,10 +62,14 @@ export function DistanceMeterWidget({
     const pollIntervalRef = useRef<any>(null);
     const modeRef = useRef<DistanceSourceMode>(mode);
 
-    const category = useMemo(
-        () => (currentDistance === null ? null : getDistanceCategory(currentDistance)),
+    // Kategori dan pesan yang sama dengan pra-cek pemindai dan DistanceModel.php.
+    const classification = useMemo(
+        () => (currentDistance === null ? null : classifyDistance(currentDistance, true)),
         [currentDistance],
     );
+    const inBand = classification?.allow_verification === true;
+    const cameraSourceText =
+        liveCameraReading?.source === 'camera_calibrated' ? 'Kamera terkalibrasi' : `Kamera (${UNCALIBRATED_NOTE})`;
 
     // Ganti mode = ganti sumber: bacaan mode sebelumnya tidak boleh terbawa.
     useEffect(() => {
@@ -211,8 +216,8 @@ export function DistanceMeterWidget({
                             <span>Metodologi Skenario Jarak Skripsi (Cochran's Q):</span>
                         </div>
                         <ul className="list-disc list-inside space-y-0.5 text-[10px] pl-1 opacity-90">
-                            <li><strong>30 cm (Ideal):</strong> Jarak operasional baku presensi guru di SMK Al-Madani.</li>
-                            <li><strong>45 cm (Sedang):</strong> Uji akurasi embedding FaceNet & ketahanan liveness EMAR jarak menengah.</li>
+                            <li><strong>30 cm (Dekat):</strong> Jarak operasional baku presensi guru di SMK Al-Madani.</li>
+                            <li><strong>45 cm (Ideal):</strong> Uji akurasi embedding FaceNet & ketahanan liveness EMAR jarak menengah.</li>
                             <li><strong>60 cm (Jauh):</strong> Uji batas resolusi wajah dan kepekaan kedipan mata/mulut jarak jauh.</li>
                         </ul>
                     </motion.div>
@@ -266,7 +271,8 @@ export function DistanceMeterWidget({
                         <div className="flex items-center justify-between">
                             <div>
                                 <span className="text-[10px] font-medium text-on-surface-variant dark:text-slate-400 block">
-                                    Jarak Terukur ({mode === 'camera' ? 'Geometri Wajah AI' : mode === 'hardware' ? 'Sensor Hardware' : 'Tanpa pengukuran'}):
+                                    Jarak terukur ·{' '}
+                                    {mode === 'camera' ? cameraSourceText : mode === 'hardware' ? 'Sensor hardware' : 'Tanpa pengukuran'}
                                 </span>
                                 {currentDistance === null ? (
                                     <div className="mt-0.5 font-mono text-xl font-black text-slate-500 dark:text-slate-400 tracking-tight">
@@ -289,21 +295,22 @@ export function DistanceMeterWidget({
                                 )}
                             </div>
 
-                            {/* Classification Badge */}
-                            {category && (
+                            {/* Kategori posisi: ketiga rentang sama-sama boleh lanjut */}
+                            {classification && (
                                 <div className="text-right">
                                     <span
-                                        className={`inline-flex items-center gap-1.5 rounded-xl border px-3 py-1 text-xs font-black uppercase tracking-wider ${category.badgeColor}`}
+                                        className={`inline-flex items-center gap-1.5 rounded-xl border px-3 py-1 text-xs font-bold ${
+                                            inBand
+                                                ? 'border-emerald-500/40 bg-emerald-500/15 text-emerald-800 dark:text-emerald-300'
+                                                : 'border-amber-500/40 bg-amber-500/15 text-amber-800 dark:text-amber-300'
+                                        }`}
                                     >
-                                        {category.isIdeal ? (
+                                        {inBand ? (
                                             <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />
                                         ) : (
                                             <AlertTriangle className="h-3.5 w-3.5 text-amber-500" />
                                         )}
-                                        <span>{category.label}</span>
-                                    </span>
-                                    <span className="block mt-1 font-mono text-[9px] text-slate-400 dark:text-slate-500">
-                                        Target: {category.benchmarkTarget} cm
+                                        <span>{categoryLabel(classification.category)}</span>
                                     </span>
                                 </div>
                             )}
@@ -315,30 +322,28 @@ export function DistanceMeterWidget({
                                 {/* Fill Indicator */}
                                 <div
                                     className={`h-full rounded-full transition-all duration-300 ${
-                                        category?.code === 'TOO_CLOSE'
-                                            ? 'bg-rose-500'
-                                            : category?.code === 'IDEAL_30'
-                                              ? 'bg-gradient-to-r from-emerald-500 to-teal-400'
-                                              : category?.code === 'MID_45'
-                                                ? 'bg-gradient-to-r from-sky-500 to-blue-500'
-                                                : category?.code === 'FAR_60'
-                                                  ? 'bg-gradient-to-r from-purple-500 to-indigo-500'
-                                                  : 'bg-amber-500'
+                                        classification?.category === 'DEKAT'
+                                            ? 'bg-gradient-to-r from-emerald-500 to-teal-400'
+                                            : classification?.category === 'IDEAL'
+                                              ? 'bg-gradient-to-r from-sky-500 to-blue-500'
+                                              : classification?.category === 'JAUH'
+                                                ? 'bg-gradient-to-r from-purple-500 to-indigo-500'
+                                                : 'bg-amber-500'
                                     }`}
                                     style={{ width: `${gaugePercent}%` }}
                                 />
 
-                                {/* 30 cm Marker (Ideal) */}
+                                {/* 30 cm Marker (Dekat) */}
                                 <div
                                     className="absolute top-0 bottom-0 w-0.5 bg-emerald-400 dark:bg-emerald-300 z-10"
                                     style={{ left: '30%' }}
-                                    title="Target Ideal: 30 cm"
+                                    title="Target Dekat: 30 cm"
                                 />
-                                {/* 45 cm Marker (Sedang) */}
+                                {/* 45 cm Marker (Ideal) */}
                                 <div
                                     className="absolute top-0 bottom-0 w-0.5 bg-sky-400 dark:bg-sky-300 z-10"
                                     style={{ left: '45%' }}
-                                    title="Target Sedang: 45 cm"
+                                    title="Target Ideal: 45 cm"
                                 />
                                 {/* 60 cm Marker (Jauh) */}
                                 <div
@@ -351,7 +356,7 @@ export function DistanceMeterWidget({
                             {/* Ruler Labels */}
                             <div className="flex items-center justify-between text-[9px] text-slate-400 dark:text-slate-500 font-mono">
                                 <span>0 cm</span>
-                                <span className="text-emerald-600 dark:text-emerald-400 font-bold">30 cm (Ideal)</span>
+                                <span className="text-emerald-600 dark:text-emerald-400 font-bold">30 cm</span>
                                 <span className="text-sky-600 dark:text-sky-400 font-bold">45 cm</span>
                                 <span className="text-purple-600 dark:text-purple-400 font-bold">60 cm</span>
                                 <span>100 cm</span>
@@ -362,12 +367,12 @@ export function DistanceMeterWidget({
                         <p className="text-[10px] text-on-surface-variant dark:text-slate-300 flex items-center gap-1.5">
                             <span
                                 className={`inline-block h-1.5 w-1.5 rounded-full shrink-0 ${
-                                    category?.isIdeal ? 'bg-emerald-500' : 'bg-amber-500'
+                                    inBand ? 'bg-emerald-500' : 'bg-amber-500'
                                 }`}
                             />
                             <span>
-                                {category
-                                    ? category.guidanceMessage
+                                {classification
+                                    ? classification.message
                                     : mode === 'hardware'
                                       ? hardwareReject
                                           ? hardwareRejectMessage(hardwareReject)
@@ -396,7 +401,7 @@ export function DistanceMeterWidget({
                                     }`}
                                 >
                                     <div className="text-[11px]">30 cm</div>
-                                    <div className="font-mono text-[10px] opacity-80">Baku / Ideal</div>
+                                    <div className="font-mono text-[10px] opacity-80">Dekat · baku</div>
                                 </button>
                                 <button
                                     type="button"
@@ -408,7 +413,7 @@ export function DistanceMeterWidget({
                                     }`}
                                 >
                                     <div className="text-[11px]">45 cm</div>
-                                    <div className="font-mono text-[10px] opacity-80">Sedang</div>
+                                    <div className="font-mono text-[10px] opacity-80">Ideal</div>
                                 </button>
                                 <button
                                     type="button"
@@ -509,7 +514,7 @@ export function DistanceMeterWidget({
                         <div className="flex items-center justify-between text-[10px] text-slate-500 dark:text-slate-400 pt-0.5">
                             <span className="flex items-center gap-1">
                                 <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                                <span>Sensor geometri wajah AI aktif (30-60 FPS)</span>
+                                <span>Jarak dari landmark wajah pemindai</span>
                             </span>
                             <span className="font-mono">{lastUpdated || 'Menunggu Wajah'}</span>
                         </div>

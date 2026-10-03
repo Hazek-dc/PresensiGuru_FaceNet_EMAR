@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
 use App\Models\User;
 use App\Models\AttendanceRecord;
@@ -10,10 +11,23 @@ use Carbon\Carbon;
 use Inertia\Inertia;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Validation\Rule;
+use App\Services\StaffProfile;
 use App\Services\SubjectLevelAnalysisService;
 
 class TeacherController extends Controller
 {
+    /** Status presensi yang dihitung "hadir hari ini" di filter dan statistik. */
+    private const PRESENT_STATUSES = ['hadir', 'terlambat', 'pulang', 'success'];
+
+    private const STATUS_FILTERS = ['active', 'enrolled', 'not_enrolled', 'hadir', 'izin', 'sakit', 'guru', 'staff_tu', 'no_position', 'disabled'];
+
+    /** Filter yang jumlahnya tampil di chip halaman daftar guru. */
+    private const COUNTED_FILTERS = ['hadir', 'izin', 'sakit', 'enrolled', 'not_enrolled', 'guru', 'staff_tu', 'no_position', 'disabled'];
+
+    private const SORTS = ['name', 'name_desc', 'newest', 'oldest'];
+
+    private const PER_PAGE_OPTIONS = [9, 18, 36];
+
     /**
      * Display a listing of the teachers.
      */
@@ -21,89 +35,144 @@ class TeacherController extends Controller
     {
         $today = Carbon::today('Asia/Pontianak');
 
-        $query = User::where('role', 'teacher')->withTrashed();
-
-        if ($request->filled('search')) {
-            $search = $request->input('search');
-            $query->where(function($q) use ($search) {
-                $q->where('name', 'like', "%{$search}%")
-                  ->orWhere('email', 'like', "%{$search}%")
-                  ->orWhere('embedding_id', 'like', "%{$search}%");
-            });
+        $search = mb_substr(trim((string) $request->input('search', '')), 0, 100);
+        $status = (string) $request->input('status', '');
+        if ($status === 'present') {
+            $status = 'hadir';
+        }
+        if (! in_array($status, self::STATUS_FILTERS, true)) {
+            $status = '';
+        }
+        $sort = in_array($request->input('sort'), self::SORTS, true) ? $request->input('sort') : 'name';
+        $perPage = (int) $request->input('per_page', 9);
+        if (! in_array($perPage, self::PER_PAGE_OPTIONS, true)) {
+            $perPage = 9;
         }
 
-        if ($request->filled('status')) {
-            $status = $request->input('status');
-            if ($status === 'disabled') {
-                $query->onlyTrashed();
-            } elseif ($status === 'active') {
-                $query->whereNull('deleted_at');
-            } elseif ($status === 'enrolled') {
-                $query->whereNotNull('embedding_id')->whereNull('deleted_at');
-            } elseif ($status === 'not_enrolled') {
-                $query->whereNull('embedding_id')->whereNull('deleted_at');
-            } elseif ($status === 'hadir' || $status === 'present') {
-                $presentIds = AttendanceRecord::whereDate('created_at', $today)
-                    ->whereIn('status', ['hadir', 'terlambat', 'pulang', 'success'])
-                    ->pluck('user_id');
-                $query->whereIn('id', $presentIds)->whereNull('deleted_at');
-            } elseif ($status === 'izin') {
-                $izinIds = AttendanceRecord::whereDate('created_at', $today)
-                    ->where('status', 'izin')
-                    ->pluck('user_id');
-                $query->whereIn('id', $izinIds)->whereNull('deleted_at');
-            } elseif ($status === 'sakit') {
-                $sakitIds = AttendanceRecord::whereDate('created_at', $today)
-                    ->where('status', 'sakit')
-                    ->pluck('user_id');
-                $query->whereIn('id', $sakitIds)->whereNull('deleted_at');
-            }
-        }
+        $todayIds = $this->todayAttendanceIds($today);
 
-        $perPage = $request->input('per_page', 9);
+        $query = $this->applyStatusFilter($this->teacherSearch($search), $status, $todayIds);
+        $this->applySort($query, $sort);
         $teachers = $query->paginate($perPage)->withQueryString();
 
-        $teachers->getCollection()->transform(function ($teacher) use ($today) {
-            $todayRec = AttendanceRecord::where('user_id', $teacher->id)
-                ->whereDate('created_at', $today)
-                ->latest()
-                ->first();
+        // Satu kueri untuk presensi hari ini semua guru di halaman ini; yang terbaru per guru dipakai.
+        $todayRecords = AttendanceRecord::whereIn('user_id', $teachers->getCollection()->pluck('id'))
+            ->whereDate('created_at', $today)
+            ->orderByDesc('created_at')
+            ->orderByDesc('id')
+            ->get()
+            ->groupBy('user_id')
+            ->map(fn ($records) => $records->first());
+
+        $teachers->getCollection()->transform(function ($teacher) use ($todayRecords) {
+            $todayRec = $todayRecords->get($teacher->id);
             $teacher->today_status = $todayRec ? $todayRec->status : null;
             $teacher->today_time = $todayRec ? Carbon::parse($todayRec->created_at)->timezone('Asia/Pontianak')->format('H:i') : null;
             $teacher->today_category = $todayRec ? ($todayRec->metadata['category'] ?? $todayRec->decision_reason) : null;
             return $teacher;
         });
 
-        $totalTeachers = User::where('role', 'teacher')->whereNull('deleted_at')->count();
-        $enrolledCount = User::where('role', 'teacher')->whereNull('deleted_at')->whereNotNull('embedding_id')->count();
-        $notEnrolledCount = max(0, $totalTeachers - $enrolledCount);
-
-        $presentIdsAll = AttendanceRecord::whereDate('created_at', $today)
-            ->whereIn('status', ['hadir', 'terlambat', 'pulang', 'success'])
-            ->pluck('user_id')
-            ->unique();
-        $presentTodayCount = User::where('role', 'teacher')->whereIn('id', $presentIdsAll)->count();
-
-        $leaveIdsAll = AttendanceRecord::whereDate('created_at', $today)
-            ->whereIn('status', ['izin', 'sakit'])
-            ->pluck('user_id')
-            ->unique();
-        $leaveTodayCount = User::where('role', 'teacher')->whereIn('id', $leaveIdsAll)->count();
-
-        $stats = [
-            'total' => $totalTeachers,
-            'enrolled' => $enrolledCount,
-            'not_enrolled' => $notEnrolledCount,
-            'present_today' => $presentTodayCount,
-            'leave_today' => $leaveTodayCount,
-            'enrolled_pct' => $totalTeachers > 0 ? round(($enrolledCount / $totalTeachers) * 100) : 0,
-        ];
+        // Jumlah di tiap chip ikut kata pencarian: angkanya sama dengan hasil bila chip diklik.
+        $counts = ['all' => $this->teacherSearch($search)->count()];
+        foreach (self::COUNTED_FILTERS as $filter) {
+            $counts[$filter] = $this->applyStatusFilter($this->teacherSearch($search), $filter, $todayIds)->count();
+        }
 
         return Inertia::render('Admin/Teachers/Index', [
             'teachers' => $teachers,
-            'stats' => $stats,
-            'filters' => $request->only(['search', 'status']),
+            // Kartu statistik tidak bergantung pada filter; dilewati saat muat ulang parsial.
+            'stats' => fn () => $this->teacherStats($todayIds),
+            'counts' => $counts,
+            'filters' => [
+                'search' => $search,
+                'status' => $status,
+                'sort' => $sort,
+                'per_page' => $perPage,
+            ],
         ]);
+    }
+
+    /**
+     * ID guru yang punya catatan presensi hari ini, per kelompok status.
+     *
+     * @return array{hadir: array<int>, izin: array<int>, sakit: array<int>}
+     */
+    private function todayAttendanceIds(Carbon $today): array
+    {
+        $rows = AttendanceRecord::whereDate('created_at', $today)
+            ->whereIn('status', [...self::PRESENT_STATUSES, 'izin', 'sakit'])
+            ->get(['user_id', 'status']);
+
+        $idsWith = fn (array $statuses) => $rows->whereIn('status', $statuses)->pluck('user_id')->unique()->values()->all();
+
+        return [
+            'hadir' => $idsWith(self::PRESENT_STATUSES),
+            'izin' => $idsWith(['izin']),
+            'sakit' => $idsWith(['sakit']),
+        ];
+    }
+
+    /** Semua guru (termasuk nonaktif) yang nama, email, ID wajah, atau bidang studinya memuat kata pencarian. */
+    private function teacherSearch(string $search): Builder
+    {
+        $query = User::where('role', 'teacher')->withTrashed();
+        if ($search === '') {
+            return $query;
+        }
+
+        // LOWER agar tidak peka huruf besar di PostgreSQL maupun SQLite; % dan _ dicari sebagai huruf biasa.
+        $pattern = '%'.str_replace(['!', '%', '_'], ['!!', '!%', '!_'], mb_strtolower($search)).'%';
+
+        return $query->where(function (Builder $q) use ($pattern) {
+            foreach (['name', 'email', 'embedding_id'] as $column) {
+                $q->orWhereRaw("LOWER({$column}) LIKE ? ESCAPE '!'", [$pattern]);
+            }
+            // subjects berisi JSON; CAST agar LOWER bisa dipakai di PostgreSQL.
+            $q->orWhereRaw("LOWER(CAST(subjects AS TEXT)) LIKE ? ESCAPE '!'", [$pattern]);
+        });
+    }
+
+    /** @param array{hadir: array<int>, izin: array<int>, sakit: array<int>} $todayIds */
+    private function applyStatusFilter(Builder $query, string $status, array $todayIds): Builder
+    {
+        return match ($status) {
+            'disabled' => $query->onlyTrashed(),
+            'active' => $query->whereNull('deleted_at'),
+            'enrolled' => $query->whereNotNull('embedding_id')->whereNull('deleted_at'),
+            'not_enrolled' => $query->whereNull('embedding_id')->whereNull('deleted_at'),
+            'hadir', 'izin', 'sakit' => $query->whereIn('id', $todayIds[$status])->whereNull('deleted_at'),
+            'guru', 'staff_tu' => $query->where('position', $status)->whereNull('deleted_at'),
+            'no_position' => $query->whereNull('position')->whereNull('deleted_at'),
+            default => $query,
+        };
+    }
+
+    /** Urutan selalu diakhiri ID agar halaman berikutnya tidak mengulang atau melewatkan guru. */
+    private function applySort(Builder $query, string $sort): void
+    {
+        match ($sort) {
+            'name_desc' => $query->orderByRaw('LOWER(name) desc')->orderByDesc('id'),
+            'newest' => $query->orderByDesc('created_at')->orderByDesc('id'),
+            'oldest' => $query->orderBy('created_at')->orderBy('id'),
+            default => $query->orderByRaw('LOWER(name) asc')->orderBy('id'),
+        };
+    }
+
+    /** @param array{hadir: array<int>, izin: array<int>, sakit: array<int>} $todayIds */
+    private function teacherStats(array $todayIds): array
+    {
+        $totalTeachers = User::where('role', 'teacher')->whereNull('deleted_at')->count();
+        $enrolledCount = User::where('role', 'teacher')->whereNull('deleted_at')->whereNotNull('embedding_id')->count();
+        $leaveIds = array_values(array_unique([...$todayIds['izin'], ...$todayIds['sakit']]));
+
+        return [
+            'total' => $totalTeachers,
+            'enrolled' => $enrolledCount,
+            'not_enrolled' => max(0, $totalTeachers - $enrolledCount),
+            'present_today' => User::where('role', 'teacher')->whereIn('id', $todayIds['hadir'])->count(),
+            'leave_today' => User::where('role', 'teacher')->whereIn('id', $leaveIds)->count(),
+            'enrolled_pct' => $totalTeachers > 0 ? round(($enrolledCount / $totalTeachers) * 100) : 0,
+        ];
     }
 
     /**
@@ -111,7 +180,7 @@ class TeacherController extends Controller
      */
     public function create()
     {
-        return Inertia::render('Admin/Teachers/Create');
+        return Inertia::render('Admin/Teachers/Create', StaffProfile::formProps());
     }
 
     /**
@@ -123,12 +192,16 @@ class TeacherController extends Controller
             'name' => 'required|string|max:255',
             'email' => 'required|email|unique:users,email',
             'password' => 'required|string|min:8|confirmed',
+            ...StaffProfile::rules(),
+        ], StaffProfile::messages());
+
+        User::create([
+            'name' => $validated['name'],
+            'email' => $validated['email'],
+            'password' => bcrypt($validated['password']),
+            'role' => 'teacher',
+            ...StaffProfile::attributes($validated),
         ]);
-
-        $validated['role'] = 'teacher';
-        $validated['password'] = bcrypt($validated['password']);
-
-        User::create($validated);
 
         return redirect()->route('admin.teachers.index')->with('success', 'Guru berhasil ditambahkan.');
     }
@@ -292,6 +365,7 @@ class TeacherController extends Controller
             'todayAttendance' => $attendanceFormatted,
             'todayDispensation' => $dispensationFormatted,
             'recent_leaves' => $recentLeaves,
+            ...StaffProfile::formProps(),
         ]);
     }
 
@@ -310,11 +384,14 @@ class TeacherController extends Controller
             'attendance_reason' => 'nullable|string|max:500',
             'attendance_doc' => 'nullable|string|max:255',
             'reason' => 'nullable|string',
-        ]);
+            ...StaffProfile::rules(),
+        ], StaffProfile::messages());
 
         $teacher->update([
             'name' => $validated['name'],
-            'email' => $validated['email']
+            'email' => $validated['email'],
+            // Form lama (tampilan blade) tidak mengirim jabatan; jangan hapus yang sudah tersimpan.
+            ...($request->has('position') ? StaffProfile::attributes($validated) : []),
         ]);
 
         // Manage teacher attendance status (hanya izin dan sakit)

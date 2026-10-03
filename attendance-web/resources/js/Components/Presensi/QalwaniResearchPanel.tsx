@@ -18,6 +18,8 @@ interface QalwaniResearchPanelProps {
     mar: number;
     quality: number;
     lux?: number | null;
+    /** 'camera' = perkiraan kamera tanpa kalibrasi; ditampilkan dengan ~. */
+    luxSource?: string | null;
     luxCondition?: string | null;
     distanceCm?: number | null;
     distanceCategory?: string | null;
@@ -33,6 +35,7 @@ export function QalwaniResearchPanel({
     mar,
     quality,
     lux,
+    luxSource = null,
     luxCondition,
     distanceCm,
     distanceCategory,
@@ -161,10 +164,14 @@ export function QalwaniResearchPanel({
                                 label="Lux"
                                 value={
                                     lux != null
-                                        ? `${Math.round(lux)}`
+                                        ? `${luxSource === 'camera' ? '~' : ''}${Math.round(lux)}`
                                         : '-'
                                 }
-                                sublabel={luxCondition ? `Kondisi ${luxCondition}` : 'Pencahayaan'}
+                                sublabel={
+                                    luxCondition
+                                        ? `Kondisi ${luxCondition}${luxSource === 'camera' ? ' · perkiraan kamera' : ''}`
+                                        : 'Pencahayaan'
+                                }
                                 isDark={isDark}
                             />
 
