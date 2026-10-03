@@ -1,13 +1,26 @@
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
+import { StaffProfileFields } from '@/Components/Admin/StaffProfileFields';
+import { StaffPosition } from '@/Utils/staffProfile';
 import { Head, Link, useForm } from '@inertiajs/react';
 
-export default function Create() {
-    const { data, setData, post, processing, errors } = useForm({
+export default function Create({
+    subject_options = [],
+    max_subjects = 3,
+}: {
+    subject_options?: string[];
+    max_subjects?: number;
+}) {
+    const { data, setData, post, processing, errors, transform } = useForm({
         name: '',
         email: '',
+        position: '' as StaffPosition | '',
+        subjects: [] as string[],
         password: '',
         password_confirmation: '',
     });
+
+    // Bidang studi hanya untuk guru; server juga membuangnya untuk jabatan lain.
+    transform((form) => ({ ...form, subjects: form.position === 'guru' ? form.subjects : [] }));
 
     const submit = (e: React.FormEvent) => {
         e.preventDefault();
@@ -123,6 +136,25 @@ export default function Create() {
                                             )
                                         }
                                         required
+                                    />
+                                </div>
+
+                                {/* Jabatan & bidang studi */}
+                                <div className="mt-6 pt-6 border-t border-outline-variant/30 dark:border-white/10">
+                                    <h4 className="mb-3.5 text-sm font-bold text-deep-navy dark:text-white flex items-center gap-2">
+                                        <span className="material-symbols-outlined text-royal-blue dark:text-sky-400 text-[20px]">
+                                            work
+                                        </span>
+                                        <span>Jabatan &amp; Bidang Studi</span>
+                                    </h4>
+                                    <StaffProfileFields
+                                        position={data.position}
+                                        subjects={data.subjects}
+                                        subjectOptions={subject_options}
+                                        maxSubjects={max_subjects}
+                                        onPositionChange={(value) => setData('position', value)}
+                                        onSubjectsChange={(value) => setData('subjects', value)}
+                                        errors={errors as Record<string, string>}
                                     />
                                 </div>
 

@@ -141,7 +141,9 @@ class TeacherEnrollmentController extends Controller
                         . '. Pastikan wajah terlihat jelas lalu coba lagi.',
                 ]);
             }
-            if (isset($data['embedding_id']) || isset($data['subject_id'])) {
+            // Mesin membalas alias emb_ (S13 -> emb_S13). ID yang sudah ada
+            // dipertahankan agar satu partisipan riset tidak terpecah menjadi dua ID.
+            if (!$user->embedding_id && (isset($data['embedding_id']) || isset($data['subject_id']))) {
                 $subjectId = $data['embedding_id'] ?? $data['subject_id'];
             }
         } catch (\Exception $e) {

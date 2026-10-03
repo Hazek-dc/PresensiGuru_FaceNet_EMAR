@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import {
     evaluateHardwareReading,
+    formatLux,
     formatMeasured,
     freshReading,
+    luxSourceLabel,
     NOT_MEASURED_LABEL,
     parseTargetParam,
     SENSOR_MAX_AGE_S,
@@ -148,5 +150,42 @@ describe('parseTargetParam dan formatMeasured', () => {
         expect(formatMeasured(undefined, 'cm')).toBe(NOT_MEASURED_LABEL);
         expect(formatMeasured(212.6, 'Lux')).toBe('213 Lux');
         expect(formatMeasured(47.34, 'cm', 1)).toBe('47.3 cm');
+    });
+});
+
+describe('lux perkiraan kamera', () => {
+    const now = 1_000_000;
+    const estimate = {
+        method: 'human_face_photometry',
+        profile: 'LAPTOP_DEFAULT',
+        factor: 1,
+        offset: 0,
+        glare_compensated: false,
+        face_targeted: true,
+    };
+
+    it('mengirim rincian perkiraan hanya untuk sumber camera', () => {
+        const camera = sensorFormFields({
+            lux: { value: 212.44, source: 'camera', measuredAt: now - 500, estimate },
+            distance: null, luxTarget: null, distanceTarget: null, nowMs: now,
+        });
+        expect(camera).toContainEqual(['lux_value', '212.4']);
+        expect(camera).toContainEqual(['lux_source', 'camera']);
+        expect(JSON.parse(camera.find(([k]) => k === 'lux_estimate')![1])).toEqual(estimate);
+
+        const luxmeter = sensorFormFields({
+            lux: { value: 212.44, source: 'luxmeter', measuredAt: now - 500, estimate },
+            distance: null, luxTarget: null, distanceTarget: null, nowMs: now,
+        });
+        expect(luxmeter.some(([k]) => k === 'lux_estimate')).toBe(false);
+    });
+
+    it('perkiraan diberi ~ dan label estimasi; hasil ukur tidak', () => {
+        expect(formatLux(212.4, 'camera')).toBe('~212 Lux');
+        expect(formatLux(212.4, 'luxmeter')).toBe('212 Lux');
+        expect(formatLux(null, 'camera')).toBe(NOT_MEASURED_LABEL);
+        expect(luxSourceLabel('camera')).toBe('Perkiraan kamera (belum dikalibrasi)');
+        expect(luxSourceLabel('camera_calibrated')).toBe('Kamera terkalibrasi');
+        expect(luxSourceLabel('luxmeter')).toBe('Luxmeter');
     });
 });

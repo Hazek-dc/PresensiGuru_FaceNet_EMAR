@@ -7,6 +7,9 @@ use Inertia\Inertia;
 use App\Models\AttendanceRecord;
 use App\Models\EvaluationMatrix;
 use App\Services\CochranExportService;
+use App\Services\CombinedHistoryExport;
+use App\Services\DistanceModel;
+use App\Services\LightingSummary;
 use App\Services\SubjectLevelAnalysisService;
 use Carbon\Carbon;
 use Symfony\Component\HttpFoundation\StreamedResponse;
@@ -59,10 +62,11 @@ class AttendanceHistoryController extends Controller
             }
         }
 
-        $records = $presensiQuery->orderBy('created_at', 'desc')
+        $page = $presensiQuery->orderBy('created_at', 'desc')
             ->paginate(15)
-            ->withQueryString()
-            ->through(function ($item) use ($tz) {
+            ->withQueryString();
+        $referenceDevices = LightingSummary::referenceDevices($page->getCollection()->pluck('metadata'));
+        $records = $page->through(function ($item) use ($tz, $referenceDevices) {
                 $created = $item->created_at ? $item->created_at->timezone($tz) : null;
                 $meta = $item->metadata ?? [];
 
@@ -110,6 +114,8 @@ class AttendanceHistoryController extends Controller
                         'name' => $item->user->name,
                         'email' => $item->user->email,
                         'embedding_id' => $item->user->embedding_id,
+                        // Foto profil; kartu memakai inisial nama bila kosong atau tidak dapat dibuka.
+                        'avatar_url' => $item->user->avatar_url,
                     ] : null,
                     'metadata' => [
                         'facenet_score' => $meta['facenet_score'] ?? null,
@@ -118,15 +124,24 @@ class AttendanceHistoryController extends Controller
                         // null = tidak terukur; jangan diganti nilai preset.
                         'distance_cm' => $meta['distance_cm'] ?? null,
                         'distance_source' => $meta['distance_source'] ?? null,
+                        // Catatan lama tanpa kategori: diturunkan dari jarak tercatatnya.
+                        'distance_category' => $meta['distance_category']
+                            ?? DistanceModel::category(is_numeric($meta['distance_cm'] ?? null) ? (float) $meta['distance_cm'] : null),
+                        'camera_label' => $meta['camera_label'] ?? null,
                         'lux' => $meta['lux'] ?? null,
                         'lux_source' => $meta['lux_source'] ?? null,
-                        'ear_blinks' => $meta['ear_blinks'] ?? 0,
-                        'mar_mouths' => $meta['mar_mouths'] ?? 0,
-                        'face_detected_pct' => $meta['face_detected_pct'] ?? 100,
-                        'scan_duration_s' => $meta['scan_duration_s'] ?? 8,
-                        'pad_pred' => $meta['pad_pred'] ?? 'BONA_FIDE',
-                        'id_pred' => $meta['id_pred'] ?? 'MATCH',
-                        'final_decision' => $meta['final_decision'] ?? ($item->status === 'success' ? 'ACCEPT' : 'REJECT'),
+                        'lighting_category' => $meta['lighting_category'] ?? null,
+                        'lighting_status' => $meta['lighting_status'] ?? null,
+                        'lighting' => LightingSummary::fromMetadata($meta, $referenceDevices),
+                        // Nilai yang tidak tercatat (mis. izin/sakit tanpa pemindaian) dikirim null,
+                        // bukan 0 kedipan, BONA_FIDE, MATCH, 100 %, atau 8 detik.
+                        'ear_blinks' => $meta['ear_blinks'] ?? null,
+                        'mar_mouths' => $meta['mar_mouths'] ?? null,
+                        'face_detected_pct' => $meta['face_detected_pct'] ?? null,
+                        'scan_duration_s' => $meta['scan_duration_s'] ?? null,
+                        'pad_pred' => $meta['pad_pred'] ?? null,
+                        'id_pred' => $meta['id_pred'] ?? null,
+                        'final_decision' => $meta['final_decision'] ?? null,
                         'evaluation_bab5' => $bab5,
                     ],
                 ];
@@ -298,7 +313,17 @@ class AttendanceHistoryController extends Controller
         return Inertia::render('Attendance/Show', [
             'record' => $record,
             'isResearcher' => $user->role === 'researcher',
+            'lighting' => LightingSummary::fromMetadata($metadata, LightingSummary::referenceDevices([$metadata])),
         ]);
+    }
+
+    /**
+     * Satu CSV: seluruh riwayat presensi beserta log aktivitas verifikasinya,
+     * ditambah log aktivitas lain. Dipakai tombol di dashboard dan halaman riwayat.
+     */
+    public function exportAll(Request $request): StreamedResponse
+    {
+        return CombinedHistoryExport::response($request->user());
     }
 
     /**
@@ -375,8 +400,9 @@ class AttendanceHistoryController extends Controller
 
         $records = $query->get();
         $fileName = 'Riwayat_Presensi_Operasional_' . now()->format('Ymd_His') . '.csv';
+        $referenceDevices = LightingSummary::referenceDevices($records->pluck('metadata'));
 
-        return response()->streamDownload(function () use ($records) {
+        return response()->streamDownload(function () use ($records, $referenceDevices) {
             $handle = fopen('php://output', 'w');
             // UTF-8 BOM for Excel compatibility
             fprintf($handle, chr(0xEF).chr(0xBB).chr(0xBF));
@@ -401,6 +427,8 @@ class AttendanceHistoryController extends Controller
                 'Durasi_Scan_s',
                 'Waktu_Presensi',
                 'Pesan_Status',
+                // Kolom pencahayaan di akhir agar urutan kolom lama tidak bergeser.
+                ...LightingSummary::CSV_HEADERS,
             ]);
 
             foreach ($records as $r) {
@@ -426,6 +454,7 @@ class AttendanceHistoryController extends Controller
                     $meta['scan_duration_s'] ?? 8.0,
                     $r->created_at ? $r->created_at->format('Y-m-d H:i:s') : '',
                     $r->decision_reason ?: '',
+                    ...LightingSummary::csvCells(LightingSummary::fromMetadata($meta, $referenceDevices)),
                 ]);
             }
 
@@ -565,16 +594,37 @@ class AttendanceHistoryController extends Controller
             fputcsv($handle, ['Waktu_Presensi', $record->created_at ? $record->created_at->format('Y-m-d H:i:s') : '-', 'Timestamp Pelaksanaan Scan Presensi']);
             fputcsv($handle, ['Status_Presensi', strtoupper($record->status), 'Status Kehadiran Sistem (HADIR / GAGAL / TERLAMBAT)']);
             fputcsv($handle, ['Keputusan_Final', $meta['final_decision'] ?? ($record->status === 'success' ? 'ACCEPT' : 'REJECT'), 'Keputusan Fusi Biometrik Bab 3 (ACCEPT / REJECT)']);
-            fputcsv($handle, ['PAD_Prediction', $meta['pad_pred'] ?? 'BONA_FIDE', 'Klasifikasi Liveness Anti-Spoofing (BONA_FIDE / ATTACK)']);
-            fputcsv($handle, ['ID_Prediction', $meta['id_pred'] ?? 'MATCH', 'Klasifikasi Pengenalan Identitas FaceNet (MATCH / NON_MATCH)']);
+            // Nilai yang tidak tercatat ditulis '-', bukan hasil yang diandaikan lulus.
+            fputcsv($handle, ['PAD_Prediction', $meta['pad_pred'] ?? '-', 'Klasifikasi Liveness Anti-Spoofing (BONA_FIDE / ATTACK)']);
+            fputcsv($handle, ['ID_Prediction', $meta['id_pred'] ?? '-', 'Klasifikasi Pengenalan Identitas FaceNet (MATCH / NON_MATCH)']);
             fputcsv($handle, ['Jarak_Euclidean_L2', isset($meta['euclidean_distance']) ? number_format($meta['euclidean_distance'], 3) : '-', 'Jarak Euclidean Vektor Embedding (Threshold <= 0.40)']);
             fputcsv($handle, ['FaceNet_Score', isset($meta['facenet_score']) ? number_format($meta['facenet_score'], 3) : '-', 'Skor Kesamaan Wajah FaceNet (128-D)']);
             fputcsv($handle, ['EMAR_Score', isset($meta['emar_score']) ? number_format($meta['emar_score'], 3) : '-', 'Skor Fusi Liveness EMAR']);
-            fputcsv($handle, ['Kedipan_Mata_EAR', $meta['ear_blinks'] ?? 0, 'Jumlah Kedipan Mata Terdeteksi (EAR < 0.20, Min 1x)']);
-            fputcsv($handle, ['Gerakan_Mulut_MAR', $meta['mar_mouths'] ?? 0, 'Jumlah Gerakan Mulut Terdeteksi (MAR >= 0.10, Min 1x)']);
-            fputcsv($handle, ['Kestabilan_Wajah_Pct', (isset($meta['face_detected_pct']) ? number_format($meta['face_detected_pct'], 1) : '100.0') . '%', 'Persentase Frame Wajah Terlacak Stabil (Min 80.0%)']);
-            fputcsv($handle, ['Jarak_Pengujian_cm', isset($meta['distance_cm']) ? $meta['distance_cm'] . ' cm' : 'Tidak terukur', 'Jarak Baku Kamera Smartphone ke Wajah']);
-            fputcsv($handle, ['Intensitas_Cahaya_Lux', isset($meta['lux']) ? $meta['lux'] . ' Lux' : 'Tidak terukur', 'Kondisi Pencahayaan Lingkungan Uji']);
+            fputcsv($handle, ['Kedipan_Mata_EAR', $meta['ear_blinks'] ?? '-', 'Jumlah Kedipan Mata Terdeteksi (EAR < 0.20, Min 1x)']);
+            fputcsv($handle, ['Gerakan_Mulut_MAR', $meta['mar_mouths'] ?? '-', 'Jumlah Gerakan Mulut Terdeteksi (MAR >= 0.10, Min 1x)']);
+            fputcsv($handle, ['Kestabilan_Wajah_Pct', isset($meta['face_detected_pct']) ? number_format($meta['face_detected_pct'], 1) . '%' : 'Tidak terukur', 'Persentase Frame Wajah Terlacak Stabil (Min 80.0%)']);
+            fputcsv($handle, ['Jarak_Pengujian_cm', isset($meta['distance_cm']) ? (($meta['distance_source'] ?? null) === 'camera' ? '~' : '') . $meta['distance_cm'] . ' cm' : 'Tidak terukur', 'Jarak Baku Kamera Smartphone ke Wajah (~ = estimasi kamera)']);
+            $lighting = LightingSummary::fromMetadata($meta, LightingSummary::referenceDevices([$meta]));
+            fputcsv($handle, [
+                'Intensitas_Cahaya_Lux',
+                isset($meta['lux']) ? (($meta['lux_source'] ?? null) === 'camera' ? '~' : '') . $meta['lux'] . ' Lux' : 'Tidak terukur',
+                'Kondisi Pencahayaan Lingkungan Uji (' . ($lighting['source_label'] ?? 'tidak terukur') . ')',
+            ]);
+            $cells = LightingSummary::csvCells($lighting);
+            $notes = [
+                'luxmeter / engine (kamera terkalibrasi, mesin) / camera_calibrated / camera (perkiraan)',
+                'redup < 100, normal 100-300, terang > 300 lux',
+                'Target skenario uji yang diatur operator, bukan hasil ukur',
+                '1 = kategori lux tercatat sama dengan target, 0 = berbeda (perkiraan bila Sumber_Lux camera)',
+                'Kalibrasi lux kamera yang dipakai',
+                'luxmeter (fisik) / luxmeter_app (aplikasi HP)',
+            ];
+            foreach (LightingSummary::CSV_HEADERS as $i => $header) {
+                fputcsv($handle, [$header, $cells[$i] === '' ? '-' : $cells[$i], $notes[$i]]);
+            }
+            if ($lighting['note_label']) {
+                fputcsv($handle, ['Alasan_Lux_Tidak_Terukur', $lighting['note_label'], $lighting['note']]);
+            }
             fputcsv($handle, ['Durasi_Scan_Detik', ($meta['scan_duration_s'] ?? 8.0) . ' Detik', 'Jendela Waktu Pemindaian Biometrik']);
             fputcsv($handle, ['Pesan_Evaluasi', $record->decision_reason ?: '-', 'Penjelasan Keputusan Engine Biometrik']);
 

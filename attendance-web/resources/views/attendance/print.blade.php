@@ -501,14 +501,28 @@
                             <div style="font-size: 8pt;">
                                 <strong>L2:</strong> {{ isset($meta['euclidean_distance']) ? number_format($meta['euclidean_distance'], 3) : '-' }}
                                 &bull;
-                                <strong>PAD:</strong> {{ $meta['pad_pred'] ?? 'PASS' }}
+                                <strong>PAD:</strong> {{ $meta['pad_pred'] ?? '-' }}
                             </div>
                             <div style="font-size: 7.5pt; color: #64748b;">
-                                Blinks: {{ $meta['ear_blinks'] ?? 0 }} | Mouth: {{ $meta['mar_mouths'] ?? 0 }}
+                                Blinks: {{ $meta['ear_blinks'] ?? '-' }} | Mouth: {{ $meta['mar_mouths'] ?? '-' }}
                             </div>
                         </td>
+                        @php
+                            // Nilai yang tidak terukur dicetak apa adanya, bukan diisi 30 cm / 300 lux.
+                            $distanceEstimated = ($meta['distance_source'] ?? null) === 'camera';
+                            $luxEstimated = ($meta['lux_source'] ?? null) === 'camera';
+                            $printDistance = is_numeric($meta['distance_cm'] ?? null)
+                                ? ($distanceEstimated ? '~' : '') . rtrim(rtrim(number_format((float) $meta['distance_cm'], 1, '.', ''), '0'), '.') . ' cm'
+                                : 'Jarak tidak terukur';
+                            $printLux = is_numeric($meta['lux'] ?? null)
+                                ? ($luxEstimated ? '~' : '') . round((float) $meta['lux']) . ' Lux'
+                                : 'Lux tidak terukur';
+                        @endphp
                         <td style="font-size: 8pt; text-align: center;">
-                            {{ $meta['distance_cm'] ?? 30 }} cm &bull; {{ $meta['lux'] ?? 300 }} Lux
+                            {{ $printDistance }} &bull; {{ $printLux }}
+                            @if(($distanceEstimated && is_numeric($meta['distance_cm'] ?? null)) || ($luxEstimated && is_numeric($meta['lux'] ?? null)))
+                                <div style="font-size: 7pt; color: #64748b;">~ = estimasi kamera (belum dikalibrasi)</div>
+                            @endif
                         </td>
                         <td style="font-size: 8pt; color: #334155;">
                             {{ $r->decision_reason ?: ($isSuccess ? 'Terverifikasi biometrik' : '-') }}

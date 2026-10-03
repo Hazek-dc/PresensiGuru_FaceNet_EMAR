@@ -226,6 +226,22 @@ export default function AuthenticatedLayout({
                     active: route().current('admin.settings.*'),
                     category: 'Laboratorium Riset',
                 },
+                {
+                    id: 'distance-calibration',
+                    label: 'Kalibrasi Jarak',
+                    icon: 'straighten',
+                    href: route('admin.distance-calibration'),
+                    active: route().current('admin.distance-calibration'),
+                    category: 'Laboratorium Riset',
+                },
+                {
+                    id: 'lux-calibration',
+                    label: 'Kalibrasi Lux',
+                    icon: 'light_mode',
+                    href: route('admin.lux-calibration'),
+                    active: route().current('admin.lux-calibration'),
+                    category: 'Laboratorium Riset',
+                },
             ],
         });
     }

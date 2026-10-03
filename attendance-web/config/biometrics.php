@@ -28,6 +28,30 @@ return [
     'distance_cm' => (int) env('BIOMETRICS_DISTANCE_CM', 30),
 
     /*
+    | Rentang posisi jarak (cm, batas inklusif), sama dengan DISTANCE_BANDS di
+    | parameter_penelitian.py dan Utils/distanceCalibration.ts. Ketiganya boleh lanjut
+    | ke pemindaian; di luar rentang hanya panduan reposisi, keputusan S1/S2/S3
+    | tidak pernah ditolak karena jarak.
+    */
+    'distance_bands' => [
+        'DEKAT' => [30.0, 40.0],
+        'IDEAL' => [45.0, 55.0],
+        'JAUH' => [60.0, 70.0],
+    ],
+
+    /*
+    | Kalibrasi jarak kamera (d = a / r + b dari titik 30/45/60 cm) ditolak bila
+    | salah satu titik meleset lebih dari batas ini dari model hasil fit.
+    */
+    'calibration_max_residual_cm' => (float) env('BIOMETRICS_CALIBRATION_MAX_RESIDUAL_CM', 3.0),
+
+    /*
+    | Galat relatif maksimum model kalibrasi lux (kamera terhadap luxmeter).
+    | 0,20 = selisih 20 % dari bacaan luxmeter pada titik mana pun.
+    */
+    'lux_calibration_max_rel_error' => (float) env('BIOMETRICS_LUX_CALIBRATION_MAX_REL_ERROR', 0.20),
+
+    /*
     | Umur maksimum (detik) bacaan luxmeter/sensor jarak yang masih dianggap hasil
     | ukur. Sama dengan read_sidecar() di capture_session.py (10 s). Bacaan lebih
     | tua dari ini ditandai basi dan tidak dikirim sebagai lux/jarak presensi.

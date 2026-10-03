@@ -8,7 +8,12 @@
  * - ITU-R BT.709: Relative Luminance (Y = 0.2126R + 0.7152G + 0.0722B)
  * - Model Reflektansi Difus Kulit Manusia (Lambertian Surface): Albedo rho ≈ 0.35
  * - Pengukuran Cahaya Ruangan Murni: Mengeliminasi bias kecerahan layar perangkat (screen glare discount)
+ *
+ * Tanpa kalibrasi luxmeter, hasil modul ini adalah perkiraan (sumber 'camera'),
+ * bukan hasil ukur, dan selalu ditampilkan serta dicatat dengan tanda estimasi.
  */
+
+import { LUMA_DARK, LUMA_SATURATED } from './luxCalibration';
 
 export interface LuxCategory {
     label: 'Redup' | 'Standar' | 'Terang';
@@ -20,7 +25,7 @@ export interface LuxCategory {
 }
 
 export interface CameraSettingsLike {
-    exposureTime?: number;      // in seconds or ms
+    exposureTime?: number;      // satuan 100 mikrodetik (W3C MediaStream Image Capture)
     iso?: number;               // ISO sensitivity (e.g. 100, 200, 800)
     exposureCompensation?: number;
     exposureMode?: string;
@@ -222,10 +227,9 @@ export function calculatePhotometricLux(
     const highlightClipRatio = highlightClipCount / totalPixels;
     const contrastRatio = meanAmbientY > 0 ? meanFaceY / meanAmbientY : 1.0;
 
-    // 2. Filter Eliminasi Pendaran Cahaya Layar (Screen Brightness Glare Discount)
-    // Jika ruangan gelap (meanAmbientY < 35 dan shadowClipRatio tinggi), tetapi wajah tampak terang
-    // karena pendaran monitor/layar HP langsung ke muka, diskon pendaran tersebut agar tidak
-    // mengelabui sistem menjadi mengira ruangan terang.
+    // 2. Diskon pendaran layar (heuristik). Berlaku bila latar gelap (rerata < 65) dan wajah
+    // lebih dari 1,4x lebih terang dari latar: bisa karena cahaya layar ke wajah, tetapi juga
+    // pada latar gelap biasa. Hasilnya ditandai isGlareCompensated agar barisnya dapat dikenali.
     let isGlareCompensated = false;
     let effectiveFaceY = meanFaceY;
 
@@ -238,14 +242,10 @@ export function calculatePhotometricLux(
     let rawLux: number;
     let method: PhotometryAnalysis['method'];
 
-    // 3. Jika WebRTC Camera Driver menyediakan metadata eksposur fisik (ISO & Shutter)
-    let exposureSeconds = cameraSettings?.exposureTime;
+    // 3. Jika driver kamera melaporkan eksposur fisik (waktu eksposur & ISO).
+    // MediaTrackSettings.exposureTime bersatuan 100 mikrodetik, jadi dibagi 10.000 menjadi detik.
+    const exposureSeconds = cameraSettings?.exposureTime !== undefined ? cameraSettings.exposureTime / 10000 : undefined;
     const iso = cameraSettings?.iso;
-
-    if (exposureSeconds !== undefined && exposureSeconds > 1.0) {
-        // Konversi milidetik ke detik
-        exposureSeconds = exposureSeconds / 1000.0;
-    }
 
     if (exposureSeconds && exposureSeconds > 0 && iso && iso > 0) {
         // Model APEX untuk objek manusia:
@@ -267,10 +267,8 @@ export function calculatePhotometricLux(
         // Fusi bobot: 65% intensitas pada objek manusia + 35% cahaya ruangan sekitar
         const effectiveRoomLuminance = (effectiveFaceY * 0.65 + meanAmbientY * 0.35) / 255.0;
 
-        // Model kurva fotometri ruangan terkalibrasi ISO 30107:
-        // - Ruang redup (effY ~ 0.22) -> ~75 Lux
-        // - Ruang standar (effY ~ 0.52) -> ~300 Lux
-        // - Ruang terang (effY ~ 0.78) -> ~650 Lux
+        // Kurva heuristik (belum divalidasi terhadap luxmeter), dipilih agar kecerahan
+        // ~0.22 / ~0.52 / ~0.78 jatuh di sekitar 75 / 300 / 650 lux (skenario redup/standar/terang).
         const baseLux = 850.0 * Math.pow(Math.max(0.01, effectiveRoomLuminance), 1.75);
         rawLux = baseLux * Math.max(0.15, aecGainFactor);
         method = isFaceTargeted ? 'human_face_photometry' : 'fallback_portrait_photometry';
@@ -367,4 +365,68 @@ export function loadLuxCalibration(): { profileId: string; factor: number; offse
         }
     } catch {}
     return { profileId: 'LAPTOP_DEFAULT', factor: 1.0, offset: 0 };
+}
+
+/**
+ * Satu sampel fotometri dari video kamera (64×48 piksel) beserta setelan eksposur
+ * track bila tersedia. Dipakai widget luxometer dan pengukur otomatis Studio.
+ */
+export function sampleCameraPhotometry(
+    video: HTMLVideoElement | null | undefined,
+    canvas: HTMLCanvasElement,
+    faceROI: NormalizedFaceROI | null | undefined,
+    profile: { factor: number; offset: number },
+): PhotometryAnalysis | null {
+    if (!video || video.readyState < 2) return null;
+    canvas.width = 64;
+    canvas.height = 48;
+    const ctx = canvas.getContext('2d', { willReadFrequently: true });
+    if (!ctx) return null;
+    ctx.drawImage(video, 0, 0, 64, 48);
+    const data = ctx.getImageData(0, 0, 64, 48).data;
+
+    let settings: CameraSettingsLike | undefined;
+    try {
+        const track = (video.srcObject as MediaStream | null)?.getVideoTracks?.()[0];
+        settings = track && typeof track.getSettings === 'function' ? (track.getSettings() as CameraSettingsLike) : undefined;
+    } catch {
+        settings = undefined;
+    }
+    return calculatePhotometricLux(data, 64, 48, faceROI, settings, profile.factor, profile.offset);
+}
+
+/**
+ * Frame yang praktis hitam (lensa tertutup, frame pertama kamera) atau jenuh tidak
+ * dapat diperkirakan; dilewati alih-alih dicatat sebagai batas bawah/atas model.
+ * Ambang sama dengan penolakan sampel kalibrasi (LUMA_DARK / LUMA_SATURATED).
+ */
+export function isUsablePhotometry(analysis: PhotometryAnalysis): boolean {
+    return (
+        Math.max(analysis.meanFaceY, analysis.meanAmbientY) > LUMA_DARK &&
+        Math.min(analysis.meanFaceY, analysis.meanAmbientY) < LUMA_SATURATED
+    );
+}
+
+/** Cara sebuah perkiraan lux kamera dibuat; dicatat bersama presensi, tidak dipakai keputusan. */
+export interface LuxEstimateDetail {
+    method: PhotometryAnalysis['method'];
+    profile: string;
+    factor: number;
+    offset: number;
+    glare_compensated: boolean;
+    face_targeted: boolean;
+}
+
+export function luxEstimateDetail(
+    analysis: PhotometryAnalysis,
+    profile: { profileId?: string; factor: number; offset: number },
+): LuxEstimateDetail {
+    return {
+        method: analysis.method,
+        profile: profile.profileId ?? 'LAPTOP_DEFAULT',
+        factor: profile.factor,
+        offset: profile.offset,
+        glare_compensated: analysis.isGlareCompensated,
+        face_targeted: analysis.isFaceTargeted,
+    };
 }

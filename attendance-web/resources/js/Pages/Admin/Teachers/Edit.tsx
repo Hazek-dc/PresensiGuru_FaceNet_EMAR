@@ -1,4 +1,7 @@
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
+import { StaffProfileFields } from '@/Components/Admin/StaffProfileFields';
+import { TeacherAvatarUploader } from '@/Components/Admin/TeacherAvatar';
+import { StaffPosition } from '@/Utils/staffProfile';
 import { Head, Link, useForm } from '@inertiajs/react';
 
 export default function Edit({
@@ -8,6 +11,8 @@ export default function Edit({
     todayAttendance,
     todayDispensation,
     recent_leaves,
+    subject_options = [],
+    max_subjects = 3,
 }: any) {
     const activeDispensation = todayDispensation || today_dispensation || (today_attendance && ['izin', 'sakit'].includes(today_attendance.status) ? today_attendance : null);
     const activeAttendance = todayAttendance || (today_attendance && today_attendance.is_present ? today_attendance : null);
@@ -20,14 +25,20 @@ export default function Edit({
         delete: destroy,
         processing,
         errors,
+        transform,
     } = useForm({
         name: teacher.name,
         email: teacher.email,
+        position: (teacher.position ?? '') as StaffPosition | '',
+        subjects: (teacher.subjects ?? []) as string[],
         attendance_status: activeDispensation?.status === 'sakit' ? 'sakit' : activeDispensation?.status === 'izin' ? 'izin' : '',
         attendance_category: activeDispensation?.category || activeDispensation?.reason || '',
         attendance_reason: activeDispensation?.decision_reason || activeDispensation?.reason || '',
         attendance_doc: activeDispensation?.document_reference || '',
     });
+
+    // Bidang studi hanya untuk guru; server juga membuangnya untuk jabatan lain.
+    transform((form) => ({ ...form, subjects: form.position === 'guru' ? form.subjects : [] }));
 
     const submit = (e: React.FormEvent) => {
         e.preventDefault();
@@ -81,6 +92,17 @@ export default function Edit({
                                 <span className="material-symbols-outlined text-royal-blue dark:text-sky-400">badge</span>
                                 <span>Informasi Profil</span>
                             </h3>
+                            <div className="mb-6 pb-6 border-b border-outline-variant/30 dark:border-white/10">
+                                <p className="mb-3 block text-xs font-bold uppercase tracking-wider text-deep-navy dark:text-slate-300">
+                                    Foto Profil
+                                </p>
+                                <TeacherAvatarUploader
+                                    teacherId={teacher.id}
+                                    name={teacher.name}
+                                    avatarUrl={teacher.avatar_url}
+                                    disabled={teacher.deleted_at !== null}
+                                />
+                            </div>
                             <form onSubmit={submit} className="space-y-4">
                                 <div>
                                     <label className="block text-xs font-bold uppercase tracking-wider text-deep-navy dark:text-slate-300">
@@ -120,6 +142,26 @@ export default function Edit({
                                             {errors.email}
                                         </p>
                                     )}
+                                </div>
+
+                                {/* Jabatan & bidang studi */}
+                                <div className="mt-6 pt-6 border-t border-outline-variant/30 dark:border-white/10">
+                                    <h4 className="mb-3.5 text-sm font-bold text-deep-navy dark:text-white flex items-center gap-2">
+                                        <span className="material-symbols-outlined text-royal-blue dark:text-sky-400 text-[20px]">
+                                            work
+                                        </span>
+                                        <span>Jabatan &amp; Bidang Studi</span>
+                                    </h4>
+                                    <StaffProfileFields
+                                        position={data.position}
+                                        subjects={data.subjects}
+                                        subjectOptions={subject_options}
+                                        maxSubjects={max_subjects}
+                                        onPositionChange={(value) => setData('position', value)}
+                                        onSubjectsChange={(value) => setData('subjects', value)}
+                                        errors={errors as Record<string, string>}
+                                        disabled={teacher.deleted_at !== null}
+                                    />
                                 </div>
 
                                 {/* Status Izin & Sakit Guru (Hanya Izin & Sakit) */}

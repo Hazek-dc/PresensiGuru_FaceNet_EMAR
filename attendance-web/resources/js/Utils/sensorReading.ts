@@ -12,7 +12,9 @@ export const SENSOR_MAX_AGE_S = 10;
 export const NOT_MEASURED_LABEL = 'Tidak terukur';
 
 export type LuxSource = 'luxmeter' | 'camera';
-export type DistanceSource = 'sensor' | 'camera';
+// camera_calibrated: estimasi browser lewat model kalibrasi jarak (distanceCalibration.ts).
+export type CameraDistanceSource = 'camera' | 'camera_calibrated';
+export type DistanceSource = 'sensor' | CameraDistanceSource;
 export type SensorSource = LuxSource | DistanceSource;
 
 export interface SensorReading<S extends SensorSource = SensorSource> {
@@ -20,6 +22,15 @@ export interface SensorReading<S extends SensorSource = SensorSource> {
     source: S;
     /** Date.now() saat bacaan diterima browser. */
     measuredAt: number;
+    /** Hanya untuk lux sumber 'camera': cara perkiraannya dibuat (metode, profil). */
+    estimate?: {
+        method: string;
+        profile: string;
+        factor: number;
+        offset: number;
+        glare_compensated: boolean;
+        face_targeted: boolean;
+    };
 }
 
 /** Bentuk respons GET /api/lux/current dan /api/distance/current. */
@@ -156,6 +167,9 @@ export function sensorFormFields({ lux, distance, luxTarget, distanceTarget, now
     if (freshLux) {
         fields.push(['lux_value', String(Math.round(freshLux.value * 10) / 10)]);
         fields.push(['lux_source', freshLux.source]);
+        if (freshLux.source === 'camera' && freshLux.estimate) {
+            fields.push(['lux_estimate', JSON.stringify(freshLux.estimate)]);
+        }
     }
     if (freshDistance) {
         fields.push(['distance_cm', String(Math.round(freshDistance.value * 10) / 10)]);
@@ -177,6 +191,19 @@ export function formatMeasured(value: number | null | undefined, unit: string, d
     return `${value.toFixed(digits)} ${unit}`;
 }
 
+/** Label sumber lux; perkiraan kamera tanpa kalibrasi selalu bertanda estimasi. */
+export const LUX_ESTIMATE_LABEL = 'Perkiraan kamera (belum dikalibrasi)';
+
+export function luxSourceLabel(source: string | null | undefined): string {
+    return source === 'camera' ? LUX_ESTIMATE_LABEL : sourceLabel(source as SensorSource | null | undefined);
+}
+
+/** Lux untuk tampilan: perkiraan kamera diberi awalan "~", sama seperti chip pemindai. */
+export function formatLux(value: number | null | undefined, source: string | null | undefined, digits = 0): string {
+    const text = formatMeasured(value, 'Lux', digits);
+    return source === 'camera' && text !== NOT_MEASURED_LABEL ? `~${text}` : text;
+}
+
 export function sourceLabel(source: SensorSource | null | undefined): string {
     switch (source) {
         case 'luxmeter':
@@ -185,6 +212,8 @@ export function sourceLabel(source: SensorSource | null | undefined): string {
             return 'Sensor';
         case 'camera':
             return 'Kamera';
+        case 'camera_calibrated':
+            return 'Kamera terkalibrasi';
         default:
             return '';
     }

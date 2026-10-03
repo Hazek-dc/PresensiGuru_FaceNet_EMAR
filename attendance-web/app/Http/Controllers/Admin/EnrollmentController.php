@@ -58,7 +58,9 @@ class EnrollmentController extends Controller
                 
                 $embeddingId = $data['embedding_id'] ?? $data['subject_id'] ?? $teacherId;
                 if (($data['success'] ?? false) && $embeddingId) {
-                    $user->embedding_id = (string) $embeddingId;
+                    // Mesin membalas alias emb_ (S10 -> emb_S10). ID yang sudah ada
+                    // dipertahankan agar satu partisipan riset tidak terpecah menjadi dua ID.
+                    $user->embedding_id = $user->embedding_id ?: (string) $embeddingId;
                     $user->save();
 
                     return redirect()->back()->with('success', 'Wajah berhasil didaftarkan.');

@@ -1,0 +1,5 @@
+{
+  "enabledPlugins": {
+    "laravel-boost@anthropic-plugin-directory": false
+  }
+}

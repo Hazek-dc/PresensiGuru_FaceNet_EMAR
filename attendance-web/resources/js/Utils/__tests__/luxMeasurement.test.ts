@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
     calculatePhotometricLux,
+    isUsablePhotometry,
+    luxEstimateDetail,
     getLuxCategory,
     LuxSensorSmoother,
     CALIBRATION_PROFILES,
@@ -40,8 +42,9 @@ describe('Lux Measurement & Photometry Unit Tests', () => {
 
         // Standard outdoor daylight settings: t = 1/250s (0.004s), ISO 100, f/2.0
         // APEX: (250 * 4) / (0.004 * 100) * (128 / 128) = 1000 / 0.4 = 2500 Lux
+        // MediaTrackSettings.exposureTime bersatuan 100 µs: 0,004 s = 40.
         const result = calculatePhotometricLux(rgba, width, height, null, {
-            exposureTime: 0.004,
+            exposureTime: 40,
             iso: 100,
         });
 
@@ -184,5 +187,36 @@ describe('Lux Measurement & Photometry Unit Tests', () => {
         const laptop = CALIBRATION_PROFILES.find((p) => p.id === 'LAPTOP_DEFAULT');
         expect(laptop).toBeDefined();
         expect(laptop?.factor).toBe(1.0);
+    });
+});
+
+describe('perkiraan lux otomatis tanpa kalibrasi', () => {
+    const frame = (value: number) => {
+        const rgba = new Uint8ClampedArray(64 * 48 * 4);
+        for (let i = 0; i < rgba.length; i += 4) {
+            rgba[i] = value;
+            rgba[i + 1] = value;
+            rgba[i + 2] = value;
+            rgba[i + 3] = 255;
+        }
+        return calculatePhotometricLux(rgba, 64, 48, null);
+    };
+
+    it('frame hitam atau jenuh tidak dianggap bacaan, bukan batas 5 lux', () => {
+        expect(frame(0).calibratedLux).toBe(5);
+        expect(isUsablePhotometry(frame(0))).toBe(false);
+        expect(isUsablePhotometry(frame(255))).toBe(false);
+        expect(isUsablePhotometry(frame(120))).toBe(true);
+    });
+
+    it('mencatat metode dan profil lensa yang dipakai', () => {
+        expect(luxEstimateDetail(frame(120), { profileId: 'EXTERNAL_USB', factor: 1.25, offset: 0 })).toEqual({
+            method: 'fallback_portrait_photometry',
+            profile: 'EXTERNAL_USB',
+            factor: 1.25,
+            offset: 0,
+            glare_compensated: false,
+            face_targeted: false,
+        });
     });
 });

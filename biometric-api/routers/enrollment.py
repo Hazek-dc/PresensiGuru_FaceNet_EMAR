@@ -36,6 +36,10 @@ MIN_ENROLL_FRAMES = 3
 MAX_ENROLL_FILES = 10
 PREVIEW_TTL_S = 15 * 60
 PREVIEW_MAX_ENTRIES = 50
+# Sampel tambahan (cahaya/jarak lain) hanya digabung bila masih dekat dengan
+# template lama. Wajah asli lintas kondisi terukur <= 0,72 (lintas perangkat),
+# wajah orang lain >= 0,95; 0,80 mencegah wajah orang lain tercampur ke template.
+APPEND_MAX_DISTANCE = 0.80
 
 # Template hasil pratinjau menunggu konfirmasi di memori proses, bukan di galeri.
 # Restart mesin menghapus pratinjau; pengguna cukup mengulang pratinjau.
@@ -183,11 +187,17 @@ async def enroll_preview(
     name: Optional[str] = Form(""),
     dept: Optional[str] = Form(""),
     session_tag: Optional[str] = Form("web_enrollment"),
+    mode: Optional[str] = Form("replace"),
 ):
     """
     Hitung template dari files[] tanpa menyentuh galeri. Template ditahan di memori
     dengan preview_token dan baru disimpan lewat /enroll/commit.
+
+    mode="append" menambah sesi baru ke template yang ada alih-alih menggantinya.
     """
+    mode = (mode or "replace").strip().lower()
+    if mode not in ("replace", "append"):
+        return _fail(400, "mode harus 'replace' atau 'append'", "BAD_MODE")
     form = await request.form()
     actual_id = _form_subject_id(form, subject_id, teacher_id, user_id)
     if not actual_id:
@@ -230,6 +240,17 @@ async def enroll_preview(
     if current is not None and np.shape(current) == np.shape(embedding):
         distance = float(np.linalg.norm(embedding - current))
 
+    if mode == "append":
+        if distance is None:
+            return _fail(422, "Belum ada template untuk subjek ini; gunakan mode ganti untuk pendaftaran pertama.",
+                         "NO_TEMPLATE_TO_APPEND", n_frames=n_frames, n_uploaded=n_uploaded)
+        if distance > APPEND_MAX_DISTANCE:
+            return _fail(422, (f"Sampel baru berjarak {distance:.3f} dari template tersimpan (batas "
+                               f"{APPEND_MAX_DISTANCE:.2f}); tidak digabung karena mungkin bukan wajah "
+                               "yang sama. Gunakan mode ganti bila memang ingin mengganti template."),
+                         "APPEND_TOO_FAR", n_frames=n_frames, n_uploaded=n_uploaded,
+                         distance_to_current=distance)
+
     template_hash = facenet.template_hash(embedding)
     token = _stage({
         "subject_id": actual_id,
@@ -240,6 +261,7 @@ async def enroll_preview(
         "n_frames": n_frames,
         "n_uploaded": n_uploaded,
         "template_hash": template_hash,
+        "mode": mode,
     })
     return {
         "success": True,
@@ -251,6 +273,7 @@ async def enroll_preview(
         "n_frames": n_frames,
         "n_uploaded": n_uploaded,
         "distance_to_current": distance,
+        "mode": mode,
     }
 
 
@@ -286,6 +309,7 @@ async def enroll_commit(request: Request):
         res = await run_in_threadpool(
             system.facenet.persist_template, actual_id, entry["name"], entry["dept"],
             entry["embedding"], entry["n_frames"], entry["session_tag"], (clean_id, prefixed_id),
+            entry.get("mode") == "append",
         )
     except Exception as e:
         with _previews_lock:
@@ -299,5 +323,65 @@ async def enroll_commit(request: Request):
         "subject_id": actual_id,
         "template_hash": res.get("template_hash"),
         "n_frames": res.get("n_frames"),
+        "n_sessions": res.get("n_sessions"),
+        "mode": entry.get("mode", "replace"),
         "backup": res.get("backup"),
     }
+
+
+# Tag sesi yang direkam lewat kamera presensi (web/kiosk); selain itu template
+# berasal dari foto (mis. dataset foto_selfie) dan biasanya tidak cocok dengan webcam.
+WEBCAM_SESSION_TAGS = ("web_enrollment", "kiosk_webcam", "manual_enrollment")
+PHOTO_SESSION_TAGS = ("enrollment", "enrollment_multisession")
+MAX_STATUS_IDS = 100
+
+
+def _session_source(tag: Any) -> str:
+    tag = str(tag or "")
+    if tag in WEBCAM_SESSION_TAGS or tag.startswith("preview_"):
+        return "webcam"
+    if tag in PHOTO_SESSION_TAGS:
+        return "photo"
+    return "unknown"
+
+
+def _template_status(facenet: Any, subject_id: str) -> Dict[str, Any]:
+    key = facenet.resolve_id(subject_id)
+    if key is None:
+        return {"id": subject_id, "enrolled": False, "key": None, "source": None,
+                "n_sessions": 0, "webcam_sessions": 0, "n_frames": None, "enrolled_at": None}
+    record = facenet.gallery[key]
+    sessions = record.get("sessions") or [{"session": record.get("session")}]
+    sources = [_session_source(s.get("session")) for s in sessions]
+    webcam = sources.count("webcam")
+    source = "webcam" if webcam else ("photo" if "photo" in sources else "unknown")
+    return {
+        "id": subject_id,
+        "enrolled": True,
+        "key": key,
+        "source": source,
+        "n_sessions": len(sessions),
+        "webcam_sessions": webcam,
+        "n_frames": record.get("n_frames"),
+        "enrolled_at": record.get("enrolled_at"),
+    }
+
+
+@router.get("/gallery/status")
+async def gallery_status(ids: str = ""):
+    """
+    Kesiapan template wajah per subjek (tanpa embedding): terdaftar atau belum,
+    asal template (webcam/foto), dan jumlah sesi. Hanya membaca galeri.
+    """
+    wanted = [i.strip() for i in ids.split(",") if i.strip()]
+    if not wanted:
+        return _fail(400, "Parameter ids diperlukan, mis. ids=S01,S02", "IDS_REQUIRED")
+    if len(wanted) > MAX_STATUS_IDS:
+        return _fail(400, f"Maksimal {MAX_STATUS_IDS} ID", "TOO_MANY_IDS")
+    try:
+        system, _ = get_engine()
+    except Exception as e:
+        return _fail(503, f"Mesin biometrik tidak dapat dimuat: {e}", "ENGINE_UNAVAILABLE")
+    facenet = system.facenet
+    await run_in_threadpool(facenet.refresh_gallery)
+    return {"success": True, "subjects": [_template_status(facenet, i) for i in wanted]}

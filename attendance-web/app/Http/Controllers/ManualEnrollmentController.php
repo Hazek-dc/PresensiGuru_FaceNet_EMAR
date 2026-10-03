@@ -65,10 +65,13 @@ class ManualEnrollmentController extends Controller
             'files.*' => 'required|image|max:10240',
             'consent_checked' => 'required|accepted',
             'consent_version' => 'required|string',
+            // append: sampel di kondisi cahaya/jarak lain ditambahkan ke template, bukan mengganti.
+            'mode' => 'nullable|in:replace,append',
         ]);
 
         $user = $request->user();
         $targetUser = User::findOrFail($request->subject_id);
+        $mode = $request->input('mode', 'replace') ?: 'replace';
 
         if (!in_array($user->role, ['admin', 'researcher']) && (int) $targetUser->id !== (int) $user->id) {
             return response()->json([
@@ -84,6 +87,7 @@ class ManualEnrollmentController extends Controller
             'name' => $targetUser->name ?? $engineSubject,
             'dept' => '',
             'session_tag' => 'web_enrollment',
+            'mode' => $mode,
         ];
 
         // Lampiran PendingRequest dikosongkan setelah terkirim, jadi setiap
@@ -141,7 +145,8 @@ class ManualEnrollmentController extends Controller
 
         // Mesin hanya mengukur jarak bila galeri sudah punya template di kunci ini,
         // jadi commit akan menimpanya walau kolom embedding_id masih kosong.
-        $replacesExisting = !empty($targetUser->embedding_id) || $distance !== null;
+        // Mode tambah tidak mengganti template; sesi lama tetap ikut dirata-rata.
+        $replacesExisting = $mode === 'replace' && (!empty($targetUser->embedding_id) || $distance !== null);
 
         $previewToken = Str::uuid()->toString();
         Cache::put('enroll_preview_' . $previewToken, [
@@ -154,6 +159,7 @@ class ManualEnrollmentController extends Controller
             'n_uploaded' => $nUploaded,
             'distance_to_current' => $distance,
             'replaces_existing' => $replacesExisting,
+            'mode' => $mode,
             'consent_version' => $request->consent_version,
             'enrolled_by' => $user->id,
             'timestamp' => now()->toIso8601String(),
@@ -172,7 +178,9 @@ class ManualEnrollmentController extends Controller
                 'n_frames' => $nFrames,
                 'n_uploaded' => $nUploaded,
                 'distance_to_current' => $distance,
+                // Peringatan penggantian hanya untuk mode ganti; mode tambah tidak mengganti.
                 'has_existing_template' => $replacesExisting,
+                'mode' => $mode,
                 'existing_embedding_id' => $targetUser->embedding_id,
             ],
         ]);
@@ -217,7 +225,8 @@ class ManualEnrollmentController extends Controller
 
         // Commit selalu menimpa template di galeri bila subjek sudah punya template,
         // termasuk bila kuncinya sama dengan embedding_id lama.
-        $replacesExisting = !empty($targetUser->embedding_id) || !empty($previewData['replaces_existing']);
+        $replacesExisting = ($previewData['mode'] ?? 'replace') === 'replace'
+            && (!empty($targetUser->embedding_id) || !empty($previewData['replaces_existing']));
         if ($replacesExisting && !$request->boolean('replace_confirmed')) {
             $current = $targetUser->embedding_id ?: $previewData['engine_subject_id'];
             return response()->json([
@@ -281,12 +290,13 @@ class ManualEnrollmentController extends Controller
         $templateHash = is_string($result['template_hash'] ?? null) ? $result['template_hash'] : $previewData['template_hash'];
         $backup = is_string($result['backup'] ?? null) ? $result['backup'] : null;
         $nFrames = isset($result['n_frames']) ? (int) $result['n_frames'] : $previewData['n_frames'];
+        $nSessions = isset($result['n_sessions']) ? (int) $result['n_sessions'] : null;
 
         // Token mesin sudah terpakai; entri cache tidak berguna lagi apa pun hasil DB.
         Cache::forget($cacheKey);
 
         try {
-            DB::transaction(function () use ($targetUser, $user, $previewData, $request, $embeddingId, $templateHash, $backup, $nFrames) {
+            DB::transaction(function () use ($targetUser, $user, $previewData, $request, $embeddingId, $templateHash, $backup, $nFrames, $nSessions) {
                 $oldEmbedding = $targetUser->embedding_id;
                 $targetUser->embedding_id = $embeddingId;
                 $targetUser->save();
@@ -303,6 +313,8 @@ class ManualEnrollmentController extends Controller
                         'preview_template_hash' => $previewData['template_hash'],
                         'engine_backup' => $backup,
                         'n_frames' => $nFrames,
+                        'mode' => $previewData['mode'] ?? 'replace',
+                        'n_sessions' => $nSessions,
                         'n_uploaded' => $previewData['n_uploaded'] ?? null,
                         'distance_to_current' => $previewData['distance_to_current'] ?? null,
                         'consent_version' => $request->consent_version,
@@ -328,11 +340,15 @@ class ManualEnrollmentController extends Controller
 
         return response()->json([
             'status' => 'success',
-            'message' => 'Wajah berhasil didaftarkan ke sistem biometrik.',
+            'message' => ($previewData['mode'] ?? 'replace') === 'append'
+                ? 'Sampel ditambahkan ke template wajah (' . ($nSessions ?? '?') . ' sesi).'
+                : 'Wajah berhasil didaftarkan ke sistem biometrik.',
             'embedding_id' => $embeddingId,
             'template_hash' => $templateHash,
             'backup' => $backup,
             'n_frames' => $nFrames,
+            'n_sessions' => $nSessions,
+            'mode' => $previewData['mode'] ?? 'replace',
         ]);
     }
 

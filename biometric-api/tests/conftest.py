@@ -16,6 +16,8 @@ ROOT = Path(__file__).resolve().parents[2]
 REAL_GALLERY = ROOT / "gallery" / "face_gallery.pkl"
 
 os.environ["FACENET_GALLERY_PATH"] = str(Path(tempfile.mkdtemp(prefix="galeri_tes_")) / "face_gallery.pkl")
+# Tanpa ini, TestClient yang menjalankan lifespan memuat mesin asli di latar.
+os.environ["BIOMETRIC_WARMUP"] = "0"
 
 
 def _fingerprint():

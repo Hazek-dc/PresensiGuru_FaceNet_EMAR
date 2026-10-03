@@ -18,8 +18,22 @@ import {
     Zap,
 } from 'lucide-react';
 import { AnimatePresence, motion } from 'motion/react';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useFaceLandmarker } from '../../Hooks/useFaceLandmarker';
+import {
+    ActiveCalibration,
+    calibrationAppliesTo,
+    CameraInfo,
+    cameraInfoFromTrack,
+    categoryLabel,
+    classifyDistance,
+    DISTANCE_BANDS,
+    distancePrecheck,
+    estimateFromRatio,
+    faceWidthRatio,
+    UNCALIBRATED_NOTE,
+} from '../../Utils/distanceCalibration';
+import { CameraDistanceSource, NOT_MEASURED_LABEL } from '../../Utils/sensorReading';
 import {
     ChallengeTracker,
     CycleCounter,
@@ -34,9 +48,9 @@ import { evaluateQualityGate } from '../../Utils/faceGeometry';
 import {
     DistanceSensorSmoother,
     estimateFaceDistance,
-    getDistanceCategory,
 } from '../../Utils/faceDistance';
 import { NormalizedFaceROI } from '../../Utils/luxMeasurement';
+import { classifyLighting, LuxCalibrationContract, LuxProbeResult, runLuxProbe } from '../../Utils/luxCalibration';
 
 /* ------------------------------------------------------------------ */
 /*  Types                                                              */
@@ -82,11 +96,29 @@ interface FaceScannerContainerProps {
     onResetScan?: () => void;
     resetKey?: number;
     onVideoRefReady?: (video: HTMLVideoElement | null) => void;
-    onDistanceUpdate?: (distanceCm: number, isIdeal: boolean, category: string) => void;
+    onDistanceUpdate?: (
+        distanceCm: number,
+        isIdeal: boolean,
+        category: string,
+        source: CameraDistanceSource,
+    ) => void;
     onFaceROIUpdate?: (roi: NormalizedFaceROI) => void;
     // true selama modal pendaftaran wajah terbuka: wajah yang sedang didaftarkan
     // tidak boleh ikut terekam dan terkirim sebagai presensi.
     paused?: boolean;
+    /** Kalibrasi jarak aktif dari server; dipakai hanya bila cocok dengan kamera ini. */
+    distanceCalibration?: ActiveCalibration | null;
+    onCameraInfoChange?: (info: CameraInfo | null) => void;
+    /** Kalibrasi lux aktif; sampel cahaya diambil saat hitung mundur, sebelum perekaman. */
+    luxCalibration?: LuxCalibrationContract | null;
+    onLuxProbe?: (probe: LuxProbeResult) => void;
+    /**
+     * Lux yang akan dicatat bersama presensi (luxmeter, kamera terkalibrasi, atau
+     * perkiraan kamera), ditampilkan di sebelah jarak. null bila tidak terukur.
+     */
+    luxOverlay?: { lux: number | null; source: string | null; calibrated: boolean; note: string | null } | null;
+    /** Rasio lebar wajah tiap pembaruan landmark (null tanpa wajah), untuk kalibrasi jarak di Studio. */
+    onFaceWidthRatio?: (ratio: number | null) => void;
 }
 
 type LivenessStage = 'NONE' | 'COUNTDOWN' | 'SCANNING_8S' | 'COMPLETED';
@@ -98,6 +130,7 @@ type LivenessStage = 'NONE' | 'COUNTDOWN' | 'SCANNING_8S' | 'COMPLETED';
 const QUALITY_HOLD_MS = 600; // Hold quality check before countdown
 const COUNTDOWN_TOTAL_SEC = 3; // 3 seconds pre-scan countdown
 const SCAN_DURATION_MS = 8000; // Jendela observasi pasif 8,0 s (Tabel 5.2)
+const LUX_IDLE_REFRESH_MS = 30_000; // Sampel cahaya berkala saat Studio menganggur
 
 /* ------------------------------------------------------------------ */
 /*  Component                                                          */
@@ -116,6 +149,12 @@ export function FaceScannerContainer({
     onDistanceUpdate,
     onFaceROIUpdate,
     paused = false,
+    distanceCalibration = null,
+    onCameraInfoChange,
+    luxCalibration = null,
+    onLuxProbe,
+    luxOverlay = null,
+    onFaceWidthRatio,
 }: FaceScannerContainerProps) {
     /* Refs */
     const videoRef = useRef<HTMLVideoElement | null>(null);
@@ -123,6 +162,24 @@ export function FaceScannerContainer({
 
     /* Live Distance Sensor State */
     const [liveDistanceCm, setLiveDistanceCm] = useState<number | null>(null);
+    const [liveDistanceSource, setLiveDistanceSource] = useState<CameraDistanceSource>('camera');
+    const [cameraInfo, setCameraInfo] = useState<CameraInfo | null>(null);
+
+    const calibrationMatch = useMemo(
+        () => calibrationAppliesTo(distanceCalibration, cameraInfo),
+        [distanceCalibration, cameraInfo],
+    );
+    const calibratedModel = calibrationMatch.applies && distanceCalibration ? distanceCalibration.browser : null;
+
+    // Model berganti = skala jarak berganti; rata-rata dan angka lama tidak boleh tercampur.
+    useEffect(() => {
+        distanceSmootherRef.current.reset();
+        setLiveDistanceCm(null);
+    }, [calibratedModel]);
+
+    useEffect(() => {
+        onCameraInfoChange?.(cameraInfo);
+    }, [cameraInfo, onCameraInfoChange]);
 
     useEffect(() => {
         if (videoRef.current) {
@@ -150,6 +207,73 @@ export function FaceScannerContainer({
     );
     const [challengeText, setChallengeText] = useState('');
     const [livenessStage, setLivenessStage] = useState<LivenessStage>('NONE');
+
+    // Sampel cahaya pra-pemindaian: eksposur dikunci sebentar di awal hitung mundur
+    // 3 detik lalu dikembalikan otomatis, sehingga video 8 detik untuk FaceNet dan
+    // EMAR tetap direkam dengan eksposur otomatis seperti biasa.
+    const luxCalibrationRef = useRef(luxCalibration);
+    luxCalibrationRef.current = luxCalibration;
+    const onLuxProbeRef = useRef(onLuxProbe);
+    onLuxProbeRef.current = onLuxProbe;
+    const luxProbeInFlightRef = useRef(false);
+    const livenessStageRef = useRef<LivenessStage>(livenessStage);
+    livenessStageRef.current = livenessStage;
+    // Saat dijeda (pendaftaran wajah, kalibrasi lux) eksposur dipegang jendela lain.
+    const probePausedRef = useRef(paused);
+    probePausedRef.current = paused;
+    const startLuxProbe = useCallback(() => {
+        const calibration = luxCalibrationRef.current;
+        const video = videoRef.current;
+        // Dua sampel bersamaan akan saling mengunci/melepas eksposur.
+        if (!calibration || !video || luxProbeInFlightRef.current || probePausedRef.current) return;
+        luxProbeInFlightRef.current = true;
+        const track = streamRef.current?.getVideoTracks()[0] ?? null;
+        runLuxProbe(video, track, calibration)
+            .then((probe) => onLuxProbeRef.current?.(probe))
+            .catch(() => {})
+            .finally(() => {
+                luxProbeInFlightRef.current = false;
+            });
+    }, []);
+
+    useEffect(() => {
+        if (livenessStage === 'COUNTDOWN') startLuxProbe();
+    }, [livenessStage, startLuxProbe]);
+
+    // Sampel saat kamera siap lalu tiap LUX_IDLE_REFRESH_MS, agar panel
+    // pencahayaan mengikuti perubahan lampu di antara pemindaian. Hanya saat
+    // tidak ada hitung mundur, perekaman, atau jeda.
+    const idleLuxKey = cameraInfo && luxCalibration
+        ? `${cameraInfo.deviceId ?? cameraInfo.label ?? ''}#${luxCalibration.id}`
+        : null;
+    useEffect(() => {
+        if (!idleLuxKey || livenessStage !== 'NONE' || paused) return;
+        const probeIfIdle = () => {
+            if (livenessStageRef.current !== 'NONE' || probePausedRef.current) return;
+            startLuxProbe();
+        };
+        const first = window.setTimeout(probeIfIdle, 1500);
+        const every = window.setInterval(probeIfIdle, LUX_IDLE_REFRESH_MS);
+        return () => {
+            window.clearTimeout(first);
+            window.clearInterval(every);
+        };
+    }, [idleLuxKey, livenessStage, paused, startLuxProbe]);
+    const overlayLux = luxOverlay?.lux ?? null;
+    const overlayEstimated = luxOverlay?.source === 'camera';
+    const overlayKategori = classifyLighting(overlayLux).kategoriNaskah;
+    const luxOverlayTitle =
+        overlayLux !== null
+            ? `Intensitas cahaya ${Math.round(overlayLux)} lux (${overlayKategori}); ${
+                  luxOverlay?.source === 'luxmeter'
+                      ? 'bacaan luxmeter'
+                      : overlayEstimated
+                        ? 'perkiraan kamera, belum dikalibrasi dengan luxmeter'
+                        : 'kamera terkalibrasi'
+              }. Nilai ini ikut dicatat bersama presensi.`
+            : luxOverlay?.calibrated
+              ? `Lux belum terukur: ${luxOverlay.note ?? 'menunggu sampel kamera terkalibrasi (saat kamera siap, tiap 30 detik, dan saat hitung mundur)'}.`
+              : 'Lux belum terukur: menunggu gambar kamera untuk estimasi otomatis (tanpa kalibrasi).';
     const [prefersReducedMotion, setPrefersReducedMotion] = useState(false);
     const [streamResolution, setStreamResolution] = useState<{ width: number; height: number } | null>(null);
     const [availableDevices, setAvailableDevices] = useState<MediaDeviceInfo[]>([]);
@@ -392,6 +516,7 @@ export function FaceScannerContainer({
 
             // Track active stream resolution
             const videoTrack = mediaStream.getVideoTracks()[0];
+            setCameraInfo(cameraInfoFromTrack(videoTrack));
             if (videoTrack) {
                 const settings = videoTrack.getSettings();
                 if (settings.deviceId && !selectedDeviceId) {
@@ -437,6 +562,7 @@ export function FaceScannerContainer({
                 }
             }
             setCameraError(msg);
+            setCameraInfo(null);
             setStatusMessage(msg);
             setVisualState('FAILED');
         }
@@ -626,17 +752,15 @@ export function FaceScannerContainer({
                 }
             }
 
-            // Distance indicator fallback if live sensor not yet estimating
-            if (liveDistanceCm === null) {
-                setIsDistanceIdeal(qualityScore >= 0.35);
-            }
         }
-    }, [geometricEar, geometricMar, hasFace, qualityScore, livenessStage, onMetricsUpdate, liveDistanceCm, speakGuidance]);
+    }, [geometricEar, geometricMar, hasFace, qualityScore, livenessStage, onMetricsUpdate, speakGuidance]);
 
     /* ---- Live Metric Distance Sensor & Human Face ROI for Photometry ---- */
     useEffect(() => {
+        onFaceWidthRatio?.(hasFace && landmarks && landmarks.length > 0 ? faceWidthRatio(landmarks) : null);
         if (!hasFace || !landmarks || landmarks.length === 0) {
             setLiveDistanceCm(null);
+            setIsDistanceIdeal(false);
             distanceSmootherRef.current.reset();
             onFaceROIUpdate?.({
                 xMin: 0.32,
@@ -648,17 +772,25 @@ export function FaceScannerContainer({
             return;
         }
 
-        // 1. Live Distance Sensor via Facial Geometry
-        const rawDist = estimateFaceDistance(landmarks);
+        // 1. Jarak dari model kalibrasi kamera ini bila ada; tanpa itu estimasi antropometri kasar.
+        const source: CameraDistanceSource = calibratedModel ? 'camera_calibrated' : 'camera';
+        const rawDist = calibratedModel
+            ? estimateFromRatio(faceWidthRatio(landmarks), calibratedModel)
+            : estimateFaceDistance(landmarks);
         if (rawDist !== null) {
             const smoothed = distanceSmootherRef.current.update(rawDist);
             if (smoothed !== null) {
                 setLiveDistanceCm(smoothed);
-                const cat = getDistanceCategory(smoothed);
-                const valid = cat.isValidDistance || cat.isIdeal;
-                setIsDistanceIdeal(valid);
-                onDistanceUpdate?.(smoothed, valid, cat.label);
+                setLiveDistanceSource(source);
+                const cls = classifyDistance(smoothed, true);
+                setIsDistanceIdeal(cls.allow_verification);
+                onDistanceUpdate?.(smoothed, cls.allow_verification, categoryLabel(cls.category) ?? '', source);
             }
+        } else {
+            // Landmark tidak cukup untuk mengukur: angka lama tidak boleh meloloskan pra-cek.
+            setLiveDistanceCm(null);
+            setIsDistanceIdeal(false);
+            distanceSmootherRef.current.reset();
         }
 
         // 2. Ekstraksi Bounding Box Objek Manusia untuk Fotometri Cahaya Ruangan
@@ -681,7 +813,32 @@ export function FaceScannerContainer({
             yMax: Math.min(1, maxY),
             isDetected: true,
         });
-    }, [landmarks, hasFace, onDistanceUpdate, onFaceROIUpdate]);
+    }, [landmarks, hasFace, onDistanceUpdate, onFaceROIUpdate, onFaceWidthRatio, calibratedModel]);
+
+    const distanceGate = distancePrecheck({
+        calibrated: calibratedModel !== null,
+        distanceCm: liveDistanceCm,
+        faceDetected: hasFace,
+    });
+    const distanceGateRef = useRef(distanceGate);
+    distanceGateRef.current = distanceGate;
+    const distanceBlocked = distanceGate.blocked;
+    const distanceGuidance = distanceGate.guidance;
+
+    const distanceOverlayLabel =
+        liveDistanceCm === null
+            ? null
+            : distanceGate.classification.allow_verification
+              ? DISTANCE_BANDS.find((b) => b.category === distanceGate.classification.category)?.label ?? null
+              : distanceGate.classification.message;
+    const distanceOverlayTitle = calibratedModel
+        ? `Jarak dari kamera terkalibrasi (kalibrasi #${distanceCalibration?.id})`
+        : [
+              `Jarak kamera: ${UNCALIBRATED_NOTE}`,
+              distanceCalibration && calibrationMatch.reason ? calibrationMatch.reason : null,
+          ]
+              .filter(Boolean)
+              .join('. ');
 
     /* ---- Verification Result Handling ---- */
     useEffect(() => {
@@ -842,6 +999,14 @@ export function FaceScannerContainer({
                     setLivenessStage('NONE');
                     return;
                 }
+                // Pra-cek D2 diulang tepat sebelum merekam: subjek bisa bergeser selama hitung mundur.
+                const gate = distanceGateRef.current;
+                if (gate.blocked) {
+                    qualityStartRef.current = null;
+                    setLivenessStage('NONE');
+                    setStatusMessage(gate.guidance ?? gate.classification.message);
+                    return;
+                }
                 start8SecondScan();
             }
         }, 1000);
@@ -888,6 +1053,15 @@ export function FaceScannerContainer({
             return;
         }
 
+        // Dengan kalibrasi, posisi di luar 30-40/45-55/60-70 cm menahan hitung mundur.
+        if (distanceBlocked) {
+            qualityStartRef.current = null;
+            setVisualState('ALIGNING_FACE');
+            setStatusMessage(distanceGuidance ?? 'Sesuaikan jarak ke kamera');
+            if (distanceGuidance) speakGuidance(distanceGuidance);
+            return;
+        }
+
         /* Quality check hold -> Start 3-second countdown */
         if (livenessStage === 'NONE') {
             if (qualityStartRef.current === null) {
@@ -915,7 +1089,24 @@ export function FaceScannerContainer({
         visualState,
         startCountdown,
         paused,
+        distanceBlocked,
+        distanceGuidance,
+        speakGuidance,
     ]);
+
+    /* Posisi keluar rentang saat hitung mundur: batalkan sebelum perekaman dimulai */
+    useEffect(() => {
+        if (livenessStage !== 'COUNTDOWN' || !distanceBlocked) return;
+        if (countdownTimerRef.current) {
+            clearInterval(countdownTimerRef.current);
+            countdownTimerRef.current = null;
+        }
+        setCountdownNum(null);
+        qualityStartRef.current = null;
+        setLivenessStage('NONE');
+        setVisualState('ALIGNING_FACE');
+        setStatusMessage(distanceGuidance ?? 'Sesuaikan jarak ke kamera');
+    }, [livenessStage, distanceBlocked, distanceGuidance]);
 
     /* ---- Frame Processing Loop ---- */
     useEffect(() => {
@@ -1138,6 +1329,12 @@ export function FaceScannerContainer({
                             const h = videoRef.current.videoHeight;
                             if (w > 0 && h > 0) {
                                 setStreamResolution({ width: w, height: h });
+                                // Sebagian browser tidak melaporkan width/height di getSettings().
+                                setCameraInfo((prev) =>
+                                    prev && (prev.width === null || prev.height === null)
+                                        ? { ...prev, width: w, height: h }
+                                        : prev,
+                                );
                             }
                         }
                     }}
@@ -1293,73 +1490,96 @@ export function FaceScannerContainer({
                     {/* Left Badges: Subject ID & Resolution */}
                     <div className="flex items-center gap-1.5 min-w-0">
                         {/* Subject Badge */}
-                        <span className="inline-flex items-center gap-1.5 rounded-full border border-sky-400/35 bg-slate-900/85 px-2.5 py-1 text-[10px] sm:text-[11px] font-bold text-sky-200 shadow-sm backdrop-blur-md">
-                            <span className="h-1.5 w-1.5 rounded-full bg-sky-400 animate-ping"></span>
-                            <span className="font-mono">{scenarioParams?.subject_id || 'S01'}</span>
+                        <span
+                            className="inline-flex min-w-0 items-center gap-1.5 rounded-full border border-sky-400/35 bg-slate-900/85 px-2.5 py-1 text-[10px] sm:text-[11px] font-bold text-sky-200 shadow-sm backdrop-blur-md"
+                            title={scenarioParams?.subject_id || 'S01'}
+                        >
+                            <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-sky-400 animate-ping"></span>
+                            <span className="truncate whitespace-nowrap font-mono">{scenarioParams?.subject_id || 'S01'}</span>
                         </span>
 
-                        {/* 1080p FHD Badge */}
-                        <span
-                            className="inline-flex items-center gap-1 rounded-full border border-cyan-400/35 bg-slate-900/85 px-2.5 py-1 text-[10px] sm:text-[11px] font-mono font-bold text-cyan-300 shadow-sm backdrop-blur-md"
-                            title={
-                                streamResolution
-                                    ? `Resolusi Kamera: ${streamResolution.width}×${streamResolution.height} px`
-                                    : 'Resolusi Kamera: 1080p Full HD (1920×1080)'
-                            }
-                        >
-                            <span className="h-1.5 w-1.5 rounded-full bg-cyan-400"></span>
-                            <span>
-                                {streamResolution
-                                    ? streamResolution.height >= 1080
-                                        ? '1080p FHD'
-                                        : `${streamResolution.height}p`
-                                    : '1080p FHD'}
+                        {/* Resolusi aktual stream; tanpa laporan browser badge tidak ditampilkan */}
+                        {streamResolution && (
+                            <span
+                                className="inline-flex items-center gap-1 rounded-full border border-cyan-400/35 bg-slate-900/85 px-2.5 py-1 text-[10px] sm:text-[11px] font-mono font-bold text-cyan-300 shadow-sm backdrop-blur-md"
+                                title={`Resolusi kamera: ${streamResolution.width}×${streamResolution.height} px`}
+                            >
+                                <span className="h-1.5 w-1.5 rounded-full bg-cyan-400"></span>
+                                <span>{`${streamResolution.height}p`}</span>
                             </span>
-                        </span>
+                        )}
 
                         {/* Session Type Pill (Desktop) */}
-                        <span className="hidden md:inline-flex items-center rounded-full bg-royal-blue/20 border border-royal-blue/40 px-2 py-0.5 text-[10px] font-bold text-sky-300 backdrop-blur-md uppercase">
+                        <span className="hidden md:inline-flex shrink-0 whitespace-nowrap items-center rounded-full bg-royal-blue/20 border border-royal-blue/40 px-2 py-0.5 text-[10px] font-bold text-sky-300 backdrop-blur-md uppercase">
                             {scenarioParams?.session_type === 'ENROLLMENT' ? 'Session-E' : 'Session-T'}
                         </span>
                     </div>
 
                     {/* Right Controls: Single Consolidated Distance + Lux + Voice + Switch */}
                     <div className="flex items-center gap-1.5 shrink-0">
-                        {/* Single Unified Distance Pill (No Duplicates) */}
+                        {/* Jarak dan kategori posisi; tanpa angka tertulis "Tidak terukur" */}
                         <span
-                            className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 sm:px-3 py-0.5 sm:py-1 text-[10px] sm:text-[11px] font-bold shadow-sm backdrop-blur-md transition-all duration-300 ${
-                                isDistanceIdeal
-                                    ? 'border-emerald-400/50 bg-emerald-950/85 text-emerald-300 ring-1 ring-emerald-400/20'
-                                    : 'border-amber-400/40 bg-amber-950/80 text-amber-300'
+                            className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-full border px-2.5 sm:px-3 py-0.5 sm:py-1 text-[10px] sm:text-[11px] font-bold shadow-sm backdrop-blur-md transition-colors duration-300 ${
+                                liveDistanceCm === null
+                                    ? 'border-slate-500/50 bg-slate-900/85 text-slate-200'
+                                    : distanceGate.classification.allow_verification
+                                      ? 'border-emerald-400/50 bg-emerald-950/85 text-emerald-200'
+                                      : 'border-amber-400/50 bg-amber-950/85 text-amber-200'
                             }`}
+                            title={distanceOverlayTitle}
+                            data-testid="distance-overlay"
                         >
-                            <span className={`h-1.5 w-1.5 rounded-full ${isDistanceIdeal ? 'bg-emerald-400 animate-pulse' : 'bg-amber-400'}`}></span>
-                            <span className="hidden xs:inline">
-                                {liveDistanceCm != null
-                                    ? `${Math.round(liveDistanceCm)} cm • ${getDistanceCategory(liveDistanceCm).label}`
-                                    : (isDistanceIdeal ? '30 - 60 cm • Sesuai' : 'Sesuaikan Jarak (30 - 60 cm)')}
+                            <span
+                                className={`h-1.5 w-1.5 rounded-full ${
+                                    liveDistanceCm === null
+                                        ? 'bg-slate-400'
+                                        : distanceGate.classification.allow_verification
+                                          ? 'bg-emerald-400'
+                                          : 'bg-amber-400'
+                                }`}
+                            ></span>
+                            <span className="font-mono">
+                                {/* ~ menandai estimasi tanpa kalibrasi di semua ukuran layar */}
+                                {liveDistanceCm !== null
+                                    ? `${liveDistanceSource === 'camera' ? '~' : ''}${liveDistanceCm.toFixed(1)} cm`
+                                    : NOT_MEASURED_LABEL}
                             </span>
-                            <span className="xs:hidden">
-                                {liveDistanceCm != null ? `${Math.round(liveDistanceCm)}cm` : (isDistanceIdeal ? 'Siap ✓' : '~30-60cm')}
-                            </span>
+                            {distanceOverlayLabel && (
+                                <span className="hidden sm:inline">· {distanceOverlayLabel}</span>
+                            )}
+                            {liveDistanceCm !== null && liveDistanceSource === 'camera' && (
+                                <span className="sr-only md:not-sr-only md:inline font-medium opacity-80">(estimasi)</span>
+                            )}
                         </span>
 
-                        {/* Single Luxmeter Pill */}
-                        {scenarioParams?.lux != null && (
-                            <span
-                                className={`hidden sm:inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-[11px] font-bold shadow-sm backdrop-blur-md transition-all ${
-                                    scenarioParams.lux < 100
-                                        ? 'border-amber-400/40 bg-amber-950/80 text-amber-300'
-                                        : scenarioParams.lux <= 300
-                                          ? 'border-emerald-400/50 bg-emerald-950/85 text-emerald-300'
-                                          : 'border-sky-400/40 bg-sky-950/80 text-sky-300'
-                                }`}
-                                title={`Intensitas Cahaya: ${Math.round(scenarioParams.lux)} Lux`}
-                            >
-                                <Sun className="h-3 w-3 text-amber-400 shrink-0" />
-                                <span className="font-mono">{Math.round(scenarioParams.lux)} Lux</span>
+                        {/* Lux yang akan dicatat; tanpa angka tertulis "Tidak terukur", alasannya di tooltip */}
+                        <span
+                            className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-full border px-2.5 sm:px-3 py-0.5 sm:py-1 text-[10px] sm:text-[11px] font-bold shadow-sm backdrop-blur-md transition-colors duration-300 ${
+                                overlayLux === null
+                                    ? 'border-slate-500/50 bg-slate-900/85 text-slate-200'
+                                    : overlayKategori === 'redup'
+                                      ? 'border-amber-400/50 bg-amber-950/85 text-amber-200'
+                                      : overlayKategori === 'normal'
+                                        ? 'border-emerald-400/50 bg-emerald-950/85 text-emerald-200'
+                                        : 'border-sky-400/50 bg-sky-950/85 text-sky-200'
+                            }`}
+                            title={luxOverlayTitle}
+                            data-testid="lux-overlay"
+                        >
+                            <Sun className="h-3 w-3 shrink-0 text-amber-400" />
+                            <span className="font-mono">
+                                {/* ~ menandai perkiraan kamera tanpa kalibrasi, sama dengan jarak */}
+                                {overlayLux !== null
+                                    ? `${overlayEstimated ? '~' : ''}${Math.round(overlayLux)} lux`
+                                    : NOT_MEASURED_LABEL}
                             </span>
-                        )}
+                            {overlayLux !== null && overlayKategori && (
+                                <span className="hidden sm:inline capitalize">· {overlayKategori}</span>
+                            )}
+                            {overlayLux !== null && overlayEstimated && (
+                                <span className="sr-only md:not-sr-only md:inline font-medium opacity-80">(estimasi)</span>
+                            )}
+                        </span>
 
                         {/* Audio Voice Guidance Toggle */}
                         <button
@@ -1396,6 +1616,20 @@ export function FaceScannerContainer({
                         </button>
                     </div>
                 </div>
+
+                {/* Layar sempit: pil jarak hanya memuat angka. Tanpa kalibrasi arahan ini
+                    tidak menahan pemindaian; dengan kalibrasi arahannya ada di pil status bawah. */}
+                {!calibratedModel && distanceGuidance && liveDistanceCm !== null && livenessStage === 'NONE' && (
+                    <div
+                        className="pointer-events-none absolute inset-x-2.5 top-12 flex justify-center sm:hidden"
+                        style={{ zIndex: 30 }}
+                        data-testid="distance-guidance-mobile"
+                    >
+                        <span className="rounded-full border border-amber-400/50 bg-amber-950/85 px-2.5 py-0.5 text-[10px] font-semibold text-amber-200 backdrop-blur-md">
+                            {distanceGuidance} (estimasi)
+                        </span>
+                    </div>
+                )}
 
                 {/* Layer 3: High-End 3-Second Circular Countdown Ring */}
                 <AnimatePresence>

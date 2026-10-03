@@ -5,10 +5,15 @@ namespace App\Http\Controllers;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use App\Models\AttendanceRecord;
+use App\Models\EvaluationMatrix;
+use App\Models\LightingLog;
+use App\Models\LuxCalibration;
+use App\Models\User;
 use App\Services\AttendanceScheduleService;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Crypt;
+use Spatie\Activitylog\Models\Activity;
 
 class DashboardController extends Controller
 {
@@ -17,20 +22,20 @@ class DashboardController extends Controller
         $user = auth()->user();
         $tz = config('app.timezone', 'Asia/Jakarta');
         $today = Carbon::today($tz);
+        $todayRange = [$today->copy()->startOfDay(), $today->copy()->endOfDay()];
 
-        // Fetch all today's records for stats
-        $allRecords = AttendanceRecord::whereBetween('created_at', [
-            $today->copy()->startOfDay(),
-            $today->copy()->endOfDay(),
-        ]);
+        // Hanya status dan guru yang dihitung; metadata presensi (JSON besar) tidak dimuat.
+        $records = AttendanceRecord::query()
+            ->whereBetween('created_at', $todayRange)
+            ->when($user->role === 'teacher', fn ($q) => $q->where('user_id', $user->id))
+            ->toBase()
+            ->get(['status', 'user_id']);
 
-        if ($user->role === 'teacher') {
-            $allRecords->where('user_id', $user->id);
-        }
-        $records = $allRecords->get();
-
-        $totalTeachers = \App\Models\User::where('role', 'teacher')->count();
-        $enrolledTeachers = \App\Models\User::where('role', 'teacher')->whereNotNull('embedding_id')->count();
+        $teacherCounts = User::where('role', 'teacher')->toBase()
+            ->selectRaw('count(*) as total, count(embedding_id) as enrolled')
+            ->first();
+        $totalTeachers = (int) $teacherCounts->total;
+        $enrolledTeachers = (int) $teacherCounts->enrolled;
 
         $presentCount = $records->whereIn('status', ['success', 'hadir'])->count();
         $lateCount = $records->where('status', 'terlambat')->count();
@@ -62,7 +67,7 @@ class DashboardController extends Controller
 
         // Fetch visible recent attendance history for Dashboard feed
         $visibleQuery = AttendanceRecord::visibleOnDashboard()
-            ->with('user');
+            ->with('user:id,name,email,embedding_id');
 
         if ($user->role === 'teacher') {
             $visibleQuery->where('user_id', $user->id);
@@ -90,7 +95,7 @@ class DashboardController extends Controller
         });
 
         // Fetch recent teacher activities & system events (Enrollment, logins, biometric updates)
-        $activitiesQuery = \Spatie\Activitylog\Models\Activity::with('causer');
+        $activitiesQuery = Activity::with('causer');
         if ($user->role === 'teacher') {
             $activitiesQuery->where(function ($q) use ($user) {
                 $q->where('causer_id', $user->id)
@@ -98,6 +103,7 @@ class DashboardController extends Controller
             });
         }
 
+        // properties dibaca untuk 'event' cadangan saja; isinya tidak dikirim ke halaman.
         $recentActivities = $activitiesQuery->latest()->take(10)->get()->map(function ($act) use ($tz) {
             $created = $act->created_at ? $act->created_at->timezone($tz) : null;
             return [
@@ -108,13 +114,14 @@ class DashboardController extends Controller
                 'time' => $created ? $created->format('H:i') : '-',
                 'date' => $created ? ($created->isToday() ? 'Hari ini' : $created->format('d M')) : '',
                 'created_at_human' => $act->created_at ? $act->created_at->diffForHumans() : '',
-                'properties' => $act->properties ?? [],
             ];
         });
 
-        // Fetch all 18 registered subjects for Pre-Flight Session Preset
-        $subjectsList = \App\Models\User::where('role', 'teacher')
-            ->get()
+        // Daftar guru untuk pilihan subjek Studio. Hanya nama dan kode yang dipakai
+        // halaman ini, jadi status template tidak ditanyakan ke mesin biometrik
+        // (panggilan HTTP itu bisa menahan Dashboard sampai 5 detik saat mesin sibuk).
+        $subjectsList = User::where('role', 'teacher')
+            ->get(['id', 'name', 'embedding_id'])
             ->sortBy(function ($u) {
                 if (preg_match('/(\d+)/', $u->embedding_id ?? '', $matches)) {
                     return (int) $matches[1];
@@ -122,40 +129,91 @@ class DashboardController extends Controller
                 return 999;
             })
             ->values()
-            ->map(function ($u) {
-                return [
-                    'id' => $u->id,
-                    'name' => $u->name,
-                    'email' => $u->email,
-                    'embedding_id' => $u->embedding_id ?: 'S01',
-                    'has_embedding' => !empty($u->embedding_id),
-                ];
-            });
+            ->map(fn ($u) => [
+                'id' => $u->id,
+                'name' => $u->name,
+                'embedding_id' => $u->embedding_id,
+            ]);
 
-        // Fetch latest evaluation matrix logs
-        $latestEvaluations = \App\Models\EvaluationMatrix::latest()->take(10)->get();
-
-        // Multi-distance testing telemetry for 30cm, 45cm, and 60cm benchmarks (rentang Subbab 5.2)
-        $distanceStats = [
-            'd30' => [
-                'target_cm' => 30,
-                'label' => '30 cm (Dekat)',
-                'total' => \App\Models\EvaluationMatrix::whereBetween('distance_cm', [30, 40])->count(),
-                'accept' => \App\Models\EvaluationMatrix::whereBetween('distance_cm', [30, 40])->where('final_decision', 'ACCEPT')->count(),
-            ],
-            'd45' => [
-                'target_cm' => 45,
-                'label' => '45 cm (Ideal)',
-                'total' => \App\Models\EvaluationMatrix::whereBetween('distance_cm', [45, 55])->count(),
-                'accept' => \App\Models\EvaluationMatrix::whereBetween('distance_cm', [45, 55])->where('final_decision', 'ACCEPT')->count(),
-            ],
-            'd60' => [
-                'target_cm' => 60,
-                'label' => '60 cm (Jauh)',
-                'total' => \App\Models\EvaluationMatrix::whereBetween('distance_cm', [60, 70])->count(),
-                'accept' => \App\Models\EvaluationMatrix::whereBetween('distance_cm', [60, 70])->where('final_decision', 'ACCEPT')->count(),
-            ],
+        // Multi-distance testing telemetry for 30cm, 45cm, and 60cm benchmarks (rentang Subbab 5.2),
+        // dihitung dalam satu kueri.
+        $bands = [
+            'd30' => [30, 40, '30 cm (Dekat)'],
+            'd45' => [45, 55, '45 cm (Ideal)'],
+            'd60' => [60, 70, '60 cm (Jauh)'],
         ];
+        $columns = [];
+        $bindings = [];
+        foreach ($bands as $key => [$low, $high]) {
+            $columns[] = "sum(case when distance_cm between ? and ? then 1 else 0 end) as {$key}_total";
+            $columns[] = "sum(case when distance_cm between ? and ? and final_decision = ? then 1 else 0 end) as {$key}_accept";
+            array_push($bindings, $low, $high, $low, $high, 'ACCEPT');
+        }
+        $distanceRow = EvaluationMatrix::query()->toBase()->selectRaw(implode(', ', $columns), $bindings)->first();
+        $distanceStats = [];
+        foreach ($bands as $key => [$low, , $label]) {
+            $distanceStats[$key] = [
+                'target_cm' => $low,
+                'label' => $label,
+                'total' => (int) ($distanceRow->{"{$key}_total"} ?? 0),
+                'accept' => (int) ($distanceRow->{"{$key}_accept"} ?? 0),
+            ];
+        }
+
+        // Statistik pencahayaan (PRD Lux bagian 15). Persentase dihitung dari
+        // pemindaian yang lux-nya terukur, bukan dari semua pemindaian. Perkiraan
+        // kamera tanpa kalibrasi (lux_source 'camera') dihitung terpisah, bukan
+        // sebagai lux terukur.
+        $lightingStats = null;
+        if (LuxCalibration::tablesReady()) {
+            $scope = fn () => LightingLog::query()
+                ->when($user->role === 'teacher', fn ($q) => $q->where('user_id', $user->id));
+            // Semua angka hari ini dalam satu kueri; lux_source NULL tidak terhitung terukur
+            // (sama seperti where lux_source <> 'camera').
+            $luxToday = $scope()->toBase()->whereBetween('created_at', $todayRange)->selectRaw(
+                'count(*) as scans,'
+                . ' sum(case when lux_value is not null and lux_source <> ? then 1 else 0 end) as measured,'
+                . ' sum(case when lux_value is not null and lux_source = ? then 1 else 0 end) as estimated,'
+                . ' avg(case when lux_value is not null and lux_source <> ? then lux_value end) as measured_avg,'
+                . ' avg(case when lux_value is not null and lux_source = ? then lux_value end) as estimated_avg,'
+                . ' sum(case when lux_value is not null and lux_source <> ? and lighting_status = ? then 1 else 0 end) as ready,'
+                . ' sum(case when lux_value is not null and lux_source <> ? and lighting_status = ? then 1 else 0 end) as warning',
+                ['camera', 'camera', 'camera', 'camera', 'camera', 'READY', 'camera', 'WARNING']
+            )->first();
+            $measuredCount = (int) ($luxToday->measured ?? 0);
+            $estimatedCount = (int) ($luxToday->estimated ?? 0);
+            $latest = $scope()->whereNotNull('lux_value')->latest('id')->first();
+            $pct = fn ($count) => $measuredCount > 0 ? round((int) $count * 100 / $measuredCount, 1) : null;
+
+            $activeCalibration = LuxCalibration::active();
+            $currentLux = $latest?->lux_value !== null ? (float) $latest->lux_value : null;
+            $lightingStats = [
+                'current_lux' => $latest?->lux_value,
+                'current_category' => $latest?->lighting_category,
+                'current_status' => $latest?->lighting_status,
+                'current_source' => $latest?->lux_source,
+                'current_source_label' => $latest?->lux_source
+                    ? (\App\Services\LightingSummary::SOURCE_LABELS[$latest->lux_source] ?? $latest->lux_source) : null,
+                'current_kategori_naskah' => \App\Services\LightingModel::classify($currentLux)['kategori_naskah'],
+                'current_at' => $latest?->created_at?->toIso8601String(),
+                'calibration' => $activeCalibration ? [
+                    'id' => $activeCalibration->id,
+                    'reference_label' => ($device = $activeCalibration->referenceDevice())
+                        ? (\App\Services\LightingSummary::REFERENCE_LABELS[$device] ?? $device) : null,
+                    'points' => count($activeCalibration->points ?? []),
+                    'created_at' => $activeCalibration->created_at?->toIso8601String(),
+                ] : null,
+                'can_calibrate' => in_array($user->role, ['admin', 'researcher'], true),
+                'average_today' => $measuredCount > 0 ? round((float) $luxToday->measured_avg, 1) : null,
+                'scans_today' => (int) ($luxToday->scans ?? 0),
+                'measured_today' => $measuredCount,
+                'estimated_today' => $estimatedCount,
+                'estimated_average_today' => $estimatedCount > 0 ? round((float) $luxToday->estimated_avg, 1) : null,
+                'optimal_pct' => $pct($luxToday->ready ?? 0),
+                'warning_pct' => $pct($luxToday->warning ?? 0),
+                'calibrated' => $activeCalibration !== null,
+            ];
+        }
 
         $currentSchedule = AttendanceScheduleService::evaluate();
         $scheduleMatrix = AttendanceScheduleService::getScheduleMatrix();
@@ -165,13 +223,56 @@ class DashboardController extends Controller
             'recent_history' => $recentHistory,
             'recent_activities' => $recentActivities,
             'subjects_list' => $subjectsList,
-            'latest_evaluations' => $latestEvaluations,
+            // Jumlah yang benar-benar akan dihapus "Hapus Semua Aktivitas"; hanya
+            // dihitung saat dialognya dibuka (router.reload only: clear_all_summary).
+            'clear_all_summary' => Inertia::optional(fn () => $this->clearAllSummary($user)),
             'distance_stats' => $distanceStats,
+            'lighting_stats' => $lightingStats,
             'timezone' => $tz,
             'today_date' => $today->format('Y-m-d'),
             'schedule_session' => $currentSchedule,
             'schedule_matrix' => $scheduleMatrix,
         ]);
+    }
+
+    /**
+     * Kueri data yang dihapus "Hapus Semua Aktivitas". Guru hanya presensinya
+     * sendiri; matriks evaluasi dan log aktivitas presensi hanya oleh admin.
+     *
+     * @return array{attendance: \Illuminate\Database\Eloquent\Builder, evaluations: ?\Illuminate\Database\Eloquent\Builder, activities: ?\Illuminate\Database\Eloquent\Builder}
+     */
+    private function clearAllQueries(User $user): array
+    {
+        $attendance = AttendanceRecord::query();
+        if ($user->role === 'teacher') {
+            $attendance->where('user_id', $user->id);
+        }
+        $isAdmin = $user->role === 'admin';
+
+        return [
+            'attendance' => $attendance,
+            'evaluations' => $isAdmin ? EvaluationMatrix::query() : null,
+            'activities' => $isAdmin ? Activity::where(function ($q) {
+                $q->where('log_name', 'dashboard_activity_feed')
+                  ->orWhere('log_name', 'attendance')
+                  ->orWhere('event', 'like', '%attendance%')
+                  ->orWhere('event', 'like', '%presensi%')
+                  ->orWhere('description', 'like', '%presensi%')
+                  ->orWhere('description', 'like', '%verifikasi wajah%');
+            }) : null,
+        ];
+    }
+
+    /** @return array{attendance: int, evaluations: int, activities: int} */
+    private function clearAllSummary(User $user): array
+    {
+        $queries = $this->clearAllQueries($user);
+
+        return [
+            'attendance' => $queries['attendance']->count(),
+            'evaluations' => $queries['evaluations']?->count() ?? 0,
+            'activities' => $queries['activities']?->count() ?? 0,
+        ];
     }
 
     public function previewHideToday(Request $request)
@@ -363,38 +464,18 @@ class DashboardController extends Controller
         try {
             DB::beginTransaction();
 
-            $attendanceQuery = AttendanceRecord::query();
-            $evalQuery = \App\Models\EvaluationMatrix::query();
+            // Kueri yang sama dengan ringkasan di dialog konfirmasi (clearAllSummary).
+            $queries = $this->clearAllQueries($user);
 
-            // If teacher, only clear their own attendance records
-            if ($user->role === 'teacher') {
-                $attendanceQuery->where('user_id', $user->id);
-                $evalQuery->where(function ($q) use ($user) {
-                    $q->where('subject_id', $user->embedding_id ?? '---')
-                      ->orWhere('claimed_subject_id', $user->embedding_id ?? '---');
-                });
-            }
-
-            $deletedAttendance = $attendanceQuery->count();
-            $deletedEvaluations = $user->role === 'admin' ? $evalQuery->count() : 0;
+            $deletedAttendance = $queries['attendance']->count();
+            $deletedEvaluations = $queries['evaluations']?->count() ?? 0;
 
             // Delete attendance records
-            $attendanceQuery->delete();
+            $queries['attendance']->delete();
 
-            // Delete evaluation matrices if admin
-            if ($user->role === 'admin') {
-                $evalQuery->delete();
-
-                // Clean up attendance and verification activity logs
-                \Spatie\Activitylog\Models\Activity::where(function ($q) {
-                    $q->where('log_name', 'dashboard_activity_feed')
-                      ->orWhere('log_name', 'attendance')
-                      ->orWhere('event', 'like', '%attendance%')
-                      ->orWhere('event', 'like', '%presensi%')
-                      ->orWhere('description', 'like', '%presensi%')
-                      ->orWhere('description', 'like', '%verifikasi wajah%');
-                })->delete();
-            }
+            // Delete evaluation matrices and attendance activity logs (admin only)
+            $queries['evaluations']?->delete();
+            $queries['activities']?->delete();
 
             // Log the cleanup event
             activity('dashboard_activity_feed')

@@ -14,12 +14,26 @@ use Illuminate\Database\Eloquent\SoftDeletes;
 use Spatie\Activitylog\Traits\LogsActivity;
 use Spatie\Activitylog\LogOptions;
 
-#[Fillable(['name', 'email', 'password', 'role', 'embedding_id', 'department', 'is_active', 'status_presensi', 'last_presensi_at', 'age_at_test', 'test_reference_date', 'is_test_data'])]
-#[Hidden(['password', 'remember_token'])]
+#[Fillable(['name', 'email', 'password', 'role', 'position', 'subjects', 'embedding_id', 'department', 'is_active', 'status_presensi', 'last_presensi_at', 'age_at_test', 'test_reference_date', 'is_test_data'])]
+#[Hidden(['password', 'remember_token', 'avatar_path'])]
 class User extends Authenticatable
 {
     /** @use HasFactory<UserFactory> */
     use HasFactory, Notifiable, SoftDeletes, LogsActivity;
+
+    /** Alamat foto profil (rute admin), dengan penanda versi agar foto baru tidak tertahan cache. */
+    protected $appends = ['avatar_url'];
+
+    public function getAvatarUrlAttribute(): ?string
+    {
+        // Lewat attributes: kueri yang hanya memilih sebagian kolom tidak membawa avatar_path.
+        $path = $this->attributes['avatar_path'] ?? null;
+        if (! $path || ! $this->getKey()) {
+            return null;
+        }
+
+        return route('admin.teachers.avatar', ['teacher' => $this->getKey(), 'v' => substr(md5($path), 0, 8)]);
+    }
 
     public function getActivitylogOptions(): LogOptions
     {
@@ -63,6 +77,7 @@ class User extends Authenticatable
         return [
             'email_verified_at' => 'datetime',
             'last_presensi_at' => 'datetime',
+            'subjects' => 'array',
             'password' => 'hashed',
         ];
     }
