@@ -37,7 +37,7 @@ Program Studi Teknik Informatika
 Universitas Muhammadiyah Pontianak  
 2026
 
-Penelitian menggunakan pendekatan eksperimental untuk mengevaluasi integrasi FaceNet dan EMAR pada sistem presensi guru dan staf. :chatgpt-content-reference{index="1"}
+Penelitian menggunakan pendekatan eksperimental untuk mengevaluasi integrasi FaceNet dan EMAR pada sistem presensi guru dan staf.
 
 
 ---
