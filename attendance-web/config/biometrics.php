@@ -92,6 +92,8 @@ return [
     'research_csv' => [
         'matriks' => env('BIOMETRICS_RESEARCH_CSV_MATRIKS', base_path('../dataset/video_singkat/Matriks_Evaluasi_Bab4.csv')),
         'bab5' => env('BIOMETRICS_RESEARCH_CSV_BAB5', base_path('../Dataset_Eksperimen_Bab5.csv')),
+        // Deret EAR/MAR per frame, hanya untuk presentasi split calibration_dev.
+        'raw_frames_dev' => env('BIOMETRICS_RESEARCH_CSV_RAW_FRAMES_DEV', base_path('../logs/log_raw_frames_dev.csv')),
     ],
 
     // Rancangan pengujian: 18 subjek x 9 kondisi x 4 label x 5 repetisi.

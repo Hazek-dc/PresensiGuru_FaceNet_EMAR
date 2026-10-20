@@ -37,7 +37,19 @@ import {
 import { AnimatePresence, motion } from 'motion/react';
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { DistanceMeterWidget } from '../../Components/Presensi/DistanceMeterWidget';
-import { FaceScannerContainer } from '../../Components/Presensi/FaceScannerContainer';
+import { FaceScannerContainer, LivenessStage } from '../../Components/Presensi/FaceScannerContainer';
+import { SoloBatchPanel } from '../../Components/Presensi/SoloBatchPanel';
+import { useSoloBatch } from '../../Hooks/useSoloBatch';
+import { playCue } from '../../Utils/audioCue';
+import {
+    cellKey,
+    isAttack,
+    SOLO_HOLD_MS,
+    SOLO_LUX_TARGETS,
+    SOLO_PARTICIPANT_ID,
+    SOLO_SESSION_TYPE,
+    soloFormFields,
+} from '../../Utils/soloSession';
 import { LuxometerWidget } from '../../Components/Presensi/LuxometerWidget';
 import { BiometricStatusPanel, LightingMonitorPanel } from '../../Components/Presensi/LightingMonitorPanel';
 import { ManualEnrollmentModal } from '../../Components/Presensi/ManualEnrollmentModal';
@@ -720,11 +732,60 @@ export default function Presensi({
         [],
     );
 
+    /* ---- Mode Solo calibration_dev (P_DEV_01, tanpa sentuhan) ---- */
+    // handleReset didefinisikan di bawah; antrean memanggilnya lewat ref.
+    const handleResetRef = useRef<() => void>(() => {});
+    const solo = useSoloBatch(useCallback(() => handleResetRef.current(), []));
+    const { markSubmitted: soloMarkSubmitted, recordResult: soloRecordResult } = solo;
+    // Hanya Admin/Peneliti: kemajuan tersimpan di peramban tidak boleh menjeda kiosk guru.
+    const soloCell = canCalibrate ? solo.activeCell : null;
+    const soloCellKey = soloCell ? cellKey(soloCell) : null;
+    const soloSubmitRef = useRef(soloCell);
+    soloSubmitRef.current = soloCell;
+    const soloPaused = soloCell !== null && solo.batch.phase !== 'armed' && solo.batch.phase !== 'processing';
+
+    useEffect(() => {
+        if (!soloCell) return;
+        setLuxTarget(SOLO_LUX_TARGETS[soloCell.lux]);
+        setDistanceTarget(soloCell.distanceCm);
+        setSampleType(isAttack(soloCell.sample) ? 'ATTACK' : 'BONA_FIDE');
+        setSessionType(SOLO_SESSION_TYPE);
+        setSubjectId(SOLO_PARTICIPANT_ID);
+        setKioskId(SOLO_PARTICIPANT_ID);
+        // soloCellKey mewakili soloCell; objeknya dibuat ulang tiap render.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [soloCellKey]);
+
+    const wasSoloRef = useRef(soloCell !== null);
+    useEffect(() => {
+        if (wasSoloRef.current && soloCell === null) {
+            setSessionType(searchParams?.get('session_type') || 'TEST');
+            setSampleType(searchParams?.get('sample_type') || 'BONA_FIDE');
+        }
+        wasSoloRef.current = soloCell !== null;
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [soloCell === null]);
+
+    const handleSoloStage = useCallback((stage: LivenessStage) => {
+        if (stage === 'COUNTDOWN') playCue('countdown');
+        else if (stage === 'SCANNING_8S') playCue('record');
+    }, []);
+
+    const soloParticipant = useMemo(() => {
+        const subject = studioSubjects.find((s) => s.id === SOLO_PARTICIPANT_ID);
+        if (!subject) return null;
+        const r = readinessOf(subject.template, template_status_available);
+        return { label: r.label, level: r.level };
+    }, [studioSubjects, template_status_available]);
+
     /* ---- Verification Callbacks ---- */
     const handleVerificationSubmit = useCallback(
         async (videoBlob: Blob, scanMetrics: any) => {
             if (abortRef.current) abortRef.current.abort();
             abortRef.current = new AbortController();
+            // Sel dibaca saat submit: callback ini ditangkap pemindai di awal perekaman.
+            const soloTrial = soloSubmitRef.current;
+            if (soloTrial) soloMarkSubmitted();
 
             const startTime = performance.now();
             setStatus('verifying');
@@ -778,6 +839,15 @@ export default function Presensi({
             if (scanMetrics.challengeStatus !== undefined) {
                 formData.append('challenge_status', scanMetrics.challengeStatus);
             }
+            if (soloTrial) {
+                // set(), bukan append(): label, target, dan identitas mengikuti sel antrean.
+                for (const [key, value] of soloFormFields(soloTrial)) formData.set(key, value);
+                formData.set('lux_target', String(SOLO_LUX_TARGETS[soloTrial.lux]));
+                formData.set('distance_target_cm', String(soloTrial.distanceCm));
+                if (Array.isArray(scanMetrics.frameSeries) && scanMetrics.frameSeries.length > 0) {
+                    formData.set('frame_series', JSON.stringify(scanMetrics.frameSeries));
+                }
+            }
 
             if (simulatedSession !== 'REALTIME') {
                 formData.append('simulated_time', simulatedSession);
@@ -812,8 +882,10 @@ export default function Presensi({
 
                 if (response.data.evaluation) {
                     setEvaluationData(response.data.evaluation);
-                    setIsEvalModalOpen(true);
+                    // Mode solo: tidak ada orang di depan laptop untuk menutup laporan.
+                    if (!soloTrial) setIsEvalModalOpen(true);
                 }
+                if (soloTrial) soloRecordResult({ ok: true, cell: soloTrial });
 
                 if (response.data.metadata) {
                     setFacenetScore(response.data.metadata.facenet_score ?? null);
@@ -836,9 +908,10 @@ export default function Presensi({
                 setErrorMsg(serverMsg);
                 setStatusText(serverMsg);
                 addToast('error', serverMsg, 'error');
+                if (soloTrial) soloRecordResult({ ok: false, error: serverMsg });
             }
         },
-        [mode, kioskId, subjectId, sessionType, sampleType, simulatedSession, addToast],
+        [mode, kioskId, subjectId, sessionType, sampleType, simulatedSession, addToast, soloMarkSubmitted, soloRecordResult],
     );
 
     const handleReset = useCallback(() => {
@@ -857,6 +930,7 @@ export default function Presensi({
         setIsEvalModalOpen(false);
         setResetKey((prev) => prev + 1);
     }, []);
+    handleResetRef.current = handleReset;
 
     /* ---- Advance to Next Subject (S01 -> S02 -> ... -> S18) ---- */
     const handleNextSubject = useCallback(() => {
@@ -1494,7 +1568,11 @@ export default function Presensi({
                                         <span className="flex items-center gap-1.5 rounded-xl border border-purple-500/30 bg-purple-500/10 dark:bg-purple-500/15 px-2.5 py-1.5 font-bold text-purple-800 dark:text-purple-300">
                                             <span className="material-symbols-outlined text-[14px]">tune</span>
                                             <span className="font-mono">
-                                                {sessionType === 'ENROLLMENT' ? 'Session-E' : 'Session-T'}
+                                                {sessionType === 'ENROLLMENT'
+                                                    ? 'Session-E'
+                                                    : sessionType === 'CALIBRATION'
+                                                      ? 'Session-C'
+                                                      : 'Session-T'}
                                             </span>
                                         </span>
 
@@ -1560,7 +1638,16 @@ export default function Presensi({
                                 onVideoRefReady={handleVideoRefReady}
                                 onDistanceUpdate={handleDistanceLiveUpdate}
                                 onFaceROIUpdate={setFaceROI}
-                                paused={isEnrollModalOpen || calSections !== null}
+                                paused={isEnrollModalOpen || calSections !== null || soloPaused}
+                                pausedMessage={
+                                    soloPaused && !isEnrollModalOpen && calSections === null
+                                        ? 'Mode solo: pemindai menunggu antrean dimulai.'
+                                        : undefined
+                                }
+                                holdMs={soloCell ? SOLO_HOLD_MS : undefined}
+                                soloGate={soloCell ? { targetCm: soloCell.distanceCm, attack: isAttack(soloCell.sample) } : null}
+                                onStageChange={soloCell ? handleSoloStage : undefined}
+                                collectFrameSeries={soloCell !== null}
                                 distanceCalibration={distanceCalibration}
                                 onCameraInfoChange={setCameraInfo}
                                 luxCalibration={luxCalibration}
@@ -1659,6 +1746,14 @@ export default function Presensi({
                     {/* RIGHT COLUMN: 2-Tab Bento Layout (Operasional vs Riset) */}
                     {/* ---------------------------------------------------- */}
                     <div className="flex flex-col gap-4 lg:col-span-4">
+                        {canCalibrate && (
+                            <SoloBatchPanel
+                                solo={solo}
+                                distanceCalibrated={calibrationMatch.applies && distanceCalibration !== null}
+                                participantStatus={soloParticipant}
+                            />
+                        )}
+
                         {/* Tab Segmented Control */}
                         <div className="grid grid-cols-2 rounded-2xl border border-outline-variant/60 dark:border-white/10 bg-surface-container-low/90 dark:bg-black/30 p-1 shadow-xs backdrop-blur-md">
                             <button

@@ -2,32 +2,49 @@
 
 namespace App\Http\Controllers;
 
-use Illuminate\Http\Request;
-use Inertia\Inertia;
-use Illuminate\Support\Facades\Http;
-use App\Models\User;
+use App\Http\Controllers\Admin\ModelSettingController;
 use App\Models\AttendanceRecord;
 use App\Models\DistanceCalibration;
 use App\Models\DistanceLog;
+use App\Models\EvaluationMatrix;
 use App\Models\LightingLog;
 use App\Models\LuxCalibration;
-use App\Models\EvaluationMatrix;
+use App\Models\User;
 use App\Services\AttendanceScheduleService;
 use App\Services\DistanceModel;
 use App\Services\EngineBrightness;
 use App\Services\LightingModel;
+use App\Services\LightingSummary;
+use App\Services\LuxCalibrationDraft;
+use App\Services\TemplateReadiness;
+use Illuminate\Http\Request;
+use Illuminate\Http\Response;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Arr;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
-use Carbon\Carbon;
+use Inertia\Inertia;
+use Symfony\Component\HttpFoundation\BinaryFileResponse;
 
 class PresensiController extends Controller
 {
     /** Sumber yang dihitung sebagai pengukuran langsung (lihat measuredInput()). */
     // camera_calibrated: estimasi browser dengan model kalibrasi luxmeter aktif.
     private const LUX_SOURCES = ['luxmeter', 'camera', 'camera_calibrated'];
+
     // camera_calibrated: estimasi browser dengan model kalibrasi kamera aktif.
     private const DISTANCE_SOURCES = ['sensor', 'camera', 'camera_calibrated'];
+
+    /**
+     * Split kalibrasi mandiri peneliti (Studio mode solo). Datanya dipakai untuk
+     * menyusun tabel kalibrasi ambang, jadi tidak boleh tercampur ke dataset TEST.
+     */
+    public const CALIBRATION_DEV_SPLIT = 'calibration_dev';
+
+    /** Sama dengan ATTACK_LABELS di parameter_penelitian.py. */
+    public const PAI_SPECIES = ['print_attack', 'screen_attack', 'replay_video'];
 
     public function index(Request $request)
     {
@@ -36,7 +53,7 @@ class PresensiController extends Controller
 
         // Daftar guru Studio dari tabel users, bukan daftar tetap di frontend,
         // beserta kesiapan template wajahnya di galeri mesin.
-        $teachers = \App\Services\TemplateReadiness::teachers();
+        $teachers = TemplateReadiness::teachers();
 
         // Kalibrasi ikut dalam halaman: artisan serve melayani satu permintaan
         // sekaligus, jadi dua permintaan susulan menunda kesiapan Studio.
@@ -53,7 +70,7 @@ class PresensiController extends Controller
             'distance_calibration' => $distanceCalibration?->toContract(),
             'lux_calibration' => $luxCalibration?->toContract(),
             // Kalibrasi lux dapat dilakukan langsung dari Studio dengan kamera yang sama.
-            'lux_calibration_setup' => $canCalibrate ? \App\Services\LuxCalibrationDraft::setupProps($request) : null,
+            'lux_calibration_setup' => $canCalibrate ? LuxCalibrationDraft::setupProps($request) : null,
         ]);
     }
 
@@ -87,35 +104,75 @@ class PresensiController extends Controller
             'scan_duration_s' => 'nullable|numeric',
             'simulated_time' => 'nullable|string',
             'simulated_day' => 'nullable|string',
+            'participant_id' => ['nullable', 'string', 'max:32', 'regex:/^[A-Za-z0-9_]+$/'],
+            'dataset_split' => 'nullable|string|in:'.self::CALIBRATION_DEV_SPLIT,
+            'pai_species' => 'nullable|string|in:'.implode(',', self::PAI_SPECIES),
+            'frame_series' => 'nullable|string|max:200000',
         ]);
+
+        $isCalibrationDev = $request->input('dataset_split') === self::CALIBRATION_DEV_SPLIT;
+        if ($isCalibrationDev) {
+            // Tanpa target skenario baris kalibrasi tidak bisa dikelompokkan ke sel
+            // 3 lux x 3 jarak; dulu baris seperti itu tercatat dengan target kosong.
+            $request->validate([
+                'participant_id' => 'required',
+                // Session-C, sama dengan split SESSION-C di dataset riset frame.
+                'session_type' => 'required|in:CALIBRATION',
+                'lux_target' => 'required|numeric',
+                'distance_target_cm' => 'required|numeric',
+                'sample_type' => 'required|in:BONA_FIDE,ATTACK',
+                'pai_species' => 'required_if:sample_type,ATTACK|prohibited_if:sample_type,BONA_FIDE',
+            ], [
+                'lux_target.required' => 'Target lux skenario wajib diisi pada split calibration_dev.',
+                'distance_target_cm.required' => 'Target jarak skenario wajib diisi pada split calibration_dev.',
+                'pai_species.required_if' => 'Spesies serangan (print/screen/replay) wajib diisi untuk sampel ATTACK.',
+            ]);
+        }
 
         $user = $request->user();
         $targetSubjectId = $request->input('subject_id') ?: $request->input('claimed_id');
-        
-        // If subject_id is specified directly (e.g. from Studio / Pre-flight)
-        if ($targetSubjectId) {
-            $userBySubject = User::where('embedding_id', $targetSubjectId)
-                ->orWhere('email', 'like', "%{$targetSubjectId}%")
-                ->first();
-            if ($userBySubject) {
-                $user = $userBySubject;
-            }
-        }
 
-        // If not logged in, we must be in Kiosk mode
-        if (!$user) {
-            if ($request->filled('kiosk_id')) {
-                $user = User::where('email', $request->kiosk_id)
-                    ->orWhere('embedding_id', $request->kiosk_id)
+        if ($isCalibrationDev) {
+            // Templat dibandingkan hanya dengan akun yang embedding_id-nya persis
+            // participant_id. Tanpa akun itu presentasi ditolak, bukan dialihkan ke
+            // akun yang sedang login atau admin seperti jalur kiosk di bawah.
+            $targetSubjectId = (string) $request->input('participant_id');
+            $user = User::where('embedding_id', $targetSubjectId)->first();
+            if (! $user) {
+                return response()->json([
+                    'message' => "Partisipan {$targetSubjectId} belum punya akun dengan embedding_id yang sama. Buat akunnya dan daftarkan wajahnya dulu.",
+                    'errors' => ['participant_id' => ['Akun partisipan tidak ditemukan.']],
+                ], 422);
+            }
+        } else {
+            // If subject_id is specified directly (e.g. from Studio / Pre-flight)
+            if ($targetSubjectId) {
+                $userBySubject = User::where('embedding_id', $targetSubjectId)
+                    ->orWhere('email', 'like', "%{$targetSubjectId}%")
                     ->first();
+                if ($userBySubject) {
+                    $user = $userBySubject;
+                }
             }
-            if (!$user && $targetSubjectId) {
-                $user = User::where('embedding_id', $targetSubjectId)->first();
-            }
-            if (!$user) {
-                $user = User::where('role', 'admin')->first() ?: User::first();
+
+            // If not logged in, we must be in Kiosk mode
+            if (! $user) {
+                if ($request->filled('kiosk_id')) {
+                    $user = User::where('email', $request->kiosk_id)
+                        ->orWhere('embedding_id', $request->kiosk_id)
+                        ->first();
+                }
+                if (! $user && $targetSubjectId) {
+                    $user = User::where('embedding_id', $targetSubjectId)->first();
+                }
+                if (! $user) {
+                    $user = User::where('role', 'admin')->first() ?: User::first();
+                }
             }
         }
+        $participantId = $isCalibrationDev ? $targetSubjectId : null;
+        $datasetSplit = $isCalibrationDev ? self::CALIBRATION_DEV_SPLIT : null;
+        $paiSpecies = $request->input('pai_species') ?: null;
 
         $subjectId = $user ? ($user->embedding_id ?: ($targetSubjectId ?: 'S01')) : ($targetSubjectId ?: 'S01');
         // Lux dan jarak dicatat hanya bila klien menyebut sumber pengukuran langsung.
@@ -159,7 +216,7 @@ class PresensiController extends Controller
         $requestId = $attemptId;
 
         // 1. Ambang Batas Metodologi Skripsi Bab 3 (Dinamis dari Pengaturan Model)
-        $modelSettings = \App\Http\Controllers\Admin\ModelSettingController::getActiveSettings();
+        $modelSettings = ModelSettingController::getActiveSettings();
         $thresholdDistance = (float) ($modelSettings['facenet_threshold'] ?? 0.40); // L2 Distance <= 0.40
         $minBlink = 1;             // Kedipan EAR >= 1x
         $minMouth = 1;             // Gerakan Mulut MAR >= 1x
@@ -174,7 +231,7 @@ class PresensiController extends Controller
                 ? (float) $request->input('facenet_score')
                 : max(0.0, 1.0 - $euclideanDistance);
             $biometricSource = 'simulated';
-        } elseif (!$videoFile) {
+        } elseif (! $videoFile) {
             $backendError = 'tidak ada rekaman video yang dikirim';
         } else {
             try {
@@ -193,9 +250,9 @@ class PresensiController extends Controller
                     'video', file_get_contents($videoFile->getRealPath()), $videoFile->getClientOriginalName()
                 )->post($url, $payload);
 
-                $response = $send($baseUrl . '/verify');
+                $response = $send($baseUrl.'/verify');
                 if ($response->status() === 404) {
-                    $response = $send($baseUrl . '/api/verify');
+                    $response = $send($baseUrl.'/api/verify');
                 }
 
                 $result = $response->json();
@@ -213,7 +270,7 @@ class PresensiController extends Controller
                     $emarScore = isset($result['emar_score']) ? (float) $result['emar_score'] : null;
                     $requestId = $result['request_id'] ?? $attemptId;
                     $biometricSource = 'engine';
-                } elseif ($response->successful() && !empty($result['fta'])) {
+                } elseif ($response->successful() && ! empty($result['fta'])) {
                     // Mesin menjawab tetapi tidak ada yang bisa diukur (FTA):
                     // wajah tidak terdeteksi atau subjek belum terdaftar.
                     $backendError = ($result['fta_reason'] ?? null) === 'SUBJECT_NOT_ENROLLED'
@@ -224,10 +281,10 @@ class PresensiController extends Controller
                 } elseif ($response->successful()) {
                     $backendError = 'respons mesin biometrik tidak memuat jarak Euclidean';
                 } else {
-                    $backendError = 'mesin biometrik membalas HTTP ' . $response->status();
+                    $backendError = 'mesin biometrik membalas HTTP '.$response->status();
                 }
             } catch (\Throwable $e) {
-                \Illuminate\Support\Facades\Log::warning('Mesin biometrik tidak dapat dihubungi: ' . $e->getMessage());
+                Log::warning('Mesin biometrik tidak dapat dihubungi: '.$e->getMessage());
                 $backendError = 'mesin biometrik tidak dapat dihubungi';
             }
         }
@@ -235,8 +292,8 @@ class PresensiController extends Controller
         // Jarak hanya dicatat; tidak ada bagian keputusan di bawah yang membacanya.
         $camera = $this->cameraInfo($request);
         $distanceTablesReady = DistanceCalibration::tablesReady();
-        if (!$distanceTablesReady) {
-            \Illuminate\Support\Facades\Log::warning('Tabel distance_calibrations/distance_logs belum ada; jalankan php artisan migrate. Presensi dicatat tanpa distance_logs.');
+        if (! $distanceTablesReady) {
+            Log::warning('Tabel distance_calibrations/distance_logs belum ada; jalankan php artisan migrate. Presensi dicatat tanpa distance_logs.');
         }
         $distanceInfo = $this->recordedDistance(
             $engineFace, $camera, $browserDistanceCm, $browserDistanceSource,
@@ -299,14 +356,14 @@ class PresensiController extends Controller
                 $message = "PULANG: Presensi Pulang Berhasil Dicatat [{$schedule['time_range']}]";
             } elseif ($schedule['status'] === AttendanceScheduleService::STATUS_DITUTUP) {
                 // > 08.00 WIB
-                if ($sessionType === 'TEST' || $sessionType === 'ENROLLMENT') {
+                if (in_array($sessionType, ['TEST', 'ENROLLMENT', 'CALIBRATION'], true)) {
                     $statusStr = 'terlambat';
-                    $message = "Mode Uji Riset: Batas Masuk Ditutup (>08.00 WIB) - Status Tercatat DITUTUP / ALPHA";
+                    $message = 'Mode Uji Riset: Batas Masuk Ditutup (>08.00 WIB) - Status Tercatat DITUTUP / ALPHA';
                 } else {
                     $isSuccess = false;
                     $statusStr = 'ditutup';
                     $finalDecision = 'REJECT';
-                    $message = "Presensi Masuk Ditutup (> 08.00 WIB). Status Sistem: DITUTUP / ALPHA. Harap lapor manual ke Guru Piket / TU SMK Al-Madani.";
+                    $message = 'Presensi Masuk Ditutup (> 08.00 WIB). Status Sistem: DITUTUP / ALPHA. Harap lapor manual ke Guru Piket / TU SMK Al-Madani.';
                 }
             } else {
                 // DILUAR_JADWAL
@@ -319,26 +376,26 @@ class PresensiController extends Controller
             $statusStr = 'failed';
 
             if (in_array($biometricSource, ['unavailable', 'fta'], true)) {
-                $message = 'Presensi tidak dapat diverifikasi: ' . $backendError
-                    . '. Tidak ada skor biometrik yang dicatat. Silakan ulangi atau hubungi admin.';
-            } elseif (!$isLivenessValid && !$isIdMatch) {
+                $message = 'Presensi tidak dapat diverifikasi: '.$backendError
+                    .'. Tidak ada skor biometrik yang dicatat. Silakan ulangi atau hubungi admin.';
+            } elseif (! $isLivenessValid && ! $isIdMatch) {
                 $message = 'Gagal: Identitas Wajah Tidak Cocok dan Liveness EMAR Tidak Terpenuhi';
-            } elseif (!$isLivenessValid) {
+            } elseif (! $isLivenessValid) {
                 if ($challengeStatus === 'REJECT_WRONG_ACTION') {
                     $actionLabel = ($activeChallenge === 'BLINK') ? 'Kedip Mata' : 'Buka Mulut';
                     $wrongLabel = ($activeChallenge === 'BLINK') ? 'membuka mulut' : 'mengedipkan mata';
                     $message = "Gagal Liveness: Aksi Tidak Sesuai Tantangan Acak ({$activeChallenge}) - Instruksi: {$actionLabel}, namun terdeteksi {$wrongLabel}";
                 } elseif ($challengeStatus === 'REJECT_TIMEOUT') {
                     $message = 'Gagal Liveness: Batas Waktu Respons Habis (>4s) - Indikasi Spoofing Foto Statis / Replay';
-                } elseif (!$isBlinkValid && !$isMouthValid) {
+                } elseif (! $isBlinkValid && ! $isMouthValid) {
                     $message = 'Gagal Liveness: Tidak Terdeteksi Kedipan dan Gerakan Mulut (Foto Statis)';
-                } elseif (!$isMouthValid) {
+                } elseif (! $isMouthValid) {
                     $message = 'Gagal Liveness: Gerakan Mulut 0x (Terindikasi Cut-Out/Lubang Foto)';
                 } else {
                     $message = 'Gagal Liveness: Kedipan Mata 0x';
                 }
-            } elseif (!$isIdMatch) {
-                $message = 'Gagal Identifikasi: Jarak Euclidean (' . number_format($euclideanDistance, 2) . ') Melebihi Batas';
+            } elseif (! $isIdMatch) {
+                $message = 'Gagal Identifikasi: Jarak Euclidean ('.number_format($euclideanDistance, 2).') Melebihi Batas';
             } else {
                 $message = 'Gagal: Posisi Wajah Kurang Stabil (<80%)';
             }
@@ -365,7 +422,7 @@ class PresensiController extends Controller
         $pLive = $livenessValid ? 1.0 : 0.0;
         $sFinal = $evaluated ? (0.6 * $pFace) + (0.4 * $pLive) : null;
         $s3 = ($evaluated && $sFinal >= 0.75) ? 1 : 0;
-        if (!$evaluated) {
+        if (! $evaluated) {
             $s1 = $s2 = $s3 = null;
         }
         $round3 = fn ($v) => $v === null ? null : round($v, 3);
@@ -398,15 +455,26 @@ class PresensiController extends Controller
             'distance_target_met' => $distanceTargetMet,
         ];
 
+        // Label kebenaran dan asal split ikut catatan presensi, agar ekspor riwayat
+        // bisa menghitung APCER per spesies tanpa menebak dari prediksi sistem.
+        // Nilai dari klien apa adanya: bawaan 'BONA_FIDE'/'TEST' di atas bukan label.
+        $trialLabels = [
+            'sample_type' => $request->input('sample_type') ?: null,
+            'session_type' => $request->input('session_type') ?: null,
+            'pai_species' => $paiSpecies,
+            'participant_id' => $participantId,
+            'dataset_split' => $datasetSplit,
+        ];
+
         // Database Persistence Transaction (Atomik Sesuai PRD)
         $record = null;
-        \Illuminate\Support\Facades\DB::transaction(function () use (
+        DB::transaction(function () use (
             $user, $subjectId, $statusStr, $message, $requestId,
             $facenetScore, $emarScore, $euclideanDistance, $distanceCm, $luxValue,
             $distanceSource, $luxSource, $distanceTarget, $luxTarget, $distanceTargetMet, $luxTargetMet,
             $earBlinks, $marMouths, $facePct, $scanDuration, $padPred, $idPred,
             $activeChallenge, $challengeStatus, $distanceMeta, $distanceTablesReady, $luxInfo, $luxTablesReady,
-            $finalDecision, $schedule, $sampleType, $sessionType, $evaluationBab5, $biometricSource, $round3, &$record
+            $finalDecision, $schedule, $sampleType, $sessionType, $evaluationBab5, $biometricSource, $round3, $trialLabels, &$record
         ) {
             // 1. Save Attendance Record
             $record = AttendanceRecord::create([
@@ -441,7 +509,7 @@ class PresensiController extends Controller
                     'operational_session' => $schedule,
                     'evaluation_bab5' => $evaluationBab5,
                     'biometric_source' => $biometricSource,
-                ], $distanceMeta, Arr::except($luxInfo, ['lux', 'lux_source'])),
+                ], $trialLabels, $distanceMeta, Arr::except($luxInfo, ['lux', 'lux_source'])),
             ]);
 
             if ($luxTablesReady) {
@@ -492,7 +560,7 @@ class PresensiController extends Controller
 
                 if ($guru) {
                     $guru->update([
-                        'status_presensi'  => 'AKTIF',
+                        'status_presensi' => 'AKTIF',
                         'last_presensi_at' => now('Asia/Pontianak'),
                     ]);
                 }
@@ -539,23 +607,32 @@ class PresensiController extends Controller
 
         // Dataset riset hanya menerima presentasi yang diukur mesin biometrik dari
         // akun sungguhan. Presentasi simulasi, FTA, tanpa hasil mesin, atau dari
-        // akun uji (is_test_data) tidak pernah ditulis.
+        // akun uji (is_test_data) tidak pernah ditulis. Presentasi calibration_dev
+        // juga tidak: kedua CSV ini adalah dataset TEST dan tidak punya kolom split.
         $isTestAccount = (bool) ($user->is_test_data ?? false);
         // Lux/jarak yang tidak terukur ditulis sebagai sel kosong, bukan 0 atau preset.
         $csvNum = fn (?float $v) => $v === null ? '' : rtrim(rtrim(number_format($v, 1, '.', ''), '0'), '.');
-        if ($biometricSource === 'engine' && !$isTestAccount) {
+        if ($isCalibrationDev) {
+            $this->appendRawFrames($request->input('frame_series'), $record, $requestId, $trialLabels, [
+                'lux_target' => $luxTarget,
+                'distance_target_cm' => $distanceTarget,
+                'biometric_source' => $biometricSource,
+                'euclidean_distance' => $euclideanDistance,
+            ]);
+        }
+        if ($biometricSource === 'engine' && ! $isTestAccount && ! $isCalibrationDev) {
             // 3. Auto-Append to Matriks_Evaluasi_Bab4.csv
             try {
                 $csvPath = (string) config('biometrics.research_csv.matriks');
                 $dir = dirname($csvPath);
-                if (!is_dir($dir)) {
+                if (! is_dir($dir)) {
                     mkdir($dir, 0755, true);
                 }
-                if (!file_exists($csvPath)) {
+                if (! file_exists($csvPath)) {
                     file_put_contents($csvPath, "File_Uji,Claimed_ID,Sample_Type,PAI_Species,Lux,Jarak_cm,Session,PAD_Pred,ID_Pred,Jarak,Kedipan,Mulut,Wajah_%,Durasi_s,Final,Error\n");
                 }
-                $fileNameUji = "LIVE_{$subjectId}_" . now()->format('Ymd_His') . ".webm";
-                $paiSpecies = ($sampleType === 'BONA_FIDE') ? 'NONE' : ((!$isMouthValid && $isBlinkValid) ? 'CUT_OUT' : 'PHOTO');
+                $fileNameUji = "LIVE_{$subjectId}_".now()->format('Ymd_His').'.webm';
+                $paiSpecies = ($sampleType === 'BONA_FIDE') ? 'NONE' : ((! $isMouthValid && $isBlinkValid) ? 'CUT_OUT' : 'PHOTO');
                 $errorCol = ($finalDecision === 'REJECT') ? str_replace(',', ';', $message) : '';
                 $csvLine = sprintf(
                     "%s,%s,%s,%s,%s,%s,%s,%s,%s,%.3f,%d,%d,%.1f,%.2f,%s,%s\n",
@@ -578,7 +655,7 @@ class PresensiController extends Controller
                 );
                 file_put_contents($csvPath, $csvLine, FILE_APPEND);
             } catch (\Exception $csvErr) {
-                \Illuminate\Support\Facades\Log::error('CSV Logger error: ' . $csvErr->getMessage());
+                Log::error('CSV Logger error: '.$csvErr->getMessage());
             }
 
             // Auto-Append to Dataset_Eksperimen_Bab5.csv
@@ -587,10 +664,10 @@ class PresensiController extends Controller
                 $bab5Exists = file_exists($bab5CsvPath);
                 $fp = fopen($bab5CsvPath, 'a');
                 if ($fp) {
-                    if (!$bab5Exists) {
+                    if (! $bab5Exists) {
                         fputcsv($fp, [
                             'participant_id', 'jarak_cm', 'lux', 'label_aktual',
-                            'euclidean_dist', 'ear', 'mar', 'keputusan_S1', 'keputusan_S2', 'keputusan_S3'
+                            'euclidean_dist', 'ear', 'mar', 'keputusan_S1', 'keputusan_S2', 'keputusan_S3',
                         ]);
                     }
 
@@ -604,12 +681,12 @@ class PresensiController extends Controller
                         round($marVal, 3),
                         $s1,
                         $s2,
-                        $s3
+                        $s3,
                     ]);
                     fclose($fp);
                 }
             } catch (\Exception $bab5Err) {
-                \Illuminate\Support\Facades\Log::error('Bab 5 CSV Logger error: ' . $bab5Err->getMessage());
+                Log::error('Bab 5 CSV Logger error: '.$bab5Err->getMessage());
             }
         }
 
@@ -635,6 +712,10 @@ class PresensiController extends Controller
                     'euclidean_distance' => $round3($euclideanDistance),
                     'ear_blinks' => $earBlinks,
                     'mar_mouths' => $marMouths,
+                    'sample_type' => $trialLabels['sample_type'],
+                    'pai_species' => $paiSpecies,
+                    'participant_id' => $participantId,
+                    'dataset_split' => $datasetSplit,
                     's1' => $s1,
                     's2' => $s2,
                     's3' => $s3,
@@ -698,7 +779,7 @@ class PresensiController extends Controller
                 'lighting_status' => $luxInfo['lighting_status'],
                 'lighting_message' => $luxInfo['lighting_message'],
                 'lux_engine_note' => $luxInfo['lux_engine_note'],
-                'lighting' => \App\Services\LightingSummary::fromMetadata([
+                'lighting' => LightingSummary::fromMetadata([
                     'lux' => $luxValue,
                     'lux_source' => $luxSource,
                     'lux_target' => $luxTarget,
@@ -713,13 +794,13 @@ class PresensiController extends Controller
                 'liveness_valid' => $livenessValid,
                 'ear_val' => round($earVal, 3),
                 'mar_val' => round($marVal, 3),
-            ], $distanceMeta),
+            ], $trialLabels, $distanceMeta),
             'metadata' => [
                 'facenet_score' => $facenetScore,
                 'emar_score' => $emarScore,
                 'distance' => $euclideanDistance,
                 'operational_session' => $schedule,
-            ]
+            ],
         ], 200);
     }
 
@@ -731,7 +812,7 @@ class PresensiController extends Controller
     private function measuredInput(Request $request, array $valueKeys, string $sourceKey, array $liveSources): array
     {
         $source = (string) $request->input($sourceKey, '');
-        if (!in_array($source, $liveSources, true)) {
+        if (! in_array($source, $liveSources, true)) {
             return [null, 'none'];
         }
 
@@ -742,6 +823,74 @@ class PresensiController extends Controller
         }
 
         return [null, 'none'];
+    }
+
+    /**
+     * Tambahkan deret EAR/MAR per frame satu presentasi calibration_dev ke
+     * log_raw_frames_dev.csv. Deret berasal dari landmark MediaPipe di browser,
+     * yaitu sinyal yang dihitung siklus kedip/mulutnya untuk keputusan S2.
+     * Jarak L2 hanya ada per presentasi (frame kandidat terbaik mesin), jadi
+     * kolomnya bernama trial_l2_dist dan bernilai sama di semua frame.
+     *
+     * @param  array{sample_type: string, session_type: string, pai_species: string|null, participant_id: string|null, dataset_split: string|null}  $labels
+     * @param  array{lux_target: float|null, distance_target_cm: float|null, biometric_source: string, euclidean_distance: float|null}  $trial
+     */
+    private function appendRawFrames(?string $rawSeries, ?AttendanceRecord $record, string $requestId, array $labels, array $trial): void
+    {
+        $decoded = $rawSeries === null || $rawSeries === '' ? [] : json_decode($rawSeries, true);
+        if (! is_array($decoded) || $decoded === []) {
+            return;
+        }
+
+        $frames = [];
+        foreach ($decoded as $frame) {
+            if (is_array($frame) && count($frame) === 3 && array_is_list($frame)
+                && is_numeric($frame[0]) && is_numeric($frame[1]) && is_numeric($frame[2])) {
+                $frames[] = [round((float) $frame[0], 1), round((float) $frame[1], 4), round((float) $frame[2], 4)];
+            }
+        }
+        if (count($frames) !== count($decoded)) {
+            Log::warning(sprintf(
+                'frame_series presensi #%s: %d dari %d frame tidak berformat [t_ms, ear, mar] dan tidak dicatat.',
+                $record?->id ?? '-', count($decoded) - count($frames), count($decoded)
+            ));
+        }
+        if ($frames === []) {
+            return;
+        }
+
+        $num = fn (?float $v) => $v === null ? '' : $v;
+        try {
+            $path = (string) config('biometrics.research_csv.raw_frames_dev');
+            $dir = dirname($path);
+            if (! is_dir($dir)) {
+                mkdir($dir, 0755, true);
+            }
+            $exists = file_exists($path);
+            $fp = fopen($path, 'a');
+            if ($fp === false) {
+                throw new \RuntimeException("tidak dapat membuka {$path}");
+            }
+            if (! $exists) {
+                fputcsv($fp, [
+                    'attendance_id', 'request_id', 'recorded_at', 'participant_id', 'dataset_split',
+                    'sample_type', 'pai_species', 'lux_target', 'distance_target_cm', 'biometric_source',
+                    'frame_idx', 't_ms', 'raw_ear', 'raw_mar', 'trial_l2_dist', 'landmark_source',
+                ]);
+            }
+            $recordedAt = now()->toIso8601String();
+            foreach ($frames as $idx => [$tMs, $ear, $mar]) {
+                fputcsv($fp, [
+                    $record?->id, $requestId, $recordedAt, $labels['participant_id'], $labels['dataset_split'],
+                    $labels['sample_type'], $labels['pai_species'] ?? '', $num($trial['lux_target']), $num($trial['distance_target_cm']),
+                    $trial['biometric_source'], $idx, $tMs, $ear, $mar,
+                    $trial['euclidean_distance'] === null ? '' : round($trial['euclidean_distance'], 4), 'browser_mediapipe',
+                ]);
+            }
+            fclose($fp);
+        } catch (\Throwable $e) {
+            Log::error('Log frame calibration_dev gagal: '.$e->getMessage());
+        }
     }
 
     /**
@@ -770,7 +919,7 @@ class PresensiController extends Controller
         $label = is_string($label) ? mb_substr(trim($label), 0, 191) : '';
         $resolution = $request->input('camera_resolution');
         $resolution = is_string($resolution) && preg_match('/^\s*(\d{2,5})\s*[x×]\s*(\d{2,5})\s*$/u', $resolution, $m)
-            ? $m[1] . 'x' . $m[2]
+            ? $m[1].'x'.$m[2]
             : null;
         $fps = $request->input('camera_fps');
         $fps = is_numeric($fps) && (float) $fps > 0 && (float) $fps <= 1000 ? round((float) $fps, 1) : null;
@@ -816,13 +965,13 @@ class PresensiController extends Controller
         $engineLux = null;
         $engineLuma = null;
         $note = null;
-        if (!$tablesReady) {
+        if (! $tablesReady) {
             $note = 'lux_table_missing';
-        } elseif (!$calibration) {
+        } elseif (! $calibration) {
             $note = 'no_lux_calibration';
-        } elseif (!$calibration->hasEngineModel()) {
+        } elseif (! $calibration->hasEngineModel()) {
             $note = 'lux_calibration_without_engine_model';
-        } elseif (!$frames) {
+        } elseif (! $frames) {
             $note = 'no_lux_probe';
         } elseif ($locked === null || $locked !== $calibration->exposure_locked) {
             $note = 'exposure_mode_mismatch';
@@ -884,12 +1033,12 @@ class PresensiController extends Controller
     private function luxEstimateDetail(Request $request): ?array
     {
         $raw = $request->input('lux_estimate');
-        if (!is_string($raw) || strlen($raw) > 500) {
+        if (! is_string($raw) || strlen($raw) > 500) {
             return null;
         }
         $data = json_decode($raw, true);
         $method = is_array($data) ? ($data['method'] ?? null) : null;
-        if (!in_array($method, ['human_face_photometry', 'apex_exposure', 'fallback_portrait_photometry'], true)) {
+        if (! in_array($method, ['human_face_photometry', 'apex_exposure', 'fallback_portrait_photometry'], true)) {
             return null;
         }
         $number = fn ($v) => is_int($v) || is_float($v) ? (is_finite((float) $v) ? round((float) $v, 4) : null) : null;
@@ -921,16 +1070,16 @@ class PresensiController extends Controller
 
         if ($engineFace['ratio'] === null) {
             $note = 'engine_no_face_width';
-        } elseif (!$tablesReady) {
+        } elseif (! $tablesReady) {
             $note = 'calibration_table_missing';
-        } elseif (!$calibration) {
+        } elseif (! $calibration) {
             $note = 'no_calibration';
-        } elseif (!$calibration->hasEngineModel()) {
+        } elseif (! $calibration->hasEngineModel()) {
             $note = 'calibration_without_engine_model';
         } elseif ($camera['camera_label'] !== null && $calibration->camera_label !== null
             && strcasecmp(trim($camera['camera_label']), trim($calibration->camera_label)) !== 0) {
             $note = 'camera_label_mismatch';
-        } elseif (!$calibration->matchesAspect($engineFace['frame_width'], $engineFace['frame_height'])) {
+        } elseif (! $calibration->matchesAspect($engineFace['frame_width'], $engineFace['frame_height'])) {
             $note = 'aspect_mismatch';
         } else {
             $engineCm = $calibration->engineDistance($engineFace['ratio']);
@@ -977,7 +1126,7 @@ class PresensiController extends Controller
     /**
      * Download Bab 5 Cochran's Q & McNemar Evaluation Dataset CSV
      */
-    public function exportBab5(): \Symfony\Component\HttpFoundation\BinaryFileResponse|\Illuminate\Http\Response
+    public function exportBab5(): BinaryFileResponse|Response
     {
         $csvPath = (string) config('biometrics.research_csv.bab5');
         if (file_exists($csvPath)) {
@@ -991,6 +1140,7 @@ class PresensiController extends Controller
             'Content-Disposition' => 'attachment; filename="Dataset_Eksperimen_Bab5.csv"',
         ];
         $headerRow = "participant_id,jarak_cm,lux,label_aktual,euclidean_dist,ear,mar,keputusan_S1,keputusan_S2,keputusan_S3\n";
+
         return response($headerRow, 200, $headers);
     }
 }

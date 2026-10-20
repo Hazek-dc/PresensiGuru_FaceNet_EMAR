@@ -51,6 +51,7 @@ import {
 } from '../../Utils/faceDistance';
 import { NormalizedFaceROI } from '../../Utils/luxMeasurement';
 import { classifyLighting, LuxCalibrationContract, LuxProbeResult, runLuxProbe } from '../../Utils/luxCalibration';
+import { soloDistanceGate } from '../../Utils/soloSession';
 
 /* ------------------------------------------------------------------ */
 /*  Types                                                              */
@@ -80,7 +81,11 @@ export interface ScanMetrics {
     marVal?: number;
     activeChallenge?: ActiveChallengeType;
     challengeStatus?: ActiveChallengeStatus;
+    /** [ms sejak awal rekaman, EAR, MAR] tiap pembaruan landmark; hanya bila collectFrameSeries. */
+    frameSeries?: Array<[number, number, number]>;
 }
+
+export type LivenessStage = 'NONE' | 'COUNTDOWN' | 'SCANNING_8S' | 'COMPLETED';
 
 interface FaceScannerContainerProps {
     onVerificationSubmit: (videoBlob: Blob, metrics: ScanMetrics) => void;
@@ -119,9 +124,16 @@ interface FaceScannerContainerProps {
     luxOverlay?: { lux: number | null; source: string | null; calibrated: boolean; note: string | null } | null;
     /** Rasio lebar wajah tiap pembaruan landmark (null tanpa wajah), untuk kalibrasi jarak di Studio. */
     onFaceWidthRatio?: (ratio: number | null) => void;
+    /** Lama wajah harus lolos gerbang sebelum hitung mundur; mode solo memakai 1,5 s. */
+    holdMs?: number;
+    /** Mode solo: hanya rentang target yang boleh lanjut (bona fide), serangan tanpa gerbang jarak. */
+    soloGate?: { targetCm: number | null; attack: boolean } | null;
+    onStageChange?: (stage: LivenessStage) => void;
+    /** Kirim deret EAR/MAR per frame bersama metrik (log calibration_dev). */
+    collectFrameSeries?: boolean;
+    /** Pesan selama paused; bawaannya untuk pendaftaran wajah. */
+    pausedMessage?: string;
 }
-
-type LivenessStage = 'NONE' | 'COUNTDOWN' | 'SCANNING_8S' | 'COMPLETED';
 
 /* ------------------------------------------------------------------ */
 /*  Constants                                                          */
@@ -155,6 +167,11 @@ export function FaceScannerContainer({
     onLuxProbe,
     luxOverlay = null,
     onFaceWidthRatio,
+    holdMs = QUALITY_HOLD_MS,
+    soloGate = null,
+    onStageChange,
+    collectFrameSeries = false,
+    pausedMessage = 'Pemindaian presensi dijeda selama pendaftaran wajah.',
 }: FaceScannerContainerProps) {
     /* Refs */
     const videoRef = useRef<HTMLVideoElement | null>(null);
@@ -218,6 +235,11 @@ export function FaceScannerContainer({
     const luxProbeInFlightRef = useRef(false);
     const livenessStageRef = useRef<LivenessStage>(livenessStage);
     livenessStageRef.current = livenessStage;
+    const onStageChangeRef = useRef(onStageChange);
+    onStageChangeRef.current = onStageChange;
+    useEffect(() => {
+        onStageChangeRef.current?.(livenessStage);
+    }, [livenessStage]);
     // Saat dijeda (pendaftaran wajah, kalibrasi lux) eksposur dipegang jendela lain.
     const probePausedRef = useRef(paused);
     probePausedRef.current = paused;
@@ -690,6 +712,10 @@ export function FaceScannerContainer({
     const totalFramesRef = useRef<number>(0);
     const minEarRef = useRef<number>(0.30);
     const maxMarRef = useRef<number>(0.05);
+    const frameSeriesRef = useRef<Array<[number, number, number]>>([]);
+    const scanStartRef = useRef<number>(0);
+    const collectFrameSeriesRef = useRef(collectFrameSeries);
+    collectFrameSeriesRef.current = collectFrameSeries;
     const scanTimerIntervalRef = useRef<NodeJS.Timeout | null>(null);
     const countdownTimerRef = useRef<NodeJS.Timeout | null>(null);
     const pausedRef = useRef(paused);
@@ -716,6 +742,13 @@ export function FaceScannerContainer({
             // Accumulate min EAR (deepest blink) and max MAR (widest mouth open)
             if (ear < minEarRef.current) minEarRef.current = ear;
             if (mar > maxMarRef.current) maxMarRef.current = mar;
+            if (collectFrameSeriesRef.current) {
+                frameSeriesRef.current.push([
+                    Math.round((performance.now() - scanStartRef.current) * 10) / 10,
+                    Math.round(ear * 10000) / 10000,
+                    Math.round(mar * 10000) / 10000,
+                ]);
+            }
 
             // Siklus penuh kedip (EAR < 0,20) dan buka-tutup mulut (MAR >= 0,10), Tabel 5.2
             if (blinkCycleRef.current.update(ear < EAR_BLINK_THRESHOLD)) {
@@ -815,11 +848,14 @@ export function FaceScannerContainer({
         });
     }, [landmarks, hasFace, onDistanceUpdate, onFaceROIUpdate, onFaceWidthRatio, calibratedModel]);
 
-    const distanceGate = distancePrecheck({
+    const baseDistanceGate = distancePrecheck({
         calibrated: calibratedModel !== null,
         distanceCm: liveDistanceCm,
         faceDetected: hasFace,
     });
+    const distanceGate = soloGate
+        ? soloDistanceGate(baseDistanceGate, { calibrated: calibratedModel !== null, ...soloGate })
+        : baseDistanceGate;
     const distanceGateRef = useRef(distanceGate);
     distanceGateRef.current = distanceGate;
     const distanceBlocked = distanceGate.blocked;
@@ -866,6 +902,8 @@ export function FaceScannerContainer({
             totalFramesRef.current = 0;
             minEarRef.current = 0.30;
             maxMarRef.current = 0.05;
+            frameSeriesRef.current = [];
+            scanStartRef.current = performance.now();
             blinkCycleRef.current.reset();
             mouthCycleRef.current.reset();
             setEarBlinksCount(0);
@@ -957,6 +995,7 @@ export function FaceScannerContainer({
                     marVal: parseFloat(maxMarRef.current.toFixed(3)),
                     activeChallenge: activeChallengeRef.current || 'BLINK',
                     challengeStatus: finalStatus,
+                    ...(collectFrameSeriesRef.current ? { frameSeries: frameSeriesRef.current } : {}),
                 });
             };
 
@@ -1027,7 +1066,7 @@ export function FaceScannerContainer({
         if (paused) {
             qualityStartRef.current = null;
             setVisualState('SEARCHING_FACE');
-            setStatusMessage('Pemindaian presensi dijeda selama pendaftaran wajah.');
+            setStatusMessage(pausedMessage);
             return;
         }
 
@@ -1070,7 +1109,7 @@ export function FaceScannerContainer({
                 setStatusMessage('Memeriksa posisi wajah & jarak (30 / 45 / 60 cm)...');
                 return;
             }
-            if (now - qualityStartRef.current < QUALITY_HOLD_MS) {
+            if (now - qualityStartRef.current < holdMs) {
                 setVisualState('CHECKING_QUALITY');
                 return;
             }
@@ -1092,6 +1131,8 @@ export function FaceScannerContainer({
         distanceBlocked,
         distanceGuidance,
         speakGuidance,
+        holdMs,
+        pausedMessage,
     ]);
 
     /* Posisi keluar rentang saat hitung mundur: batalkan sebelum perekaman dimulai */
@@ -1511,7 +1552,11 @@ export function FaceScannerContainer({
 
                         {/* Session Type Pill (Desktop) */}
                         <span className="hidden md:inline-flex shrink-0 whitespace-nowrap items-center rounded-full bg-royal-blue/20 border border-royal-blue/40 px-2 py-0.5 text-[10px] font-bold text-sky-300 backdrop-blur-md uppercase">
-                            {scenarioParams?.session_type === 'ENROLLMENT' ? 'Session-E' : 'Session-T'}
+                            {scenarioParams?.session_type === 'ENROLLMENT'
+                                ? 'Session-E'
+                                : scenarioParams?.session_type === 'CALIBRATION'
+                                  ? 'Session-C'
+                                  : 'Session-T'}
                         </span>
                     </div>
 

@@ -59,6 +59,10 @@ class CombinedHistoryExport
         'Lux' => 'lux',
         'Sumber Lux' => 'lux_source',
         'Target Lux Skenario' => 'lux_target',
+        'Label Sampel' => 'sample_type',
+        'Spesies PAI' => 'pai_species',
+        'ID Partisipan' => 'participant_id',
+        'Split Dataset' => 'dataset_split',
         'Sumber Biometrik' => 'biometric_source',
         'Akun Uji' => 'is_test_data',
         'Disembunyikan dari Dasbor' => 'hidden_at',
@@ -293,6 +297,11 @@ class CombinedHistoryExport
             'lux' => $meta['lux'] ?? null,
             'lux_source' => self::provenance($meta, 'lux', 'lux_source', false),
             'lux_target' => $meta['lux_target'] ?? $bab5['lux_target'] ?? null,
+            // Catatan sebelum 20-10-2026 tidak menyimpan label sampel; selnya kosong.
+            'sample_type' => $meta['sample_type'] ?? null,
+            'pai_species' => $meta['pai_species'] ?? null,
+            'participant_id' => $meta['participant_id'] ?? null,
+            'dataset_split' => $meta['dataset_split'] ?? null,
             'hidden_at' => self::time($record->hidden_from_dashboard_at, $tz),
             'log_description' => $log?->description,
         ] + self::logCells($log, $users);
@@ -334,6 +343,10 @@ class CombinedHistoryExport
                 'distance_source' => self::provenance($props, 'distance_cm', 'distance_source', true),
                 'lux' => $props['lux'] ?? null,
                 'lux_source' => self::provenance($props, 'lux', 'lux_source', true),
+                'sample_type' => $props['sample_type'] ?? null,
+                'pai_species' => $props['pai_species'] ?? null,
+                'participant_id' => $props['participant_id'] ?? null,
+                'dataset_split' => $props['dataset_split'] ?? null,
             ];
         }
 
