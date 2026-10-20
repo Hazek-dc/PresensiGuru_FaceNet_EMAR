@@ -1,34 +1,60 @@
 ﻿#!/usr/bin/env python3
 """
-=============================================================================
-EKSPOR DATASET RIWAYAT & LOG PENGUJIAN SKRIPSI: COCHRAN'S Q & ISO/IEC 30107-3
-Penelitian : "Analisis Kinerja FaceNet dan Eye-Mouth Aspect Ratio (EMAR)
-              pada Sistem Face Verification Mitigasi Serangan Spoofing Presensi"
-Peneliti   : Qalwani Anugerah — NPM 221220048
-Institusi  : Universitas Muhammadiyah Pontianak (2026)
-=============================================================================
+DATA SIMULASI, BUKAN HASIL PENGUKURAN.
 
-Komposisi Total: 6.480 Data Pengujian Berpasangan (Paired Samples)
-  - 1.620 baris Bona Fide (18 subjek x 9 kondisi x 10 repetisi)
-  - 4.860 baris Spoofing  (18 subjek x 9 kondisi x 3 jenis serangan x 10 repetisi)
-      * 1.620 Print_Attack
-      * 1.620 Screen_Attack
-      * 1.620 Replay_Video
+Skrip ini membangkitkan 6.480 baris tiruan untuk mencoba alur hitung Cochran's Q
+dan metrik ISO/IEC 30107-3. Tidak ada kamera, subjek, atau presentasi yang
+direkam. Setiap skor adalah offset tetap ditambah derau dari hash zlib.crc32 di
+generate_sample_row(). Angka dari berkas keluarannya tidak boleh dikutip sebagai
+hasil penelitian di naskah skripsi.
 
-Header CSV:
-participant_id,label_aktual,kondisi_lux,kondisi_jarak,skor_facenet,skor_ear,skor_mar,keputusan_S1,keputusan_S2,keputusan_S3
+Perbedaan dengan sistem dan rancangan yang sebenarnya:
+  - REPETITIONS = 10, padahal parameter_penelitian.py mengunci 5 (3.240 presentasi).
+  - keputusan_S2 dan keputusan_S3 untuk Print_Attack dan Screen_Attack ditulis
+    langsung "Reject", tidak dihitung dari skor.
+  - S3 memakai skala P_face 0,80 dan ambang terima 0,50, sedangkan
+    PresensiController.php memakai 1,5 dan 0,75.
+  - ID subjek berawalan P, sedangkan perekaman memakai S01..S18.
+
+Data ukur ada di logs/telemetry.db (tabel presentation_log). Ekspornya lewat
+rute Laravel export.cochran (CochranExportService) atau
+FrameTelemetryLogger.export_presentations_csv(), lalu dianalisis dengan
+analisis_tingkat_subjek.py. Skrip analisis itu menolak berkas simulasi ini.
+
+Konteks penelitian : "Analisis Kinerja FaceNet dan Eye-Mouth Aspect Ratio (EMAR)
+                      pada Sistem Face Verification Mitigasi Serangan Spoofing Presensi"
+Peneliti           : Qalwani Anugerah, NPM 221220048
+Institusi          : Universitas Muhammadiyah Pontianak (2026)
+
+Komposisi simulasi: 6.480 baris tiruan
+  - 1.620 baris Bona_Fide (18 subjek x 9 kondisi x 10 repetisi)
+  - 4.860 baris serangan  (18 subjek x 9 kondisi x 3 jenis serangan x 10 repetisi)
+
+Isi CSV keluaran:
+  baris 1 : komentar penanda simulasi (diawali "#")
+  baris 2 : sumber_data,participant_id,label_aktual,kondisi_lux,kondisi_jarak,
+            skor_facenet,skor_ear,skor_mar,keputusan_S1,keputusan_S2,keputusan_S3
+  kolom sumber_data selalu berisi SIMULASI.
 """
 
 import os
 import sys
 import csv
+import math
 import zlib
 from pathlib import Path
 from typing import List, Dict, Tuple
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 OUTPUT_DIR = BASE_DIR / "exports"
-OUTPUT_CSV = OUTPUT_DIR / "Dataset_Cochran_Q_ISO30107_6480.csv"
+OUTPUT_CSV = OUTPUT_DIR / "SIMULASI_Cochran_Q_6480_BUKAN_DATA_UKUR.csv"
+
+PENANDA_SIMULASI = "DATA SIMULASI, BUKAN HASIL PENGUKURAN"
+BARIS_PENANDA = (
+    f"# {PENANDA_SIMULASI}. Dibangkitkan scripts/simulasi_cochran_dataset.py "
+    "dari hash zlib.crc32. Jangan dipakai sebagai data penelitian."
+)
+SUMBER_DATA = "SIMULASI"
 
 PARTICIPANTS = [f"P{i:02d}" for i in range(1, 19)]
 CONDITIONS_LUX = ["Redup", "Standar", "Terang"]
@@ -37,6 +63,7 @@ REPETITIONS = 10
 SPOOF_TYPES = ["Print_Attack", "Screen_Attack", "Replay_Video"]
 
 HEADERS = [
+    "sumber_data",
     "participant_id",
     "label_aktual",
     "kondisi_lux",
@@ -56,7 +83,7 @@ def generate_sample_row(
     kondisi_jarak: str,
     rep: int
 ) -> List[str]:
-    # Hash deterministik untuk reproduktifitas eksperimen ilmiah
+    # Derau tiruan, bukan pengukuran. Hash dipakai agar keluaran sama setiap dijalankan.
     seed_str = f"{participant_id}_{label_aktual}_{kondisi_lux}_{kondisi_jarak}_{rep}"
     hash_val = zlib.crc32(seed_str.encode("utf-8"))
     norm1 = (hash_val % 1000) / 1000.0
@@ -68,7 +95,7 @@ def generate_sample_row(
     jarak_offset = 0.028 if kondisi_jarak == "45cm" else (0.058 if kondisi_jarak == "60cm" else 0.0)
 
     if label_aktual == "Bona_Fide":
-        # Wajah asli hadir di depan sensor
+        # Tiruan presentasi wajah asli
         base_dist = 0.14 + (norm1 * 0.16) + lux_offset + jarak_offset
         if kondisi_lux == "Redup" and kondisi_jarak == "60cm" and norm1 > 0.88:
             base_dist = 0.415 + (norm2 * 0.04)
@@ -121,6 +148,7 @@ def generate_sample_row(
         s3 = "Accept" if (norm1 > 0.98 and skor_mar >= 0.100) else "Reject"
 
     return [
+        SUMBER_DATA,
         participant_id,
         label_aktual,
         kondisi_lux,
@@ -138,6 +166,9 @@ def generate_cochran_dataset(output_path: Path) -> int:
     count = 0
 
     with open(output_path, "w", newline="", encoding="utf-8-sig") as f:
+        # Baris pertama sengaja bukan header: pembaca CSV yang tidak melewati
+        # komentar "#" akan gagal, bukan diam-diam memakai data tiruan.
+        f.write(BARIS_PENANDA + "\r\n")
         writer = csv.writer(f)
         writer.writerow(HEADERS)
 
@@ -164,14 +195,15 @@ def generate_cochran_dataset(output_path: Path) -> int:
 
 def calculate_statistical_metrics(csv_path: Path):
     with open(csv_path, "r", encoding="utf-8-sig") as f:
-        reader = csv.DictReader(f)
+        reader = csv.DictReader(line for line in f if not line.startswith("#"))
         rows = list(reader)
 
     total_samples = len(rows)
     bf_rows = [r for r in rows if r["label_aktual"] == "Bona_Fide"]
     atk_rows = [r for r in rows if r["label_aktual"] != "Bona_Fide"]
 
-    print(f"\n[INFO] Berhasil mengekstrak {total_samples} baris dari {csv_path.name}:")
+    print(f"\n[{PENANDA_SIMULASI}]")
+    print(f"[INFO] {total_samples} baris tiruan dari {csv_path.name}:")
     print(f"  - Bona Fide: {len(bf_rows)} baris")
     print(f"  - Spoofing : {len(atk_rows)} baris")
 
@@ -243,9 +275,10 @@ def calculate_statistical_metrics(csv_path: Path):
     print(f"  Klasifikasi Benar S3 (Weighted) : {t_s3} / {total_samples} ({t_s3/total_samples*100:.2f}%)")
     print(f"  Nilai Statistik Cochran's Q     : {q_stat:.4f}")
     print(f"  Derajat Kebebasan (df = k - 1)  : {k - 1}")
-    print(f"  P-value                         : < 0.0001 (Signifikan Secara Statistik pada alpha = 0.01)")
-    print(f"  Kesimpulan                      : H0 DITOLAK. Terdapat perbedaan efektivitas yang")
-    print(f"                                    sangat signifikan antara FaceNet standalone vs EMAR.")
+    # Untuk df = 2, fungsi survival chi-kuadrat tepat sama dengan exp(-Q / 2).
+    print(f"  P-value                         : {math.exp(-q_stat / 2):.4e}")
+    print(f"  Catatan                         : {PENANDA_SIMULASI}.")
+    print(f"                                    Jangan laporkan angka ini sebagai temuan penelitian.")
     print("=" * 78 + "\n")
 
 if __name__ == "__main__":
