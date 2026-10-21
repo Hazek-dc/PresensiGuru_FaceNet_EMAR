@@ -10,12 +10,15 @@ Rumus keputusan dan metrik tidak diubah tanpa tes dan persetujuan eksplisit pene
 ## Wilayah berkas
 
 - `facenet_emar_system.py`: `count_full_cycles`, `EMARModule`, `FusionModule` (`decide_s1/s2/s3`),
-  `evaluate_trial`, konstanta `EMAR_*`, `FINAL_THRESHOLD`, `BLINK_*`, `MOUTH_*`.
+  `FaceEMARSystem.decide_all`, `verify_all_scenarios`, `evaluate_trial`, konstanta `EMAR_*` kecuali `EMAR_WORKERS`
+  (milik vision-preproc-agent), `FINAL_THRESHOLD`, `BLINK_*`, `MOUTH_*`.
 - `telemetry_logger.py`, `capture_session.py`, `active_liveness.py`, `live_inference_pad.py`,
   `evaluation_bab5.py` (rumus S1/S2/S3 dan logger CSV). Tesnya boleh ditulis bersama qa-stat-evaluator-agent.
-- Bukan wilayah Anda: `compute_iso_metrics` (milik qa-stat-evaluator-agent).
+- Bukan wilayah Anda: `compute_iso_metrics`, `compute_iso_by_pai`, `mcnemar_test` (milik qa-stat-evaluator-agent).
 - Berkas bersama (CLAUDE.md bagian 8): rumus S1/S2/S3 di `PresensiController.php` (blok evaluasi Bab 5),
   `AttendanceHistoryController.php`, `Components/Presensi/Bab5ScenarioCard.tsx`. Ubah bersama agen pemilik direktori.
+  Salinan rumus (a) di `scripts/analisis_kalibrasi_dev.py` ikut diubah bersama qa-stat-evaluator-agent dalam
+  perubahan D1 yang sama.
 
 ## Fakta kode (audit Tahap 1)
 
@@ -27,7 +30,11 @@ Rumus keputusan dan metrik tidak diubah tanpa tes dan persetujuan eksplisit pene
   bila verified DAN (P_live >= 0,5 ATAU 0,6 * (1 - d/1,20) >= 0,50). Kondisi terakhir praktis d < 0,20: pada
   d = 0,20 tepat, floating point memberi 0,49999999999999994 dan menolaknya. Dipakai `capture_session.py`/`telemetry.db`.
 - Jalur desktop ketiga: `live_inference_pad.py` -> `evaluation_bab5.evaluate_trial` (salinan
-  `facenet_emar_system.evaluate_trial`) menulis `Dataset_Eksperimen_Bab5.csv`. S2 = d <= 0,40 DAN EAR minimum sesi
+  `facenet_emar_system.evaluate_trial`) menulis `Dataset_Eksperimen_Bab5.csv`. d di jalur ini bukan dari
+  `FaceNetModule`: ekstraktornya sendiri (keras_facenet atau facenet_pytorch pada crop 160x160 tanpa MTCNN, atau
+  pseudo-embedding Sobel bila keduanya tidak terpasang), jarak minimum 1:N terhadap `DATABASE_IDENTITAS_MASTER.pkl`
+  (atau `--db`), d = 1,50 bila tidak terukur, dan `participant_id` diisi nama hasil pencocokan. Baris web di CSV
+  yang sama memakai d mesin 1:1. Jangan menggabungkan d atau `participant_id` kedua jalur. S2 = d <= 0,40 DAN EAR minimum sesi
   < 0,20 DAN MAR maksimum sesi >= 0,10 (aturan min/max, tanpa siklus, nilai bawaan 0,28/0,05 di `live_inference_pad.py` bila tidak terukur).
   S3 = rumus (a), tanpa gerbang identitas.
 - `biometric-api/app/services/emar_service.py` menghitung MAR dengan penyebut 2D (1,5 kali MAR mesin). Jangan dipakai.
@@ -44,12 +51,14 @@ Rumus keputusan dan metrik tidak diubah tanpa tes dan persetujuan eksplisit pene
 | Delta EAR/MAR >= 0,05, aturan min/max | Delta: terblokir D5. Aturan min/max sudah dipakai jalur desktop `evaluation_bab5` dan lebih lemah dari siklus penuh karena tidak memeriksa urutan. |
 | S2 dari dlib mesin | Terblokir D2. Arah yang sesuai naskah, tetapi mengubah semua keputusan web. |
 | MiniFASNet | Terblokir D6 (butuh ADR, bobot pihak luar, lisensi). |
-| `log_raw_frames.csv` | Sudah untuk `calibration_dev` (MediaPipe browser, `logs/log_raw_frames_dev.csv`). EAR/MAR dlib per frame bisa ditambahkan ke respons `/verify` sebagai kolom terpisah, jangan dicampur dalam satu kolom. |
+| `log_raw_frames.csv` | Sudah untuk `calibration_dev` (MediaPipe browser, `logs/log_raw_frames_dev.csv`). EAR/MAR dlib per frame bisa ditambahkan ke respons `/verify` sebagai kolom terpisah (jangan dicampur dalam satu kolom), bersama `vision-preproc-agent`, pemilik `_verify_video_file` dan `AttendanceResponse`. |
 | `raw_l2_dist` per frame | Tidak layak; lihat agen identitas. |
 
 ## Selesai berarti
 
 `python3 -m pytest tests` lulus (minimal `test_parameter_naskah.py`, `test_evaluation_bab5.py`,
 `test_evaluation_bab5_sensor.py`, `test_telemetry_logger.py`, `test_active_liveness.py`,
-`test_verifikasi_video_paralel.py`, `test_lebar_wajah.py`, `test_analisis_kalibrasi_dev.py`), Pest yang terkait lulus,
-lalu `thesis-guard` memeriksa diff.
+`test_verifikasi_video_paralel.py`, `test_lebar_wajah.py`, `test_analisis_kalibrasi_dev.py`) dan
+`cd biometric-api && python3 -m pytest tests` lulus (`test_enroll_verify_real_engine.py` menjalankan `EMARModule`/
+`FusionModule` asli lewat `/verify`). Pest yang terkait lulus, dan Vitest bila rumus bersama di `Bab5ScenarioCard.tsx`
+ikut berubah. `git status --short -- gallery/` kosong. Lalu `thesis-guard` memeriksa diff.

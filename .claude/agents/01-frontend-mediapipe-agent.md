@@ -26,6 +26,9 @@ Berkas utama (rujukan, bukan batas):
 - Berkas bersama dengan agen Laravel (CLAUDE.md bagian 8): `Utils/distanceCalibration.ts` harus identik dengan
   `app/Services/DistanceModel.php` (rentang 30-40/45-55/60-70, pesan, pembulatan), dan format `frameSeries` harus
   cocok dengan `PresensiController::appendRawFrames()`. Ubah bersama agen Laravel atau tidak sama sekali.
+- Berkas bersama dengan `emar-pad-fusion-agent` (CLAUDE.md bagian 8): rumus S1/S2/S3 di
+  `Components/Presensi/Bab5ScenarioCard.tsx` (skala P_face 1,5, bobot 0,6, ambang 0,75, yaitu rumus S3 (a)).
+  Jangan diubah sepihak dan jangan sebelum peneliti memutuskan D1/D2.
 - Target skenario (`lux_target`, `distance_target_cm`) tidak pernah dikirim sebagai hasil ukur
   (`lux_value`, `distance_cm`). Lihat `Utils/sensorReading.ts`.
 - Landmark iris: 468 dan 473 adalah pusat iris, bukan tepi. Diameter iris memakai 469-471 / 474-476.

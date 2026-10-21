@@ -10,7 +10,9 @@ Laravel 13. Middleware dan CSRF diatur di `bootstrap/app.php`, tidak ada `Http/K
 
 ## Wilayah berkas
 
-- `app/Http/Controllers/PresensiController.php` (`store()`: identitas klaim, split `calibration_dev`, S1/S2/S3, metadata, CSV riset, `appendRawFrames`).
+- `app/Http/Controllers/PresensiController.php` (`store()`: identitas klaim, split `calibration_dev`, metadata, CSV riset).
+- Berkas bersama (CLAUDE.md bagian 8): blok rumus S1/S2/S3 di `store()` dan di `AttendanceHistoryController.php`
+  diubah bersama `emar-pad-fusion-agent`. Validator `appendRawFrames()` diubah bersama agen frontend (format `frameSeries`).
 - `app/Http/Controllers/AttendanceHistoryController.php` (ekspor), `app/Services/CombinedHistoryExport.php`, `app/Services/CochranExportService.php`, `app/Services/SubjectLevelAnalysisService.php`.
 - `app/Models/*`, `database/migrations/*`, `routes/web.php`, `bootstrap/app.php`, `config/biometrics.php`, `app/Http/Controllers/Admin/ModelSettingController.php`.
 - `app/Services/DistanceModel.php`: harus identik dengan `resources/js/Utils/distanceCalibration.ts` (rentang, pesan, pembulatan). Berkas bersama, ubah bersama agen frontend.
@@ -26,10 +28,13 @@ Laravel 13. Middleware dan CSRF diatur di `bootstrap/app.php`, tidak ada `Http/K
     `sample_type ?: 'BONA_FIDE'` di CSV (utang data, bukan D10).
   - di `AttendanceHistoryController::exportOperational` dan ekspor sekitarnya: `'S00'`, `pad_pred ?? 'BONA_FIDE'`,
     `id_pred ?? 'MATCH'`, `face_detected_pct` 100, `scan_duration_s ?? 8.0` (thesis-guard butir 2).
+  - di `AttendanceHistoryController::index()` dan `show()`: hitung ulang S1/S2/S3 untuk rekaman tanpa
+    `evaluation_bab5` dengan bawaan EAR/MAR 0,18/0,28 dan 0,40/0,05 (D10, sama dengan `store()`).
+  - `face_detected_pct` selalu 100 dan `scan_duration_s` 8,0 berasal dari browser, jadi D10 juga butuh agen frontend.
 - `pai_species` di activity log dan Matriks CSV jalur TEST ditimpa tebakan dari prediksi. Label kebenaran hanya di `attendance_records.metadata`.
 - Ambang runtime dibaca dari `ModelSettingController::getActiveSettings()` dan bisa diubah admin.
   Simpan ambang yang berlaku per baris bila menambah kolom keputusan.
-- Rumus S1/S2/S3 tidak diubah tanpa keputusan D1/D2 dan tes.
+- Rumus S1/S2/S3 tidak diubah sepihak: hanya bersama `emar-pad-fusion-agent`, setelah keputusan D1/D2, dan dengan tes.
 
 ## Status butir PRD (audit Tahap 1)
 

@@ -14,7 +14,7 @@ Angka terkunci tersebar di beberapa berkas. Tidak ada satu sumber tunggal.
 | Hal | Sumber |
 |---|---|
 | Ambang naskah (L2, EAR, MAR, alpha, jendela), kondisi lux/jarak, label, desain | `parameter_penelitian.py` |
-| Konstanta mesin yang juga terkunci | `facenet_emar_system.py`: `D_REF`, `FINAL_THRESHOLD`, `EMAR_*`, `BLINK_CONSEC_FRAMES`, `MOUTH_OPEN_FRAMES`, `FACENET_MIN_CONFIDENCE`, `FACENET_CANDIDATE_RATIOS`, `FACENET_EARLY_EXIT_DISTANCE` |
+| Konstanta mesin yang juga terkunci | `facenet_emar_system.py`: `D_REF`, `FINAL_THRESHOLD`, `EMAR_W1`, `EMAR_W2`, `EMAR_LIVENESS_THRESHOLD`, `BLINK_CONSEC_FRAMES`, `MOUTH_OPEN_FRAMES`, `FACENET_MIN_CONFIDENCE`, `FACENET_CANDIDATE_RATIOS`, `FACENET_EARLY_EXIT_DISTANCE` |
 | Ambang web | `attendance-web/config/biometrics.php` lewat `ModelSettingController::getActiveSettings()` (bisa diubah admin) |
 | Ambang browser | `Utils/emarGeometry.ts` (`EAR_BLINK_THRESHOLD`, `MAR_OPEN_THRESHOLD`, `CHALLENGE_TIMEOUT_S`), `Utils/distanceCalibration.ts` (rentang jarak) |
 | S3 web | 0,6 / 1,5 / 0,75 masih ditulis langsung di `PresensiController.php`, `AttendanceHistoryController.php`, `Bab5ScenarioCard.tsx` |
@@ -50,6 +50,11 @@ Jangan menambah salinan angka baru. Kode Python baru mengimpor dari
 - **Perekam desktop**: `capture_session.py` menulis `logs/telemetry.db`
   (`presentation_log`). `live_inference_pad.py` memanggil
   `evaluation_bab5.evaluate_trial` dan menulis `Dataset_Eksperimen_Bab5.csv`.
+  d di jalur ini bukan jarak `FaceNetModule` 1:1: ekstraktornya sendiri
+  (keras_facenet atau facenet_pytorch tanpa MTCNN, atau pseudo-embedding Sobel),
+  jarak minimum 1:N terhadap `DATABASE_IDENTITAS_MASTER.pkl`, d = 1,50 bila tidak
+  terukur, dan `participant_id` diisi nama hasil pencocokan. Jangan menggabungkan
+  d atau `participant_id` baris desktop dengan baris web.
 - **Tidak ada di repo** (jangan dianggap ada): MiniFASNet, detektor objek browser,
   tabel `self_test_trials`, estimator jarak dari iris, kolom latensi per komponen,
   `scripts/generate_bab5_evaluation.py`.
@@ -98,17 +103,31 @@ bawaan lama. Saring di analisis, jangan sunting berkasnya.
    - Menambah gerbang d <= 0,40 ke rumus (a) membuat S3 identik dengan S2 (tes
      `test_gerbang_identitas_membuat_s3_sama_dengan_s2`).
 3. **Nilai karangan yang masih ada.** Jangan membangun fitur baru di atasnya.
-   - `PresensiController::store()`: `face_detected_pct` selalu 100.
-     `ear_val`/`mar_val` bawaan 0,18/0,28 dan 0,40/0,05 bila tidak dikirim.
-     `scan_duration_s` dikunci 8,0. `sample_type` kosong menjadi `BONA_FIDE` di CSV
+   - `face_detected_pct` selalu 100 karena `FaceScannerContainer.tsx` hanya
+     menghitung frame berwajah (`if (!hasFace) return`, lalu `totalFramesRef` dan
+     `detectedFramesRef` naik bersamaan). `store()` juga mengisi 100 bila kosong.
+   - `scan_duration_s` dikirim tetap 8.0 oleh browser (`durationS: 8.0`), dan
+     `store()` mengisi 8,0 bila kosong.
+   - `PresensiController::store()`: `ear_val`/`mar_val` bawaan 0,18/0,28 dan
+     0,40/0,05 bila tidak dikirim. `sample_type` kosong menjadi `BONA_FIDE` di CSV
      Bab 5/Matriks.
+   - `AttendanceHistoryController::index()` (sekitar baris 78-89) dan `show()`
+     (sekitar baris 276-290) menghitung ulang S1/S2/S3 untuk rekaman tanpa
+     `evaluation_bab5` dengan bawaan EAR/MAR yang sama, liveness dari ambang EAR/MAR
+     (bukan `challenge_status`), dan rumus S3 (a). Hasilnya tampil di UI sebagai
+     `evaluation_bab5`.
    - `AttendanceHistoryController::exportOperational` (sekitar baris 439-454):
      `'S00'`, `pad_pred ?? 'BONA_FIDE'`, `id_pred ?? 'MATCH'`, `face_detected_pct`
-     100, `scan_duration_s ?? 8.0`. Pola yang sama ada di sekitar baris 628 dan 724.
+     100, `scan_duration_s ?? 8.0`. Lalu `exportSubject` (sekitar baris 628,
+     `scan_duration_s ?? 8.0`) dan `exportPdfData` (sekitar baris 724-727,
+     `pad_pred ?? 'BONA_FIDE'`, `ear_blinks ?? 0`, `mar_mouths ?? 0`).
 4. **Jarak** dihitung dari rasio lebar wajah dengan model d = a/r + b (residu
    <= 3,0 cm). Sumber utama: mesin (dlib rahang titik 0-16, koefisien
-   `engine_a`/`engine_b`) bila kalibrasi aktif punya model mesin. Cadangan:
-   browser (MediaPipe pipi 234/454). Lihat `PresensiController::recordedDistance()`.
+   `engine_a`/`engine_b`) bila kalibrasi aktif punya model mesin. Cadangan: jarak
+   dari klien dengan `distance_source` `sensor` (rangefinder lewat
+   `DistanceMeterWidget`), `camera`, atau `camera_calibrated` (estimasi browser dari
+   MediaPipe pipi 234/454). Klaim `camera_calibrated` tanpa kalibrasi sah diturunkan
+   menjadi `camera`. Lihat `PresensiController::recordedDistance()`.
    Pada serangan, angka itu mengukur wajah di foto/layar, bukan jarak artefak.
    Kondisi jarak serangan = penanda lantai.
 5. **`pai_species` di activity log dan `Matriks_Evaluasi_Bab4.csv`** pada jalur
@@ -134,12 +153,14 @@ bawaan lama. Saring di analisis, jangan sunting berkasnya.
 - **Repo ini publik.** Jangan meng-commit media wajah, nama subjek, template, atau
   deret biometrik BARU (`logs/log_raw_frames_dev.csv` dan `exports/kalibrasi_dev/`
   sudah di-.gitignore). Berkas warisan sudah terlacak di git dan terekspos:
-  `dataset/foto_selfie/*` (nama subjek di nama berkas), `dataset/self_qalwani/*`,
-  `dataset/video_singkat/*.mp4` dan `*.pkl`, `dataset/frame_hasil/*`,
-  `gallery/*.pkl`, `logs/*.db`, serta nama/email di
+  `dataset/foto_selfie/*` (nama subjek di nama berkas), `dataset/video_singkat/*.mp4`
+  dan `*.pkl`, `dataset/frame_hasil/*`, `gallery/*.pkl`, `logs/*.db`, nama/email di
   `attendance-web/database/seeders/TeacherDatasetSeeder.php` dan
-  `dataset/subjects.csv`. Menghapusnya dari riwayat git adalah keputusan peneliti.
-  Agen tidak menyentuhnya.
+  `dataset/subjects.csv`, serta nama peneliti di `dataset/self_qalwani/README.md`.
+  Selain README itu, `dataset/self_qalwani/` hanya melacak `.gitkeep`, `.gitignore`,
+  dan templat manifest berisi header. Media, template, dan manifest terisi di sana
+  diabaikan `.gitignore` lokal dan tidak boleh di-commit. Menghapus berkas warisan
+  dari riwayat git adalah keputusan peneliti. Agen tidak menyentuhnya.
 - Mengubah input mesin (resolusi, margin/threshold MTCNN, alignment, pemilihan
   frame, jumlah thread) membuat hasil tidak identik. Bila yang berubah adalah
   ekstraksi embedding (MTCNN, alignment, crop), template galeri juga harus
@@ -180,7 +201,7 @@ percakapan. Rinciannya di laporan audit.
 | D7 | Aturan FTA baru (< 30% frame berwajah). |
 | D8 | MTCNN margin 14, threshold 0,9, atau affine alignment (galeri harus dibangun ulang). |
 | D9 | Spesies `cutout_attack` (N_TOTAL menjadi 4.050). |
-| D10 | Memperbaiki `face_detected_pct` dan nilai bawaan EAR/MAR (keputusan lama bisa berubah). |
+| D10 | Memperbaiki `face_detected_pct` (browser dan `store()`) dan nilai bawaan EAR/MAR (`store()`, `AttendanceHistoryController::index()/show()`). Keputusan lama bisa berubah. |
 | D11 | Jarak meteran manual: hanya boleh sebagai sumber `tape_confirmed` per sesi, bukan salinan otomatis target. |
 | D12 | Pembatasan split `calibration_dev` ke `P_DEV_01` saja. Sekarang ID S01-S18 yang punya akun juga diterima. |
 
@@ -193,22 +214,38 @@ data yang tetap tidak boleh disalin ke kolom baru.
 |---|---|
 | `frontend-mediapipe-agent` | `attendance-web/resources/js/**` |
 | `laravel-orchestrator-agent` | `attendance-web/{app,routes,config,database,bootstrap}/**`, `attendance-web/tests/**` (Pest) |
-| `vision-preproc-agent` | `biometric-api/main.py`, `biometric-api/routers/{attendance,measure}.py`, `biometric-api/app/**` kecuali `app/evaluation/**`, `biometric-api/tests/*.py` kecuali `test_enroll_*`. Di `facenet_emar_system.py`: `_verify_video_file`, `_iter_video_frames`, `_read_frames_at`, `_candidate_indices`, `FaceWidthTally`, `measure_*` |
-| `facenet-identity-agent` | `facenet_emar_system.py::FaceNetModule` (termasuk `_init_mtcnn`, `_extract_embedding`), konstanta `FACENET_*` dan `D_REF`, `biometric-api/routers/enrollment.py`, `biometric-api/tests/test_enroll_*`, `daftar_ulang_wajah.py`, `scripts/enroll_qalwani.py`, `scripts/auto_enroll_gallery.py` |
-| `emar-pad-fusion-agent` | `facenet_emar_system.py`: `count_full_cycles`, `EMARModule`, `FusionModule`, `evaluate_trial`, konstanta `EMAR_*`, `FINAL_THRESHOLD`, `BLINK_*`, `MOUTH_*`. `telemetry_logger.py`, `capture_session.py`, `active_liveness.py`, `live_inference_pad.py`, `evaluation_bab5.py` |
-| `qa-stat-evaluator-agent` | `tests/**` (Python root), `scripts/analisis_*.py`, `analisis_tingkat_subjek.py`, `facenet_emar_system.py::compute_iso_metrics`, `biometric-api/app/evaluation/**`, `biometric-api/tests/evaluation/**` |
+| `vision-preproc-agent` | `biometric-api/main.py`, `biometric-api/routers/{attendance,measure}.py`, `biometric-api/app/**` kecuali `app/evaluation/**`, `biometric-api/tests/*.py` kecuali `test_enroll_*`. Di `facenet_emar_system.py`: `verify_video_file` (dengan `_VERIFY_LOCK`), `_verify_video_file`, `_iter_video_frames`, `_read_frames_at`, `_candidate_indices`, `_ordered_parallel_map`, `_count_video_packets`, `FaceWidthTally`, `face_width_ratio`, `frame_luma_stats`, `measure_*`, `EMAR_WORKERS`, `create_flask_api` |
+| `facenet-identity-agent` | `facenet_emar_system.py::FaceNetModule` (termasuk `_init_mtcnn`, `_extract_embedding`), `resolve_gallery_key`, konstanta `FACENET_*` dan `D_REF`, `biometric-api/routers/enrollment.py`, `biometric-api/tests/test_enroll_*`, `daftar_ulang_wajah.py`, `scripts/enroll_qalwani.py`, `scripts/auto_enroll_gallery.py` |
+| `emar-pad-fusion-agent` | `facenet_emar_system.py`: `count_full_cycles`, `EMARModule`, `FusionModule`, `FaceEMARSystem.decide_all`, `verify_all_scenarios`, `evaluate_trial`, konstanta `EMAR_*` kecuali `EMAR_WORKERS`, `FINAL_THRESHOLD`, `BLINK_*`, `MOUTH_*`. `telemetry_logger.py`, `capture_session.py`, `active_liveness.py`, `live_inference_pad.py`, `evaluation_bab5.py` |
+| `qa-stat-evaluator-agent` | `tests/**` (Python root), `scripts/analisis_*.py`, `analisis_tingkat_subjek.py`, `facenet_emar_system.py`: `compute_iso_metrics`, `compute_iso_by_pai`, `mcnemar_test` (McNemar hanya deskriptif). `biometric-api/app/evaluation/**`, `biometric-api/tests/evaluation/**` |
 | `thesis-guard` | baca-saja, wajib setelah perubahan mesin, keputusan, ekspor, log, atau galeri |
 
 Berkas bersama (diubah bersama kedua agen, tidak boleh sepihak):
 
 - Rumus S1/S2/S3 di `PresensiController.php`, `AttendanceHistoryController.php`,
   `Bab5ScenarioCard.tsx`: pemilik direktori + `emar-pad-fusion-agent`, setelah D1/D2.
+- Salinan rumus (a) di `scripts/analisis_kalibrasi_dev.py` (`S3_ACCEPT`,
+  `P_FACE_SCALE`, `implied_l2`, `s3_accept`, Tabel 2c): `qa-stat-evaluator-agent` +
+  `emar-pad-fusion-agent`. Ikut diubah dalam perubahan D1 yang sama dengan rumus web,
+  `evaluation_bab5.py`, dan `facenet_emar_system.py::evaluate_trial`.
+- `biometric-api/tests/test_audit_criteria.py` dan `test_e2e_mock_pipeline.py`
+  menguji `app/services/*` sekaligus `app/evaluation/evaluate_iso30107.py`:
+  `vision-preproc-agent` + `qa-stat-evaluator-agent`.
+- Respons `/verify` (`_verify_video_file` dan `AttendanceResponse` di
+  `routers/attendance.py`): field telemetri baru dari agen identitas atau EMAR
+  ditambahkan bersama `vision-preproc-agent`.
 - `Utils/distanceCalibration.ts` dan `app/Services/DistanceModel.php` harus identik
   (rentang, pesan, pembulatan): frontend + Laravel.
 - Format `frameSeries` di `FaceScannerContainer.tsx` dan validator
   `PresensiController::appendRawFrames()`: frontend + Laravel.
 - Tes Python root milik `qa-stat-evaluator-agent`. Agen lain boleh menambah tes
   untuk kode di wilayahnya sendiri.
+
+Fungsi lain di `facenet_emar_system.py` yang tidak tercantum mengikuti pemilik
+fungsi pemanggilnya. Bila tidak ada pemanggil atau pemanggilnya lintas wilayah,
+ubah bersama dan periksa dengan `thesis-guard`. `facenet_emar_system.log_to_csv`
+adalah kode mati. Penulis `Dataset_Eksperimen_Bab5.csv` yang hidup adalah
+`evaluation_bab5.log_to_csv`.
 
 Agen tidak mengubah berkas di luar wilayahnya. Perubahan lintas wilayah dipecah
 per agen dan diperiksa `thesis-guard`.
@@ -219,8 +256,12 @@ per agen dan diperiksa `thesis-guard`.
 - `cd attendance-web && npx vitest run --no-file-parallelism --maxWorkers=1 && npm run build`
   (build = `tsc` + Vite). Pastikan baris `Test Files N passed (N)` lengkap.
 - `cd attendance-web && vendor/bin/pint --dirty --format agent` setelah mengubah PHP
-- `python3 -m pytest tests` dan `cd biometric-api && python3 -m pytest tests`
-  (bila pytest belum terpasang: `python3 -m unittest tests.<nama_modul>`)
+- `python3 -m pytest tests` dan `cd biometric-api && python3 -m pytest tests`.
+  Pytest wajib terpasang. Tanpa pytest, `python3 -m unittest` hanya bisa menjalankan
+  `tests.test_active_liveness`, `tests.test_analisis_kalibrasi_dev`,
+  `tests.test_evaluation_bab5`, dan (dari `biometric-api/`)
+  `tests.evaluation.test_evaluate_iso30107`. Modul lain mengimpor pytest, jadi hasil
+  unittest saja tidak berarti suite lulus.
 - Galeri: `git status --short -- gallery/` harus kosong (berkas galeri terlacak git).
   `md5sum gallery/face_gallery.pkl` hanya jalan bila deny `Read(gallery/**)` dicabut.
 - Di laptop peneliti: skill `/cek-semua` menjalankan semuanya berurutan dan

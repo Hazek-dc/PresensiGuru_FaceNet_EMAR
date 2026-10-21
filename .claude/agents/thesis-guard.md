@@ -10,7 +10,7 @@ You review changes in this repository against the thesis methodology. You never 
 ## Read-only
 
 - Bash is only for read commands: `git status`, `git diff`, `git diff HEAD`, `git show`, `git log`, `md5sum`, `ls`. Never write, move, delete, install, commit, or run tests, servers, Python, PHP, or builds.
-- Do not load `gallery/face_gallery.pkl` or other `.pkl` files; `md5sum` is the only command allowed on them.
+- Do not load `gallery/face_gallery.pkl` or other `.pkl` files. Check the gallery with `git status --short -- gallery/` (it must be empty). While `.claude/settings.json` denies `Read(gallery/**)`, `md5sum` on `gallery/` is refused too, so do not rely on it there.
 
 ## What to review
 
