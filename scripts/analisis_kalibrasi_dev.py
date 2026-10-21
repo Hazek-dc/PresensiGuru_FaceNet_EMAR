@@ -59,7 +59,10 @@ UNAVAILABLE_LABEL = "Mesin tidak dapat dihubungi"
 S3_ACCEPT = 0.75
 P_FACE_SCALE = 1.5
 
-L2_GRID = (0.30, 0.35, 0.40, 0.45, 0.50)
+# Tidak di bawah 0,35: mesin berhenti mengevaluasi kandidat begitu d <= 0,35
+# (FACENET_EARLY_EXIT_DISTANCE), jadi d tercatat bukan minimum semua kandidat dan
+# ambang < 0,35 akan melebihkan FNMR serta mengecilkan IAPMR.
+L2_GRID = (0.35, 0.40, 0.45, 0.50)
 EAR_GRID = (0.15, 0.18, 0.20, 0.25)
 MAR_GRID = (0.05, 0.10, 0.15, 0.20)
 ALPHA_GRID = (0.30, 0.50, 0.60, 0.70)

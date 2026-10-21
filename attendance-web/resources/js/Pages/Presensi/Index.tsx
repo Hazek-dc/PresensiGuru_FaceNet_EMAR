@@ -1816,7 +1816,15 @@ export default function Presensi({
                                         </span>
                                     </h4>
 
-                                    {mode === 'personal' && user ? (
+                                    {soloCell ? (
+                                        // Mode solo direkam layar/difoto untuk naskah: tanpa nama, email, atau ID akun login.
+                                        <div className="rounded-2xl border border-outline-variant/30 dark:border-white/10 bg-surface-container-low dark:bg-slate-900/60 p-3.5">
+                                            <p className="font-mono text-sm font-bold text-deep-navy dark:text-white">{SOLO_PARTICIPANT_ID}</p>
+                                            <p className="text-xs text-on-surface-variant dark:text-slate-400">
+                                                Partisipan anonim, split calibration_dev
+                                            </p>
+                                        </div>
+                                    ) : mode === 'personal' && user ? (
                                         <>
                                             <div className="flex items-center gap-3 rounded-2xl border border-outline-variant/30 dark:border-white/10 bg-surface-container-low dark:bg-slate-900/60 p-3.5 mb-3.5">
                                                 <div className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-2xl bg-gradient-to-tr from-royal-blue to-sky-accent font-bold text-white text-base shadow-sm">

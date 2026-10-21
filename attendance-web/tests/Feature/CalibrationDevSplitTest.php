@@ -67,6 +67,20 @@ it('menolak baris kalibrasi tanpa target skenario', function (string $missing) {
     Http::assertNothingSent();
 })->with(['lux_target', 'distance_target_cm', 'participant_id']);
 
+it('hanya Admin/Peneliti yang login yang boleh merekam calibration_dev', function () {
+    Http::fake(['*' => Http::response(['distance' => 0.31])]);
+    $teacher = User::factory()->create(['role' => 'teacher', 'embedding_id' => 'S05', 'is_active' => true]);
+
+    $this->withHeader('Accept', 'application/json')
+        ->post(route('presensi.verify'), calibrationPayload())
+        ->assertStatus(403);
+    submitCalibration($this, $teacher, calibrationPayload())->assertStatus(403);
+
+    expect(AttendanceRecord::count())->toBe(0)
+        ->and(file_exists(config('biometrics.research_csv.raw_frames_dev')))->toBeFalse();
+    Http::assertNothingSent();
+});
+
 it('mewajibkan spesies untuk serangan dan menolaknya untuk bona fide', function () {
     Http::fake(['*' => Http::response(['distance' => 0.31])]);
 

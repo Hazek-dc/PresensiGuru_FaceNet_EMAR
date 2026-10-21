@@ -111,6 +111,14 @@ class PresensiController extends Controller
         ]);
 
         $isCalibrationDev = $request->input('dataset_split') === self::CALIBRATION_DEV_SPLIT;
+        // Rute ini publik untuk kiosk. Baris riset calibration_dev hanya boleh dari
+        // Admin/Peneliti yang login, agar perangkat lain di jaringan tidak bisa
+        // menambah presentasi atau deret frame atas nama partisipan.
+        if ($isCalibrationDev && ! in_array($request->user()?->role, ['admin', 'researcher'], true)) {
+            return response()->json([
+                'message' => 'Split calibration_dev hanya untuk Admin/Peneliti yang sudah login.',
+            ], 403);
+        }
         if ($isCalibrationDev) {
             // Tanpa target skenario baris kalibrasi tidak bisa dikelompokkan ke sel
             // 3 lux x 3 jarak; dulu baris seperti itu tercatat dengan target kosong.
