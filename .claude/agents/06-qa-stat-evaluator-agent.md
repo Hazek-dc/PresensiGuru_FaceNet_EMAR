@@ -9,9 +9,12 @@ serta aturan statistik `thesis-guard`. Tabel hanya dibuat dari data terekam.
 
 ## Wilayah berkas
 
-- `tests/*.py`, `biometric-api/tests/*`, dan tes keputusan di `attendance-web/tests/Feature/*` (bersama agen Laravel).
-- `scripts/analisis_kalibrasi_dev.py`, `analisis_tingkat_subjek.py`, `evaluation_bab5.py` (bagian metrik),
-  `biometric-api/app/evaluation/evaluate_iso30107.py`.
+- `tests/**` (Python root). Agen lain boleh menambah tes untuk kode di wilayahnya sendiri.
+- `scripts/analisis_*.py`, `analisis_tingkat_subjek.py`, `facenet_emar_system.py::compute_iso_metrics`.
+- `biometric-api/app/evaluation/**` dan `biometric-api/tests/evaluation/**`.
+- Tes keputusan di `attendance-web/tests/Feature/*` ditulis bersama agen Laravel (pemilik Pest).
+- Bukan wilayah Anda: `evaluation_bab5.py` (rumus S1/S2/S3 dan logger CSV, milik emar-pad-fusion-agent).
+  Anda hanya menulis tesnya.
 - Keluaran di `exports/` (folder `exports/kalibrasi_dev/` di-.gitignore).
 
 ## Aturan khusus
@@ -19,12 +22,16 @@ serta aturan statistik `thesis-guard`. Tabel hanya dibuat dari data terekam.
 - **Data sintetis dilarang sebagai hasil**: `scripts/export_cochran_dataset.py`,
   `exports/Dataset_Cochran_Q_ISO30107_6480.csv`, dan angka hasil di `README.md`. Angka 6.480 berasal dari desain
   lama 10 repetisi; desain terkunci 3.240.
-- `Dataset_Eksperimen_Bab5.csv` berisi baris demo (P01-P04), akun uji `emb_TEST-QALWANI-001`, dan nilai fallback.
-  Saring di analisis; jangan sunting berkasnya.
-- FTA terpisah dari penyebut. APCER per spesies. ACER bukan metrik ISO; sebutkan definisinya. Dua definisi di repo:
+- `analisis_tingkat_subjek.py` saat ini terikat ke `exports/Dataset_Cochran_Q_ISO30107_6480.csv` (sintetis):
+  mewajibkan 6.480 baris, mengunci matriks konfusi, dan memakai m_obs = 360 (desain lama). Jangan dijalankan untuk
+  hasil. Skrip harus ditulis ulang untuk data TEST nyata S01-S18 (N = 3.240).
+- `Dataset_Eksperimen_Bab5.csv` berisi 4 baris demo (P01-P04), 43 baris akun uji `emb_TEST-QALWANI-001`, 27 baris
+  nilai pengganti EAR/MAR 0,18/0,40, dan 53 baris 30 cm/300 lux. Saring di analisis, jangan sunting berkasnya.
+- Jangan menggabungkan sumber rumus S3 (a) dan (b) dalam satu tabel (CLAUDE.md bagian 4 butir 2).
+- FTA terpisah dari penyebut. APCER per spesies. ACER bukan metrik ISO, jadi sebutkan definisinya. Dua definisi di repo:
   APCER terburuk (`analisis_kalibrasi_dev.py`) dan APCER gabungan (`compute_iso_metrics`, `evaluate_iso30107.py`).
-- CI: Wilson saja. Bootstrap, GEE, dan mixed-effects dilarang. Wilson tingkat percobaan terlalu sempit untuk
-  repetisi per subjek; beri label deskriptif.
+- CI untuk proporsi (APCER, BPCER, FTA per sel): Wilson, diberi label deskriptif karena repetisi per subjek
+  berkorelasi. Bootstrap, GEE, dan mixed-effects dilarang.
 - Inferensi: Friedman + Wilcoxon (Bonferroni) di tingkat subjek, N = 18. Cochran's Q/McNemar tingkat percobaan
   hanya deskriptif. Data `P_DEV_01` (satu orang) tidak untuk inferensi populasi.
 - Grid search ambang hanya pada `calibration_dev`, dan hasilnya tidak menggeser nilai terkunci tanpa persetujuan.
@@ -40,7 +47,7 @@ serta aturan statistik `thesis-guard`. Tabel hanya dibuat dari data terekam.
 | Tabel 5.B grid | Sudah sebagian (tabel 2a/2b/2c `analisis_kalibrasi_dev.py`). |
 | Tabel 5.C, 5.D | Sudah sebagian (tabel 3); kurang APCER gabungan dan kolom FTA per sel. |
 | Tabel 5.E latensi, klaim < 200 ms/frame | Menunggu instrumentasi mesin. Klaim belum diukur, jangan ditulis. |
-| Tabel 5.F | Tingkat subjek ya. Tingkat percobaan hanya deskriptif. |
+| Tabel 5.F | Tingkat subjek: menunggu data TEST nyata dan penulisan ulang `analisis_tingkat_subjek.py` (kini hanya membaca data sintetis). `SubjectLevelAnalysisService` (Laravel, sumber `telemetry.db`) adalah jalur terekam yang ada. Tingkat percobaan hanya deskriptif. |
 
 ## Selesai berarti
 

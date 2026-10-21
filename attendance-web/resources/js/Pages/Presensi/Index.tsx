@@ -1280,7 +1280,9 @@ export default function Presensi({
                                 <div className="flex items-center gap-1.5 rounded-2xl border border-sky-400/30 bg-sky-500/10 dark:bg-sky-500/15 px-3 py-1.5 text-xs font-bold text-royal-blue dark:text-sky-300">
                                     <span className="material-symbols-outlined text-[15px]">badge</span>
                                     <span className="font-mono font-black text-deep-navy dark:text-white">{currentSubjectInfo.id}</span>
-                                    <span className="truncate max-w-[130px] sm:max-w-[200px] text-deep-navy dark:text-white">{currentSubjectInfo.name}</span>
+                                    {!soloCell && (
+                                        <span className="truncate max-w-[130px] sm:max-w-[200px] text-deep-navy dark:text-white">{currentSubjectInfo.name}</span>
+                                    )}
                                     {mode === 'kiosk' && (
                                         <button
                                             type="button"
