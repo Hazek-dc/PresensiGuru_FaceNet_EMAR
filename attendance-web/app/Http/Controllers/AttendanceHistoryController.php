@@ -2,16 +2,20 @@
 
 namespace App\Http\Controllers;
 
-use Illuminate\Http\Request;
-use Inertia\Inertia;
 use App\Models\AttendanceRecord;
 use App\Models\EvaluationMatrix;
+use App\Models\User;
 use App\Services\CochranExportService;
 use App\Services\CombinedHistoryExport;
 use App\Services\DistanceModel;
+use App\Services\FusionDecision;
 use App\Services\LightingSummary;
 use App\Services\SubjectLevelAnalysisService;
 use Carbon\Carbon;
+use Illuminate\Http\Request;
+use Inertia\Inertia;
+use Spatie\Activitylog\Models\Activity;
+use Symfony\Component\HttpFoundation\BinaryFileResponse;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class AttendanceHistoryController extends Controller
@@ -34,23 +38,23 @@ class AttendanceHistoryController extends Controller
             $presensiQuery->where('user_id', $user->id);
         }
 
-        if (!empty($search)) {
+        if (! empty($search)) {
             $presensiQuery->where(function ($q) use ($search) {
                 $q->where('decision_reason', 'like', "%{$search}%")
-                  ->orWhere('status', 'like', "%{$search}%")
-                  ->orWhereHas('user', function ($uq) use ($search) {
-                      $uq->where('name', 'like', "%{$search}%")
-                         ->orWhere('email', 'like', "%{$search}%")
-                         ->orWhere('embedding_id', 'like', "%{$search}%");
-                  });
+                    ->orWhere('status', 'like', "%{$search}%")
+                    ->orWhereHas('user', function ($uq) use ($search) {
+                        $uq->where('name', 'like', "%{$search}%")
+                            ->orWhere('email', 'like', "%{$search}%")
+                            ->orWhere('embedding_id', 'like', "%{$search}%");
+                    });
             });
         }
 
-        if (!empty($date)) {
+        if (! empty($date)) {
             $presensiQuery->whereDate('created_at', clone new Carbon($date));
         }
 
-        if (!empty($status)) {
+        if (! empty($status)) {
             if ($status === 'hadir' || $status === 'success') {
                 $presensiQuery->whereIn('status', ['success', 'hadir']);
             } elseif ($status === 'izin_sakit') {
@@ -67,137 +71,108 @@ class AttendanceHistoryController extends Controller
             ->withQueryString();
         $referenceDevices = LightingSummary::referenceDevices($page->getCollection()->pluck('metadata'));
         $records = $page->through(function ($item) use ($tz, $referenceDevices) {
-                $created = $item->created_at ? $item->created_at->timezone($tz) : null;
-                $meta = $item->metadata ?? [];
+            $created = $item->created_at ? $item->created_at->timezone($tz) : null;
+            $meta = $item->metadata ?? [];
 
-                $dist = isset($meta['euclidean_distance']) ? (float)$meta['euclidean_distance'] : null;
-                $earBlinks = $meta['ear_blinks'] ?? 0;
-                $marMouths = $meta['mar_mouths'] ?? 0;
+            // Bab 5 Evaluation Scenarios (S1, S2, S3)
+            $bab5 = $meta['evaluation_bab5'] ?? self::recomputedBab5($meta);
 
-                // Bab 5 Evaluation Scenarios (S1, S2, S3)
-                $bab5 = $meta['evaluation_bab5'] ?? null;
-                if (!$bab5 && $dist !== null) {
-                    $s1 = ($dist <= (float) config('biometrics.facenet_threshold', 0.40)) ? 1 : 0;
-                    $earVal = (float)($meta['ear_val'] ?? ($earBlinks > 0 ? 0.18 : 0.28));
-                    $marVal = (float)($meta['mar_val'] ?? ($marMouths > 0 ? 0.40 : 0.05));
-                    $livenessValid = ($earVal < (float) config('biometrics.ear_threshold', 0.20))
-                        && ($marVal >= (float) config('biometrics.mar_threshold', 0.10));
-                    $s2 = ($s1 === 1 && $livenessValid) ? 1 : 0;
-                    $pFace = max(0.0, 1.0 - ($dist / 1.5));
-                    $pLive = $livenessValid ? 1.0 : 0.0;
-                    $sFinal = (0.6 * $pFace) + (0.4 * $pLive);
-                    $s3 = ($sFinal >= 0.75) ? 1 : 0;
-
-                    $bab5 = [
-                        'euclidean_distance' => round($dist, 3),
-                        's1_decision' => $s1,
-                        's2_decision' => $s2,
-                        's3_decision' => $s3,
-                        's_final' => round($sFinal, 3),
-                        'p_face' => round($pFace, 3),
-                        'p_live' => round($pLive, 3),
-                        'ear_val' => round($earVal, 3),
-                        'mar_val' => round($marVal, 3),
-                        'liveness_valid' => $livenessValid,
-                    ];
-                }
-
-                return [
-                    'id' => $item->id,
-                    'status' => $item->status,
-                    'decision_reason' => $item->decision_reason ?: 'Presensi biometrik',
-                    'time' => $created ? $created->format('H:i') : '-',
-                    'date' => $created ? $created->format('d M Y') : '-',
-                    'created_at_formatted' => $created ? $created->format('d/m/Y H:i:s') : '-',
-                    'user' => $item->user ? [
-                        'id' => $item->user->id,
-                        'name' => $item->user->name,
-                        'email' => $item->user->email,
-                        'embedding_id' => $item->user->embedding_id,
-                        // Foto profil; kartu memakai inisial nama bila kosong atau tidak dapat dibuka.
-                        'avatar_url' => $item->user->avatar_url,
-                    ] : null,
-                    'metadata' => [
-                        'facenet_score' => $meta['facenet_score'] ?? null,
-                        'emar_score' => $meta['emar_score'] ?? null,
-                        'euclidean_distance' => $meta['euclidean_distance'] ?? null,
-                        // null = tidak terukur; jangan diganti nilai preset.
-                        'distance_cm' => $meta['distance_cm'] ?? null,
-                        'distance_source' => $meta['distance_source'] ?? null,
-                        // Catatan lama tanpa kategori: diturunkan dari jarak tercatatnya.
-                        'distance_category' => $meta['distance_category']
-                            ?? DistanceModel::category(is_numeric($meta['distance_cm'] ?? null) ? (float) $meta['distance_cm'] : null),
-                        'camera_label' => $meta['camera_label'] ?? null,
-                        'lux' => $meta['lux'] ?? null,
-                        'lux_source' => $meta['lux_source'] ?? null,
-                        'lighting_category' => $meta['lighting_category'] ?? null,
-                        'lighting_status' => $meta['lighting_status'] ?? null,
-                        'lighting' => LightingSummary::fromMetadata($meta, $referenceDevices),
-                        // Nilai yang tidak tercatat (mis. izin/sakit tanpa pemindaian) dikirim null,
-                        // bukan 0 kedipan, BONA_FIDE, MATCH, 100 %, atau 8 detik.
-                        'ear_blinks' => $meta['ear_blinks'] ?? null,
-                        'mar_mouths' => $meta['mar_mouths'] ?? null,
-                        'face_detected_pct' => $meta['face_detected_pct'] ?? null,
-                        'scan_duration_s' => $meta['scan_duration_s'] ?? null,
-                        'pad_pred' => $meta['pad_pred'] ?? null,
-                        'id_pred' => $meta['id_pred'] ?? null,
-                        'final_decision' => $meta['final_decision'] ?? null,
-                        'evaluation_bab5' => $bab5,
-                    ],
-                ];
-            });
+            return [
+                'id' => $item->id,
+                'status' => $item->status,
+                'decision_reason' => $item->decision_reason ?: 'Presensi biometrik',
+                'time' => $created ? $created->format('H:i') : '-',
+                'date' => $created ? $created->format('d M Y') : '-',
+                'created_at_formatted' => $created ? $created->format('d/m/Y H:i:s') : '-',
+                'user' => $item->user ? [
+                    'id' => $item->user->id,
+                    'name' => $item->user->name,
+                    'email' => $item->user->email,
+                    'embedding_id' => $item->user->embedding_id,
+                    // Foto profil; kartu memakai inisial nama bila kosong atau tidak dapat dibuka.
+                    'avatar_url' => $item->user->avatar_url,
+                ] : null,
+                'metadata' => [
+                    'facenet_score' => $meta['facenet_score'] ?? null,
+                    'emar_score' => $meta['emar_score'] ?? null,
+                    'euclidean_distance' => $meta['euclidean_distance'] ?? null,
+                    // null = tidak terukur; jangan diganti nilai preset.
+                    'distance_cm' => $meta['distance_cm'] ?? null,
+                    'distance_source' => $meta['distance_source'] ?? null,
+                    // Catatan lama tanpa kategori: diturunkan dari jarak tercatatnya.
+                    'distance_category' => $meta['distance_category']
+                        ?? DistanceModel::category(is_numeric($meta['distance_cm'] ?? null) ? (float) $meta['distance_cm'] : null),
+                    'camera_label' => $meta['camera_label'] ?? null,
+                    'lux' => $meta['lux'] ?? null,
+                    'lux_source' => $meta['lux_source'] ?? null,
+                    'lighting_category' => $meta['lighting_category'] ?? null,
+                    'lighting_status' => $meta['lighting_status'] ?? null,
+                    'lighting' => LightingSummary::fromMetadata($meta, $referenceDevices),
+                    // Nilai yang tidak tercatat (mis. izin/sakit tanpa pemindaian) dikirim null,
+                    // bukan 0 kedipan, BONA_FIDE, MATCH, 100 %, atau 8 detik.
+                    'ear_blinks' => $meta['ear_blinks'] ?? null,
+                    'mar_mouths' => $meta['mar_mouths'] ?? null,
+                    'face_detected_pct' => $meta['face_detected_pct'] ?? null,
+                    'scan_duration_s' => $meta['scan_duration_s'] ?? null,
+                    'pad_pred' => $meta['pad_pred'] ?? null,
+                    'id_pred' => $meta['id_pred'] ?? null,
+                    'final_decision' => $meta['final_decision'] ?? null,
+                    'evaluation_bab5' => $bab5,
+                ],
+            ];
+        });
 
         // 2. System Audit / Activity Log Query
-        $activitiesQuery = \Spatie\Activitylog\Models\Activity::with('causer');
+        $activitiesQuery = Activity::with('causer');
 
         if ($user->role === 'teacher') {
             $activitiesQuery->where(function ($q) use ($user) {
                 $q->where('causer_id', $user->id)
-                  ->orWhere('subject_id', $user->id);
+                    ->orWhere('subject_id', $user->id);
             });
         }
 
-        if (!empty($activityEvent) && $activityEvent !== 'all') {
+        if (! empty($activityEvent) && $activityEvent !== 'all') {
             if ($activityEvent === 'attendance') {
                 $activitiesQuery->where(function ($q) {
                     $q->where('log_name', 'attendance')
-                      ->orWhere('event', 'like', '%attendance%')
-                      ->orWhere('event', 'like', '%biometric%')
-                      ->orWhere('description', 'like', '%presensi%');
+                        ->orWhere('event', 'like', '%attendance%')
+                        ->orWhere('event', 'like', '%biometric%')
+                        ->orWhere('description', 'like', '%presensi%');
                 });
             } elseif ($activityEvent === 'enrollment') {
                 $activitiesQuery->where(function ($q) {
                     $q->where('event', 'like', '%enroll%')
-                      ->orWhere('description', 'like', '%wajah%')
-                      ->orWhere('description', 'like', '%enroll%');
+                        ->orWhere('description', 'like', '%wajah%')
+                        ->orWhere('description', 'like', '%enroll%');
                 });
             } elseif ($activityEvent === 'auth') {
                 $activitiesQuery->where(function ($q) {
                     $q->where('event', 'like', '%login%')
-                      ->orWhere('event', 'like', '%logout%')
-                      ->orWhere('description', 'like', '%login%')
-                      ->orWhere('description', 'like', '%logout%');
+                        ->orWhere('event', 'like', '%logout%')
+                        ->orWhere('description', 'like', '%login%')
+                        ->orWhere('description', 'like', '%logout%');
                 });
             } elseif ($activityEvent === 'system') {
                 $activitiesQuery->where(function ($q) {
                     $q->where('event', 'like', '%delete%')
-                      ->orWhere('event', 'like', '%clear%')
-                      ->orWhere('description', 'like', '%hapus%')
-                      ->orWhere('description', 'like', '%membersihkan%');
+                        ->orWhere('event', 'like', '%clear%')
+                        ->orWhere('description', 'like', '%hapus%')
+                        ->orWhere('description', 'like', '%membersihkan%');
                 });
             } else {
                 $activitiesQuery->where('event', $activityEvent);
             }
         }
 
-        if (!empty($search)) {
+        if (! empty($search)) {
             $activitiesQuery->where(function ($q) use ($search) {
                 $q->where('description', 'like', "%{$search}%")
-                  ->orWhere('event', 'like', "%{$search}%")
-                  ->orWhereHas('causer', function ($cq) use ($search) {
-                      $cq->where('name', 'like', "%{$search}%")
-                         ->orWhere('email', 'like', "%{$search}%");
-                  });
+                    ->orWhere('event', 'like', "%{$search}%")
+                    ->orWhereHas('causer', function ($cq) use ($search) {
+                        $cq->where('name', 'like', "%{$search}%")
+                            ->orWhere('email', 'like', "%{$search}%");
+                    });
             });
         }
 
@@ -207,6 +182,7 @@ class AttendanceHistoryController extends Controller
             ->through(function ($act) use ($tz) {
                 $created = $act->created_at ? $act->created_at->timezone($tz) : null;
                 $props = $act->properties ? $act->properties->toArray() : [];
+
                 return [
                     'id' => $act->id,
                     'description' => $act->description,
@@ -263,6 +239,40 @@ class AttendanceHistoryController extends Controller
         ]);
     }
 
+    /**
+     * S1/S2/S3 untuk catatan lama tanpa evaluation_bab5, dengan definisi yang
+     * berlaku sekarang (FusionDecision, D1 rumus b + D2 liveness dlib). P_live hanya
+     * dari emar_score mesin yang tercatat. Tanpa itu S2/S3 null: EAR/MAR tidak
+     * pernah diisi angka bawaan (D10). Ditandai recomputed karena bukan keputusan
+     * yang dibuat saat presentasi.
+     */
+    private static function recomputedBab5(array $meta): ?array
+    {
+        if (! is_numeric($meta['euclidean_distance'] ?? null)) {
+            return null;
+        }
+        $dist = (float) $meta['euclidean_distance'];
+        $pLive = is_numeric($meta['emar_score'] ?? null) ? (float) $meta['emar_score'] : null;
+        $fusion = FusionDecision::evaluate($dist, (float) config('biometrics.facenet_threshold', 0.40), $pLive, null);
+        $round3 = fn ($v) => $v === null ? null : round($v, 3);
+
+        return [
+            'recomputed' => true,
+            'decision_version' => FusionDecision::VERSION,
+            'euclidean_distance' => round($dist, 3),
+            's1_decision' => $fusion['s1'],
+            's2_decision' => $fusion['s2'],
+            's3_decision' => $fusion['s3'],
+            's_final' => $round3($fusion['s_final']),
+            'p_face' => $round3($fusion['s_embed']),
+            'p_live' => $round3($fusion['p_live']),
+            'ear_val' => is_numeric($meta['ear_val'] ?? null) ? round((float) $meta['ear_val'], 3) : null,
+            'mar_val' => is_numeric($meta['mar_val'] ?? null) ? round((float) $meta['mar_val'], 3) : null,
+            'liveness_source' => 'engine_dlib',
+            'liveness_valid' => $fusion['liveness_valid'],
+        ];
+    }
+
     public function show(string $id)
     {
         $user = auth()->user();
@@ -273,35 +283,8 @@ class AttendanceHistoryController extends Controller
         }
 
         $metadata = $record->metadata ?? [];
-        if (!isset($metadata['evaluation_bab5'])) {
-            $dist = isset($metadata['euclidean_distance']) ? (float)$metadata['euclidean_distance'] : null;
-            if ($dist !== null) {
-                $earBlinks = $metadata['ear_blinks'] ?? 0;
-                $marMouths = $metadata['mar_mouths'] ?? 0;
-                $s1 = ($dist <= (float) config('biometrics.facenet_threshold', 0.40)) ? 1 : 0;
-                $earVal = (float)($metadata['ear_val'] ?? ($earBlinks > 0 ? 0.18 : 0.28));
-                $marVal = (float)($metadata['mar_val'] ?? ($marMouths > 0 ? 0.40 : 0.05));
-                $livenessValid = ($earVal < (float) config('biometrics.ear_threshold', 0.20))
-                    && ($marVal >= (float) config('biometrics.mar_threshold', 0.10));
-                $s2 = ($s1 === 1 && $livenessValid) ? 1 : 0;
-                $pFace = max(0.0, 1.0 - ($dist / 1.5));
-                $pLive = $livenessValid ? 1.0 : 0.0;
-                $sFinal = (0.6 * $pFace) + (0.4 * $pLive);
-                $s3 = ($sFinal >= 0.75) ? 1 : 0;
-
-                $metadata['evaluation_bab5'] = [
-                    'euclidean_distance' => round($dist, 3),
-                    's1_decision' => $s1,
-                    's2_decision' => $s2,
-                    's3_decision' => $s3,
-                    's_final' => round($sFinal, 3),
-                    'p_face' => round($pFace, 3),
-                    'p_live' => round($pLive, 3),
-                    'ear_val' => round($earVal, 3),
-                    'mar_val' => round($marVal, 3),
-                    'liveness_valid' => $livenessValid,
-                ];
-            }
+        if (! isset($metadata['evaluation_bab5'])) {
+            $metadata['evaluation_bab5'] = self::recomputedBab5($metadata);
         }
 
         if ($user->role !== 'researcher') {
@@ -333,17 +316,17 @@ class AttendanceHistoryController extends Controller
     {
         $user = auth()->user();
         $tz = config('app.timezone', 'Asia/Jakarta');
-        $query = \Spatie\Activitylog\Models\Activity::with('causer')->latest();
+        $query = Activity::with('causer')->latest();
 
         if ($user->role === 'teacher') {
             $query->where(function ($q) use ($user) {
                 $q->where('causer_id', $user->id)
-                  ->orWhere('subject_id', $user->id);
+                    ->orWhere('subject_id', $user->id);
             });
         }
 
         $activities = $query->get();
-        $fileName = 'Log_Aktivitas_Sistem_' . now()->format('Ymd_His') . '.csv';
+        $fileName = 'Log_Aktivitas_Sistem_'.now()->format('Ymd_His').'.csv';
 
         return response()->streamDownload(function () use ($activities, $tz) {
             $handle = fopen('php://output', 'w');
@@ -399,7 +382,7 @@ class AttendanceHistoryController extends Controller
         }
 
         $records = $query->get();
-        $fileName = 'Riwayat_Presensi_Operasional_' . now()->format('Ymd_His') . '.csv';
+        $fileName = 'Riwayat_Presensi_Operasional_'.now()->format('Ymd_His').'.csv';
         $referenceDevices = LightingSummary::referenceDevices($records->pluck('metadata'));
 
         return response()->streamDownload(function () use ($records, $referenceDevices) {
@@ -436,22 +419,24 @@ class AttendanceHistoryController extends Controller
                 $teacher = $r->user;
                 fputcsv($handle, [
                     $r->id,
-                    $teacher->embedding_id ?? ($meta['subject_id'] ?? 'S00'),
+                    $teacher->embedding_id ?? ($meta['subject_id'] ?? ''),
                     $teacher->name ?? 'Guru',
                     $teacher->email ?? '',
                     $r->status,
                     $meta['final_decision'] ?? ($r->status === 'success' ? 'ACCEPT' : 'REJECT'),
-                    $meta['pad_pred'] ?? 'BONA_FIDE',
-                    $meta['id_pred'] ?? 'MATCH',
+                    // D10: nilai yang tidak tercatat dikosongkan, bukan BONA_FIDE, MATCH,
+                    // 0 kedipan, 100 %, atau 8,0 s.
+                    $meta['pad_pred'] ?? '',
+                    $meta['id_pred'] ?? '',
                     isset($meta['euclidean_distance']) ? number_format($meta['euclidean_distance'], 3) : '-',
                     isset($meta['facenet_score']) ? number_format($meta['facenet_score'], 3) : '-',
                     isset($meta['emar_score']) ? number_format($meta['emar_score'], 3) : '-',
-                    $meta['ear_blinks'] ?? 0,
-                    $meta['mar_mouths'] ?? 0,
-                    isset($meta['face_detected_pct']) ? number_format($meta['face_detected_pct'], 1) : 100.0,
+                    $meta['ear_blinks'] ?? '',
+                    $meta['mar_mouths'] ?? '',
+                    isset($meta['face_detected_pct']) ? number_format($meta['face_detected_pct'], 1) : '',
                     $meta['distance_cm'] ?? '',
                     $meta['lux'] ?? '',
-                    $meta['scan_duration_s'] ?? 8.0,
+                    $meta['scan_duration_s'] ?? '',
                     $r->created_at ? $r->created_at->format('Y-m-d H:i:s') : '',
                     $r->decision_reason ?: '',
                     ...LightingSummary::csvCells(LightingSummary::fromMetadata($meta, $referenceDevices)),
@@ -468,7 +453,7 @@ class AttendanceHistoryController extends Controller
     /**
      * Download CSV for research evaluation matrix (Bab 4)
      */
-    public function exportResearch(Request $request): StreamedResponse|\Symfony\Component\HttpFoundation\BinaryFileResponse
+    public function exportResearch(Request $request): StreamedResponse|BinaryFileResponse
     {
         $csvPath = (string) config('biometrics.research_csv.matriks');
         if (file_exists($csvPath)) {
@@ -485,7 +470,7 @@ class AttendanceHistoryController extends Controller
                 ['simulated', 'fta', 'unavailable'],
                 true
             ));
-        $fileName = 'Matriks_Evaluasi_Bab4_' . now()->format('Ymd_His') . '.csv';
+        $fileName = 'Matriks_Evaluasi_Bab4_'.now()->format('Ymd_His').'.csv';
 
         return response()->streamDownload(function () use ($records) {
             $handle = fopen('php://output', 'w');
@@ -555,13 +540,13 @@ class AttendanceHistoryController extends Controller
     public function exportSubject(Request $request, string $id): StreamedResponse
     {
         $user = auth()->user();
-        
+
         // Find record by primary ID or latest for that subject
         if (is_numeric($id)) {
             $record = AttendanceRecord::with('user')->findOrFail($id);
         } else {
             // Find by embedding_id
-            $targetUser = \App\Models\User::where('embedding_id', $id)->first();
+            $targetUser = User::where('embedding_id', $id)->first();
             $query = AttendanceRecord::with('user');
             if ($targetUser) {
                 $query->where('user_id', $targetUser->id);
@@ -576,7 +561,7 @@ class AttendanceHistoryController extends Controller
         $meta = $record->metadata ?? [];
         $teacher = $record->user;
         $subjectId = $teacher->embedding_id ?? ($meta['subject_id'] ?? 'S01');
-        $fileName = "Presensi_Evaluasi_{$subjectId}_" . ($record->created_at ? $record->created_at->format('Ymd_His') : now()->format('Ymd_His')) . '.csv';
+        $fileName = "Presensi_Evaluasi_{$subjectId}_".($record->created_at ? $record->created_at->format('Ymd_His') : now()->format('Ymd_His')).'.csv';
 
         return response()->streamDownload(function () use ($record, $meta, $teacher, $subjectId) {
             $handle = fopen('php://output', 'w');
@@ -602,13 +587,13 @@ class AttendanceHistoryController extends Controller
             fputcsv($handle, ['EMAR_Score', isset($meta['emar_score']) ? number_format($meta['emar_score'], 3) : '-', 'Skor Fusi Liveness EMAR']);
             fputcsv($handle, ['Kedipan_Mata_EAR', $meta['ear_blinks'] ?? '-', 'Jumlah Kedipan Mata Terdeteksi (EAR < 0.20, Min 1x)']);
             fputcsv($handle, ['Gerakan_Mulut_MAR', $meta['mar_mouths'] ?? '-', 'Jumlah Gerakan Mulut Terdeteksi (MAR >= 0.10, Min 1x)']);
-            fputcsv($handle, ['Kestabilan_Wajah_Pct', isset($meta['face_detected_pct']) ? number_format($meta['face_detected_pct'], 1) . '%' : 'Tidak terukur', 'Persentase Frame Wajah Terlacak Stabil (Min 80.0%)']);
-            fputcsv($handle, ['Jarak_Pengujian_cm', isset($meta['distance_cm']) ? (($meta['distance_source'] ?? null) === 'camera' ? '~' : '') . $meta['distance_cm'] . ' cm' : 'Tidak terukur', 'Jarak Baku Kamera Smartphone ke Wajah (~ = estimasi kamera)']);
+            fputcsv($handle, ['Kestabilan_Wajah_Pct', isset($meta['face_detected_pct']) ? number_format($meta['face_detected_pct'], 1).'%' : 'Tidak terukur', 'Persentase Frame Wajah Terlacak Stabil (Min 80.0%)']);
+            fputcsv($handle, ['Jarak_Pengujian_cm', isset($meta['distance_cm']) ? (($meta['distance_source'] ?? null) === 'camera' ? '~' : '').$meta['distance_cm'].' cm' : 'Tidak terukur', 'Jarak Baku Kamera Smartphone ke Wajah (~ = estimasi kamera)']);
             $lighting = LightingSummary::fromMetadata($meta, LightingSummary::referenceDevices([$meta]));
             fputcsv($handle, [
                 'Intensitas_Cahaya_Lux',
-                isset($meta['lux']) ? (($meta['lux_source'] ?? null) === 'camera' ? '~' : '') . $meta['lux'] . ' Lux' : 'Tidak terukur',
-                'Kondisi Pencahayaan Lingkungan Uji (' . ($lighting['source_label'] ?? 'tidak terukur') . ')',
+                isset($meta['lux']) ? (($meta['lux_source'] ?? null) === 'camera' ? '~' : '').$meta['lux'].' Lux' : 'Tidak terukur',
+                'Kondisi Pencahayaan Lingkungan Uji ('.($lighting['source_label'] ?? 'tidak terukur').')',
             ]);
             $cells = LightingSummary::csvCells($lighting);
             $notes = [
@@ -625,7 +610,7 @@ class AttendanceHistoryController extends Controller
             if ($lighting['note_label']) {
                 fputcsv($handle, ['Alasan_Lux_Tidak_Terukur', $lighting['note_label'], $lighting['note']]);
             }
-            fputcsv($handle, ['Durasi_Scan_Detik', ($meta['scan_duration_s'] ?? 8.0) . ' Detik', 'Jendela Waktu Pemindaian Biometrik']);
+            fputcsv($handle, ['Durasi_Scan_Detik', isset($meta['scan_duration_s']) ? $meta['scan_duration_s'].' Detik' : 'Tidak terukur', 'Jendela Waktu Pemindaian Biometrik']);
             fputcsv($handle, ['Pesan_Evaluasi', $record->decision_reason ?: '-', 'Penjelasan Keputusan Engine Biometrik']);
 
             fclose($handle);
@@ -668,23 +653,23 @@ class AttendanceHistoryController extends Controller
             $query->where('user_id', $user->id);
         }
 
-        if (!empty($search)) {
+        if (! empty($search)) {
             $query->where(function ($q) use ($search) {
                 $q->where('decision_reason', 'like', "%{$search}%")
-                  ->orWhere('status', 'like', "%{$search}%")
-                  ->orWhereHas('user', function ($uq) use ($search) {
-                      $uq->where('name', 'like', "%{$search}%")
-                         ->orWhere('email', 'like', "%{$search}%")
-                         ->orWhere('embedding_id', 'like', "%{$search}%");
-                  });
+                    ->orWhere('status', 'like', "%{$search}%")
+                    ->orWhereHas('user', function ($uq) use ($search) {
+                        $uq->where('name', 'like', "%{$search}%")
+                            ->orWhere('email', 'like', "%{$search}%")
+                            ->orWhere('embedding_id', 'like', "%{$search}%");
+                    });
             });
         }
 
-        if (!empty($date)) {
+        if (! empty($date)) {
             $query->whereDate('created_at', clone new Carbon($date));
         }
 
-        if (!empty($status)) {
+        if (! empty($status)) {
             if ($status === 'hadir' || $status === 'success') {
                 $query->whereIn('status', ['success', 'hadir']);
             } elseif ($status === 'izin_sakit') {
@@ -703,11 +688,17 @@ class AttendanceHistoryController extends Controller
             $statusStr = strtolower($item->status ?? '');
 
             $statusLabel = 'Hadir';
-            if ($statusStr === 'terlambat') $statusLabel = 'Terlambat';
-            elseif ($statusStr === 'pulang') $statusLabel = 'Pulang';
-            elseif ($statusStr === 'izin') $statusLabel = 'Izin';
-            elseif ($statusStr === 'sakit') $statusLabel = 'Sakit';
-            elseif ($statusStr === 'failed' || $statusStr === 'rejected') $statusLabel = 'Ditolak';
+            if ($statusStr === 'terlambat') {
+                $statusLabel = 'Terlambat';
+            } elseif ($statusStr === 'pulang') {
+                $statusLabel = 'Pulang';
+            } elseif ($statusStr === 'izin') {
+                $statusLabel = 'Izin';
+            } elseif ($statusStr === 'sakit') {
+                $statusLabel = 'Sakit';
+            } elseif ($statusStr === 'failed' || $statusStr === 'rejected') {
+                $statusLabel = 'Ditolak';
+            }
 
             return [
                 'no' => $index + 1,
@@ -720,10 +711,10 @@ class AttendanceHistoryController extends Controller
                 'time' => $created ? $created->format('H:i') : '-',
                 'date' => $created ? $created->format('d/m/Y') : '-',
                 'datetime' => $created ? $created->format('d/m/Y H:i') : '-',
-                'euclidean_distance' => isset($meta['euclidean_distance']) ? number_format((float)$meta['euclidean_distance'], 3) : '-',
-                'pad_pred' => $meta['pad_pred'] ?? 'BONA_FIDE',
-                'ear_blinks' => $meta['ear_blinks'] ?? 0,
-                'mar_mouths' => $meta['mar_mouths'] ?? 0,
+                'euclidean_distance' => isset($meta['euclidean_distance']) ? number_format((float) $meta['euclidean_distance'], 3) : '-',
+                'pad_pred' => $meta['pad_pred'] ?? '-',
+                'ear_blinks' => $meta['ear_blinks'] ?? null,
+                'mar_mouths' => $meta['mar_mouths'] ?? null,
                 'final_decision' => $meta['final_decision'] ?? ($statusStr === 'success' || $statusStr === 'hadir' ? 'ACCEPT' : 'REJECT'),
                 'decision_reason' => $item->decision_reason ?: 'Presensi biometrik',
             ];
@@ -741,7 +732,7 @@ class AttendanceHistoryController extends Controller
             'meta' => [
                 'school_name' => 'SMK AL-MADANI PONTIANAK',
                 'title' => 'REKAPITULASI PRESENSI BIOMETRIK GURU & TENAGA KEPENDIDIKAN',
-                'generated_at' => now()->timezone($tz)->format('d F Y, H:i') . ' WIB',
+                'generated_at' => now()->timezone($tz)->format('d F Y, H:i').' WIB',
                 'filters' => [
                     'search' => $search ?: 'Semua Subjek',
                     'date' => $date ?: 'Semua Tanggal',
@@ -776,23 +767,23 @@ class AttendanceHistoryController extends Controller
             $query->where('user_id', $user->id);
         }
 
-        if (!empty($search)) {
+        if (! empty($search)) {
             $query->where(function ($q) use ($search) {
                 $q->where('status', 'like', "%{$search}%")
-                  ->orWhere('decision_reason', 'like', "%{$search}%")
-                  ->orWhereHas('user', function ($uq) use ($search) {
-                      $uq->where('name', 'like', "%{$search}%")
-                         ->orWhere('email', 'like', "%{$search}%")
-                         ->orWhere('embedding_id', 'like', "%{$search}%");
-                  });
+                    ->orWhere('decision_reason', 'like', "%{$search}%")
+                    ->orWhereHas('user', function ($uq) use ($search) {
+                        $uq->where('name', 'like', "%{$search}%")
+                            ->orWhere('email', 'like', "%{$search}%")
+                            ->orWhere('embedding_id', 'like', "%{$search}%");
+                    });
             });
         }
 
-        if (!empty($date)) {
+        if (! empty($date)) {
             $query->whereDate('created_at', clone new Carbon($date));
         }
 
-        if (!empty($status)) {
+        if (! empty($status)) {
             if ($status === 'hadir' || $status === 'success') {
                 $query->whereIn('status', ['success', 'hadir']);
             } elseif ($status === 'izin_sakit') {
@@ -823,7 +814,7 @@ class AttendanceHistoryController extends Controller
             'search' => $search,
             'date' => $date,
             'status' => $status,
-            'printedAt' => now()->timezone($tz)->format('d F Y, H:i') . ' WIB',
+            'printedAt' => now()->timezone($tz)->format('d F Y, H:i').' WIB',
             'printedDate' => now()->timezone($tz)->format('d F Y'),
             'user' => $user,
         ]);
@@ -842,13 +833,13 @@ class AttendanceHistoryController extends Controller
             if ($request->wantsJson()) {
                 return response()->json([
                     'status' => 'error',
-                    'message' => 'Anda tidak memiliki otoritas untuk menghapus catatan presensi guru lain.'
+                    'message' => 'Anda tidak memiliki otoritas untuk menghapus catatan presensi guru lain.',
                 ], 403);
             }
             abort(403, 'Anda tidak memiliki otoritas untuk menghapus data ini.');
         }
 
-        $subjectName = $record->user->name ?? 'Subjek #' . $record->id;
+        $subjectName = $record->user->name ?? 'Subjek #'.$record->id;
         $recordId = $record->id;
 
         // Delete record
@@ -881,14 +872,14 @@ class AttendanceHistoryController extends Controller
     public function destroyActivity(Request $request, string $id)
     {
         $user = auth()->user();
-        $activity = \Spatie\Activitylog\Models\Activity::findOrFail($id);
+        $activity = Activity::findOrFail($id);
 
         // RBAC Authorization: Teacher can only delete activity where they are the causer or subject
         if ($user->role === 'teacher' && $activity->causer_id !== $user->id && $activity->subject_id !== $user->id) {
             if ($request->wantsJson()) {
                 return response()->json([
                     'status' => 'error',
-                    'message' => 'Anda tidak memiliki otoritas untuk menghapus log aktivitas ini.'
+                    'message' => 'Anda tidak memiliki otoritas untuk menghapus log aktivitas ini.',
                 ], 403);
             }
             abort(403, 'Anda tidak memiliki otoritas untuk menghapus log aktivitas ini.');
@@ -908,4 +899,3 @@ class AttendanceHistoryController extends Controller
         return redirect()->back()->with('success', "Log aktivitas #{$actId} berhasil dihapus.");
     }
 }
-

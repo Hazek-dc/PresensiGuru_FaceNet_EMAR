@@ -34,10 +34,26 @@ MAR_OPEN_THRESHOLD = 0.10           # mulut terbuka jika MAR >= 0,10
 ALPHA_DEFAULT = 0.60                # S_final = 0,60 * S_embed + 0,40 * S_liveness
 OBSERVATION_WINDOW_S = 8.0          # batas jendela pengamatan
 
+# Fusi S3, keputusan peneliti D1 (21 Oktober 2026): rumus FusionModule.decide_s3.
+# S3 diterima bila d <= 0,40 DAN ALPHA * s_embed + (1 - ALPHA) * P_live >= 0,50,
+# dengan s_embed = max(0, 1 - d / 1,20) dan P_live in {0; 0,5; 1}. Tanpa liveness
+# (P_live = 0) S3 tetap menerima bila s_embed >= 0,833, yaitu d < 0,20.
+FUSION_D_REF = 1.20
+FUSION_THRESHOLD = 0.50
+# P_live = 0,5 * min(siklus_kedip, 1) + 0,5 * min(siklus_mulut, 1); liveness
+# (keputusan D2: dlib mesin) lolos bila P_live >= 1,0, yaitu kedua siklus ada.
+LIVENESS_THRESHOLD = 1.0
+# Versi definisi keputusan yang dicatat tiap presentasi web
+# (attendance-web/app/Services/FusionDecision.php::VERSION).
+DECISION_VERSION = "D1b-D2dlib-2026-10-21"
+
 # "masing-masing wajib tervalidasi minimal satu siklus transisi penuh di dalam
 # jendela observasi 8,0 s" (Subbab 5.3). Kedipan DAN gerakan mulut keduanya wajib.
 MIN_BLINK_CYCLES = 1
 MIN_MOUTH_CYCLES = 1
+# Satu siklus = tidak-aktif -> aktif paling sedikit N frame -> tidak-aktif (dlib mesin).
+BLINK_CONSEC_FRAMES = 2
+MOUTH_OPEN_FRAMES = 3
 
 
 def cosine_from_distance(d: float) -> float:

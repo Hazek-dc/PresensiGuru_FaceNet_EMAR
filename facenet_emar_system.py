@@ -164,13 +164,18 @@ logger = logging.getLogger("FaceEMARSystem")
 # Jangan menulis ulang angkanya di sini.
 from parameter_penelitian import (  # noqa: E402
     ALPHA_DEFAULT,
+    BLINK_CONSEC_FRAMES,
     DISTANCE_CM,
     EAR_BLINK_THRESHOLD,
     FACENET_DISTANCE_THRESHOLD,
+    FUSION_D_REF,
+    FUSION_THRESHOLD,
+    LIVENESS_THRESHOLD,
     LUX_CATEGORIES,
     MAR_OPEN_THRESHOLD,
     MIN_BLINK_CYCLES,
     MIN_MOUTH_CYCLES,
+    MOUTH_OPEN_FRAMES,
     OBSERVATION_WINDOW_S,
 )
 
@@ -178,7 +183,7 @@ from parameter_penelitian import (  # noqa: E402
 FACENET_EMBEDDING_SIZE     = 512    # InceptionResnetV1 → 512-D
 FACENET_MIN_FACE_SIZE      = 40     # px minimum untuk MTCNN
 FACENET_MIN_CONFIDENCE     = 0.90   # Confidence minimum MTCNN detection
-D_REF                      = 1.20   # Jarak referensi untuk skor P_face [0,1]
+D_REF                      = FUSION_D_REF   # 1,20: jarak referensi skor P_face [0,1]
 # FACENET_GALLERY_PATH dipakai tes agar tidak pernah menulis galeri asli.
 GALLERY_PATH               = Path(os.environ.get("FACENET_GALLERY_PATH") or BASE_DIR / "gallery" / "face_gallery.pkl")
 DEVICE                     = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -192,20 +197,21 @@ MOUTH_REF           = MIN_MOUTH_CYCLES   # Siklus buka-tutup mulut untuk evidenc
 # Naskah mewajibkan kedipan DAN gerakan mulut masing-masing minimal satu siklus.
 # Karena P_live = w1*evidence_mata + w2*evidence_mulut dengan w1 + w2 = 1,
 # P_live mencapai 1,0 hanya bila kedua evidence penuh -- maka ambangnya 1,0.
-EMAR_LIVENESS_THRESHOLD = 1.0       # TAU_LIVE: ambang P_live untuk keputusan PAD
+EMAR_LIVENESS_THRESHOLD = LIVENESS_THRESHOLD   # TAU_LIVE 1,0: ambang P_live keputusan PAD
 
 # ---- Parameter Fusion --------------------------------------------------------
 #  S2: Rule-based Gate  → liveness lolos DAN identitas cocok
 #  S3: Weighted Fusion  → S_final = alpha * P_face + (1-alpha) * P_live >= TAU_FUSION
-# TAU_FUSION tidak ditetapkan naskah. Dengan alpha 0,60, serangan statis
-# (P_live = 0) tetap diterima S3 bila P_face >= 0,833, yaitu d <= 0,20.
-FINAL_THRESHOLD     = 0.50          # TAU_FUSION: ambang keputusan S3
+# TAU_FUSION ditetapkan peneliti lewat keputusan D1 (parameter_penelitian.py).
+# Dengan alpha 0,60, serangan statis (P_live = 0) tetap diterima S3 bila
+# P_face >= 0,833, yaitu d < 0,20.
+FINAL_THRESHOLD     = FUSION_THRESHOLD   # TAU_FUSION 0,50: ambang keputusan S3
 
 # ---- Parameter Liveness Temporal --------------------------------------------
 # Durasi minimum dihitung dalam frame, sehingga bergantung pada fps pipeline.
 # Pada ~12 fps (EMAR saja), 2 frame = ~167 ms; kedipan yang lebih singkat lolos.
-BLINK_CONSEC_FRAMES  = 2            # Frame berturut-turut mata tertutup → kedipan
-MOUTH_OPEN_FRAMES    = 3            # Frame berturut-turut mulut terbuka → satu siklus
+# BLINK_CONSEC_FRAMES (2) dan MOUTH_OPEN_FRAMES (3) dari parameter_penelitian.py:
+# frame berturut-turut mata tertutup / mulut terbuka untuk satu siklus.
 EMAR_BUFFER_MAX_FRAMES = 1024       # Batas pengaman buffer, jauh di atas 8 s × fps
 
 # ---- Runtime -----------------------------------------------------------------
@@ -215,6 +221,17 @@ EMAR_BUFFER_MAX_FRAMES = 1024       # Batas pengaman buffer, jauh di atas 8 s ×
 EMAR_WORKERS           = max(1, min(6, (os.cpu_count() or 2) - 2))
 FACENET_FRAME_INTERVAL = 10         # Jalankan FaceNet tiap N frame (demo real-time)
 MAX_FRAMES             = 30         # Frame maksimum per video (evaluasi offline)
+
+# Waktu MTCNN dan InceptionResnetV1 dari panggilan _extract_embedding terakhir di
+# thread ini, (mtcnn_ms, embedding_ms); embedding_ms None bila wajah tidak lolos
+# MTCNN. Hanya telemetri latensi: tidak ada keputusan yang membacanya.
+_EXTRACT_TIMING = threading.local()
+
+
+def _sync_device(device: Any) -> None:
+    """Tunggu kernel GPU selesai agar waktu yang dibaca bukan waktu antre."""
+    if str(device).startswith("cuda") and torch.cuda.is_available():
+        torch.cuda.synchronize()
 
 # ---- Database ----------------------------------------------------------------
 DB_PATH = BASE_DIR / "logs" / "attendance.db"
@@ -659,13 +676,16 @@ class FaceNetModule:
         Returns:
             np.ndarray 512-D atau None jika wajah tidak terdeteksi / confidence rendah
         """
+        _EXTRACT_TIMING.last = None
         try:
+            t0 = time.perf_counter()
             img_rgb = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2RGB)
             # Deteksi wajah dengan confidence filtering (min_conf)
             boxes, probs, points = self.mtcnn.detect(img_rgb, landmarks=True)
             if (boxes is None or len(boxes) == 0
                     or probs is None or probs[0] is None
                     or float(probs[0]) < FACENET_MIN_CONFIDENCE):
+                _EXTRACT_TIMING.last = ((time.perf_counter() - t0) * 1000, None)
                 return None
             # Sama dengan self.mtcnn(img_rgb) (MTCNN.forward), tetapi memakai
             # hasil deteksi di atas: deteksi kedua pada frame 1080p makan ~0,3 s.
@@ -673,11 +693,15 @@ class FaceNetModule:
                 boxes, probs, points, img_rgb, method=self.mtcnn.selection_method)
             face_tensor = self.mtcnn.extract(img_rgb, boxes, None)
             if face_tensor is None:
+                _EXTRACT_TIMING.last = ((time.perf_counter() - t0) * 1000, None)
                 return None
+            _sync_device(self.device)
+            t1 = time.perf_counter()
             face_tensor = face_tensor.unsqueeze(0).to(self.device)
             with torch.no_grad():
                 emb = self.resnet(face_tensor).cpu().numpy()[0]
             emb = emb / (np.linalg.norm(emb) + 1e-10)
+            _EXTRACT_TIMING.last = ((t1 - t0) * 1000, (time.perf_counter() - t1) * 1000)
             return emb
         except Exception as e:
             logger.debug(f"Ekstraksi embedding gagal: {e}")
@@ -1348,47 +1372,14 @@ class FusionModule:
 # WORKFLOW ALGORITMA PENCATATAN 3 SKENARIO (UNTUK EKSPOR CSV BAB 5)
 # ==============================================================================
 
-def evaluate_trial(euclidean_dist, ear, mar, alpha=ALPHA_DEFAULT, threshold_s3=0.75):
-    # ==========================================
-    # SKENARIO 1 (S1): FaceNet Stand-alone
-    # Mengabaikan liveness, hanya melihat kemiripan wajah
-    # ==========================================
-    if euclidean_dist <= FACENET_DISTANCE_THRESHOLD:
-        s1_decision = 1  # 1 = ACCEPT (Bona-fide)
-    else:
-        s1_decision = 0  # 0 = REJECT (Spoof/Unrecognized)
+def evaluate_trial(euclidean_dist, ear, mar, alpha=ALPHA_DEFAULT, threshold_s3=FINAL_THRESHOLD):
+    """S1/S2/S3 dari jarak, EAR terendah, dan MAR tertinggi sesi (D1: rumus b).
 
-    # ==========================================
-    # SKENARIO 2 (S2): Rule-Based Gate (FaceNet + EMAR)
-    # Wajib Lolos Wajah DAN Lolos Kedipan/Mulut
-    # ==========================================
-    liveness_valid = (ear < EAR_BLINK_THRESHOLD) and (mar >= MAR_OPEN_THRESHOLD)
-    
-    if (s1_decision == 1) and liveness_valid:
-        s2_decision = 1
-    else:
-        s2_decision = 0
-
-    # ==========================================
-    # SKENARIO 3 (S3): Weighted Fusion (FaceNet + EMAR)
-    # Menghitung probabilitas fusi menggunakan bobot alpha
-    # ==========================================
-    # Mengubah Euclidean L2 menjadi probabilitas (P_face) 
-    # (Asumsi: Jarak 0 = 100% mirip, Jarak 1.5 = 0% mirip)
-    p_face = max(0.0, 1.0 - (euclidean_dist / 1.5)) 
-    
-    # Probabilitas Liveness (P_live)
-    p_live = 1.0 if liveness_valid else 0.0
-    
-    # Kalkulasi Skor Fusi: S_final = a(P_face) + (1-a)(P_live)
-    s_final = (alpha * p_face) + ((1.0 - alpha) * p_live)
-    
-    if s_final >= threshold_s3:
-        s3_decision = 1
-    else:
-        s3_decision = 0
-
-    return s1_decision, s2_decision, s3_decision
+    Satu implementasi dengan evaluation_bab5.evaluate_trial agar jalur desktop dan
+    mesin tidak punya dua rumus S3.
+    """
+    from evaluation_bab5 import evaluate_trial as _evaluate_trial
+    return _evaluate_trial(euclidean_dist, ear, mar, alpha=alpha, threshold_s3=threshold_s3)
 
 
 def log_to_csv(participant_id, jarak, lux, label_aktual, euclidean_dist, ear, mar, s1, s2, s3, filename='Dataset_Eksperimen_Bab5.csv'):
@@ -2592,11 +2583,16 @@ def verify_video_file(system: "FaceEMARSystem", video_path: str, user_id: str) -
     Raises:
         ValueError: video tidak dapat dibaca atau tidak memuat frame.
     """
+    t_wait = time.perf_counter()
     with _VERIFY_LOCK:
-        return _verify_video_file(system, video_path, user_id)
+        lock_wait_ms = (time.perf_counter() - t_wait) * 1000
+        body = _verify_video_file(system, video_path, user_id)
+    body["latency_ms"]["lock_wait"] = round(lock_wait_ms, 1)
+    return body
 
 
 def _verify_video_file(system: "FaceEMARSystem", video_path: str, user_id: str) -> Dict[str, Any]:
+    t_start = time.perf_counter()
     try:
         cap = cv2.VideoCapture(video_path)
         video_fps = cap.get(cv2.CAP_PROP_FPS) or 0.0
@@ -2628,6 +2624,11 @@ def _verify_video_file(system: "FaceEMARSystem", video_path: str, user_id: str) 
                 kept[idx] = frame
             yield frame
 
+    # Deret EAR/MAR dlib per frame berlandmark, [t_ms, ear, mar], format yang sama
+    # dengan deret browser di log_raw_frames_dev.csv. Hanya telemetri.
+    emar_series: List[List[float]] = []
+    landmark_frames = 0
+    t_emar = time.perf_counter()
     measurements = _ordered_parallel_map(
         system.emar.measure, face_width.frames(frames_keeping_candidates()),
         workers=EMAR_WORKERS, max_in_flight=2 * EMAR_WORKERS,
@@ -2638,6 +2639,8 @@ def _verify_video_file(system: "FaceEMARSystem", video_path: str, user_id: str) 
             face_width.add(m)
             if res.landmark_count > 0:
                 res_emar = res
+                landmark_frames += 1
+                emar_series.append([round(idx / fps * 1000, 1), round(float(res.ear_avg), 4), round(float(res.mar), 4)])
             n_frames += 1
     except BaseException:
         # Traceback menahan frame fungsi ini; frame tersimpan dilepas lebih dulu.
@@ -2645,6 +2648,9 @@ def _verify_video_file(system: "FaceEMARSystem", video_path: str, user_id: str) 
         raise
     if n_frames == 0:
         raise ValueError("Video tidak mengandung frame")
+    # Dekode video dan pass EMAR berjalan tumpang-tindih di thread paralel, jadi
+    # keduanya hanya bisa diukur sebagai satu tahap.
+    emar_pass_ms = (time.perf_counter() - t_emar) * 1000
 
     # Resolusi alias identitas (dengan atau tanpa prefiks emb_). Galeri dimuat
     # ulang lebih dulu: tanpa itu, pendaftaran ulang dari proses lain belum
@@ -2667,9 +2673,26 @@ def _verify_video_file(system: "FaceEMARSystem", video_path: str, user_id: str) 
     best_facenet_res = None
     mid_res = None
     min_dist = float("inf")
+    facenet_ms = 0.0
+    mtcnn_ms: Optional[float] = 0.0
+    embedding_ms: Optional[float] = 0.0
+    candidates_evaluated = 0
     try:
         for idx, frame in candidate_frames:
+            _EXTRACT_TIMING.last = None
+            t_c = time.perf_counter()
             res_c = system.facenet.verify(frame, actual_user_id)
+            facenet_ms += (time.perf_counter() - t_c) * 1000
+            candidates_evaluated += 1
+            # FaceNetModule tiruan di tes tidak mengisi waktu; tahap yang tidak
+            # terukur dilaporkan None, bukan 0.
+            split = getattr(_EXTRACT_TIMING, "last", None)
+            if split is None:
+                mtcnn_ms = embedding_ms = None
+            else:
+                mtcnn_ms = None if mtcnn_ms is None else mtcnn_ms + split[0]
+                if embedding_ms is not None and split[1] is not None:
+                    embedding_ms += split[1]
             if idx == n_frames // 2:
                 mid_res = res_c
             if res_c.embedding is not None and res_c.distance < min_dist:
@@ -2735,6 +2758,19 @@ def _verify_video_file(system: "FaceEMARSystem", video_path: str, user_id: str) 
         "video_seconds": round(n_frames / fps, 3),
         # Jarak kamera hanya dicatat; S1/S2/S3 di atas tidak memakainya.
         **face_width.summary(),
+        # Telemetri: frame berlandmark dlib (0 = FTA liveness pada decide_s2/s3),
+        # deret EAR/MAR dlib, dan waktu per tahap. Tidak mengubah keputusan.
+        "frames_total": n_frames,
+        "landmark_frames": landmark_frames,
+        "emar_series": emar_series,
+        "candidates_evaluated": candidates_evaluated,
+        "latency_ms": {
+            "emar_pass": round(emar_pass_ms, 1),
+            "facenet_total": round(facenet_ms, 1),
+            "mtcnn": None if mtcnn_ms is None else round(mtcnn_ms, 1),
+            "facenet_embedding": None if embedding_ms is None else round(embedding_ms, 1),
+            "total": round((time.perf_counter() - t_start) * 1000, 1),
+        },
         "request_id": str(uuid.uuid4()),
     }
 

@@ -76,26 +76,29 @@ class TestEvaluationBab5(unittest.TestCase):
         self.assertEqual(s2, 0)
 
     def test_s3_weighted_fusion(self):
-        # S3: s_final = alpha * p_face + (1-alpha) * p_live >= threshold_s3
-        # Kasus A: Face cocok sempurna (dist=0.0 -> p_face=1.0), liveness valid (p_live=1.0)
-        # s_final = 0.6(1.0) + 0.4(1.0) = 1.0 >= 0.75 -> S3 = 1
+        # S3 keputusan D1 (rumus b): d <= 0,40 DAN 0,6 * (1 - d/1,20) + 0,4 * P_live >= 0,50,
+        # dengan P_live = 0,5 * kedip + 0,5 * mulut.
+        # Kasus A: d = 0, kedip dan mulut -> s_final = 1,0 -> S3 = 1
         _, _, s3 = evaluate_trial(euclidean_dist=0.0, ear=0.18, mar=0.40)
         self.assertEqual(s3, 1)
 
-        # Kasus B: Face cocok (dist=0.30 -> p_face = 1 - 0.2 = 0.8), tapi liveness PALSU (p_live=0.0)
-        # s_final = 0.6(0.8) + 0.4(0.0) = 0.48 < 0.75 -> S3 = 0
+        # Kasus B: d = 0,30, tanpa liveness -> 0,6 * 0,75 = 0,45 < 0,50 -> S3 = 0
         _, _, s3 = evaluate_trial(euclidean_dist=0.30, ear=0.28, mar=0.05)
         self.assertEqual(s3, 0)
 
-        # Kasus C: Face cukup mirip (dist=0.60 -> p_face = 1 - 0.4 = 0.6), liveness VALID (p_live=1.0)
-        # s_final = 0.6(0.6) + 0.4(1.0) = 0.36 + 0.40 = 0.76 >= 0.75 -> S3 = 1
-        _, _, s3 = evaluate_trial(euclidean_dist=0.60, ear=0.18, mar=0.40)
-        self.assertEqual(s3, 1)
+        # Kasus C: d = 0,30, hanya mulut (P_live 0,5) -> 0,45 + 0,20 = 0,65 -> S3 = 1, S2 = 0
+        _, s2, s3 = evaluate_trial(euclidean_dist=0.30, ear=0.28, mar=0.40)
+        self.assertEqual((s2, s3), (0, 1))
 
-        # Kasus D: Wajah asing (dist=1.35 -> p_face = 1 - 0.9 = 0.1), liveness VALID (p_live=1.0)
-        # s_final = 0.6(0.1) + 0.4(1.0) = 0.06 + 0.40 = 0.46 < 0.75 -> S3 = 0
-        _, _, s3 = evaluate_trial(euclidean_dist=1.35, ear=0.18, mar=0.40)
+        # Kasus D: gerbang identitas. d = 0,60 dengan liveness penuh dulu diterima rumus a
+        # (0,76 >= 0,75); kini S3 = 0 karena d > 0,40.
+        _, _, s3 = evaluate_trial(euclidean_dist=0.60, ear=0.18, mar=0.40)
         self.assertEqual(s3, 0)
+
+        # Kasus E: tanpa liveness, d = 0,20 tepat ditolak (0,49999999999999994) dan
+        # d = 0,19 diterima. Sifat rumus b ini harus dilaporkan di naskah.
+        self.assertEqual(evaluate_trial(euclidean_dist=0.20, ear=0.28, mar=0.05)[2], 0)
+        self.assertEqual(evaluate_trial(euclidean_dist=0.19, ear=0.28, mar=0.05)[2], 1)
 
     def test_log_to_csv(self):
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -176,9 +179,10 @@ class TestEvaluationBab5(unittest.TestCase):
             res = evaluate_and_log("P01", 30, 150, "Bona_Fide", 0.40, 0.199, 0.099, filename=test_csv)
             self.assertFalse(res["liveness_valid"])
 
-            # alpha bawaan 0.60: 0.60 * (1 - 0.30/1.5) + 0.40 * 1.0 = 0.88
+            # alpha bawaan 0.60 (D1): 0.60 * (1 - 0.30/1.20) + 0.40 * 1.0 = 0.85
             res = evaluate_and_log("P01", 30, 150, "Bona_Fide", 0.30, 0.18, 0.40, filename=test_csv)
-            self.assertAlmostEqual(res["s_final"], 0.88, places=3)
+            self.assertAlmostEqual(res["s_final"], 0.85, places=3)
+            self.assertAlmostEqual(res["p_face"], 0.75, places=3)
 
 
 if __name__ == "__main__":

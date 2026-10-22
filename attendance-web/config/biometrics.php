@@ -28,6 +28,19 @@ return [
     'distance_cm' => (int) env('BIOMETRICS_DISTANCE_CM', 30),
 
     /*
+    | Fusi S3 = FusionModule.decide_s3 (keputusan D1, rumus b) dan ambang liveness
+    | dlib S2 (D2). Sama dengan parameter_penelitian.py (ALPHA_DEFAULT, FUSION_D_REF,
+    | FUSION_THRESHOLD, EMAR_LIVENESS_THRESHOLD). Sengaja tanpa env dan tanpa
+    | pengaturan admin: mengubahnya mengubah definisi skenario di naskah.
+    */
+    'fusion' => [
+        'alpha' => 0.60,
+        'd_ref' => 1.20,
+        'threshold' => 0.50,
+        'liveness_threshold' => 1.0,
+    ],
+
+    /*
     | Rentang posisi jarak (cm, batas inklusif), sama dengan DISTANCE_BANDS di
     | parameter_penelitian.py dan Utils/distanceCalibration.ts. Ketiganya boleh lanjut
     | ke pemindaian; di luar rentang hanya panduan reposisi, keputusan S1/S2/S3

@@ -14,8 +14,9 @@ serta aturan statistik `thesis-guard`. Tabel hanya dibuat dari data terekam.
   `compute_iso_by_pai`, `mcnemar_test` (McNemar hanya deskriptif).
 - `biometric-api/app/evaluation/**` dan `biometric-api/tests/evaluation/**`. Bersama vision-preproc-agent:
   `biometric-api/tests/test_audit_criteria.py` dan `test_e2e_mock_pipeline.py`.
-- Berkas bersama: salinan rumus (a) di `scripts/analisis_kalibrasi_dev.py` (`S3_ACCEPT`, `P_FACE_SCALE`, `implied_l2`,
-  `s3_accept`) diubah bersama emar-pad-fusion-agent dalam perubahan D1 yang sama dengan rumus web.
+- Berkas bersama: salinan rumus (b) di `scripts/analisis_kalibrasi_dev.py` (`s3_accept`, `implied_l2`, `count_full_cycles`)
+  diubah bersama emar-pad-fusion-agent. Paritas dengan web dikunci `TestParitasWeb`, dengan mesin dikunci
+  `test_penghitung_skrip_analisis_sama_dengan_mesin`.
 - Tes Pest (`attendance-web/tests/Feature/*`) milik laravel-orchestrator-agent dan tes Vitest
   (`resources/js/**/__tests__/*`) milik frontend-mediapipe-agent. Anda menjalankan suite itu dan mengusulkan kasus uji
   kepada pemiliknya, tetapi tidak menulis berkasnya sendiri.
@@ -33,7 +34,8 @@ serta aturan statistik `thesis-guard`. Tabel hanya dibuat dari data terekam.
   hasil. Skrip harus ditulis ulang untuk data TEST nyata S01-S18 (N = 3.240).
 - `Dataset_Eksperimen_Bab5.csv` berisi 4 baris demo (P01-P04), 43 baris akun uji `emb_TEST-QALWANI-001`, 27 baris
   nilai pengganti EAR/MAR 0,18/0,40, dan 53 baris 30 cm/300 lux. Saring di analisis, jangan sunting berkasnya.
-- Jangan menggabungkan sumber rumus S3 (a) dan (b) dalam satu tabel (CLAUDE.md bagian 4 butir 2).
+- Hanya presentasi dengan `Versi Keputusan` = `DECISION_VERSION` yang dianalisis. Data rumus (a) atau liveness browser
+  tidak digabung dengan data baru (CLAUDE.md bagian 4 butir 2).
 - FTA terpisah dari penyebut. APCER per spesies. ACER bukan metrik ISO, jadi sebutkan definisinya. Dua definisi di repo:
   APCER terburuk (`analisis_kalibrasi_dev.py`) dan APCER gabungan (`compute_iso_metrics`, `evaluate_iso30107.py`).
 - CI untuk proporsi (APCER, BPCER, FTA per sel): Wilson, diberi label deskriptif karena repetisi per subjek
@@ -47,12 +49,12 @@ serta aturan statistik `thesis-guard`. Tabel hanya dibuat dari data terekam.
 
 | Butir | Status |
 |---|---|
-| Tes (a) NON_MATCH d = 0,55, live -> S3 = 0 | Lulus di S3 mesin, gagal di S3 web (S3 = 1). Tulis setelah D1 diputuskan. |
+| Tes (a) NON_MATCH d = 0,55, live -> S3 = 0 | Sudah (D1): `test_bab5_scenarios_use_thesis_thresholds` dan tes Python rumus (b). |
 | Tes (b) bona fide, (c) print/screen | Boleh. Gunakan deret frame (mesin berbasis siklus) dan level EAR/MAR absolut, bukan hanya delta. |
 | Tabel 5.A split | Pakai N terkunci 3.240 dan N terekam aktual `P_DEV_01`. |
-| Tabel 5.B grid | Sudah sebagian (tabel 2a/2b/2c `analisis_kalibrasi_dev.py`). |
+| Tabel 5.B grid | Sudah: tabel 2a/2b/2c `analisis_kalibrasi_dev.py` (2b dari deret dlib, 2c rumus b). |
 | Tabel 5.C, 5.D | Sudah sebagian (tabel 3); kurang APCER gabungan dan kolom FTA per sel. |
-| Tabel 5.E latensi, klaim < 200 ms/frame | Menunggu instrumentasi mesin. Klaim belum diukur, jangan ditulis. |
+| Tabel 5.E latensi, klaim < 200 ms/frame | Tabel 1 `tabel1_latensi_komponen.csv` (deskriptif per presentasi, satu subjek). Klaim per frame tidak bisa ditulis: pass EMAR paralel, jadi ms/frame adalah rata-rata teramortisasi. |
 | Tabel 5.F | Tingkat subjek: menunggu data TEST nyata dan penulisan ulang `analisis_tingkat_subjek.py` (kini hanya membaca data sintetis). `SubjectLevelAnalysisService` (Laravel, sumber `telemetry.db`) adalah jalur terekam yang ada. Tingkat percobaan hanya deskriptif. |
 
 ## Selesai berarti

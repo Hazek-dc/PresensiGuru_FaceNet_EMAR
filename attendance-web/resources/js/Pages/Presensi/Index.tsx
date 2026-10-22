@@ -825,12 +825,15 @@ export default function Presensi({
 
             formData.append('ear_blinks', String(scanMetrics.earBlinks));
             formData.append('mar_mouths', String(scanMetrics.marMouths));
-            formData.append('face_pct', String(scanMetrics.facePct));
+            // D10: nilai yang tidak terukur tidak dikirim, sehingga server mencatat null.
+            if (scanMetrics.facePct != null) {
+                formData.append('face_pct', String(scanMetrics.facePct));
+            }
             formData.append('scan_duration_s', String(scanMetrics.durationS));
-            if (scanMetrics.earVal !== undefined) {
+            if (scanMetrics.earVal != null) {
                 formData.append('ear_val', String(scanMetrics.earVal));
             }
-            if (scanMetrics.marVal !== undefined) {
+            if (scanMetrics.marVal != null) {
                 formData.append('mar_val', String(scanMetrics.marVal));
             }
             if (scanMetrics.activeChallenge !== undefined) {
@@ -994,8 +997,8 @@ export default function Presensi({
             `Jarak_Euclidean_L2,${evaluationData.euclidean_distance ?? '-'},Jarak Euclidean Vektor Embedding (Threshold <= 0.40)`,
             `FaceNet_Score,${evaluationData.facenet_score ?? '-'},Skor Kesamaan Wajah FaceNet (128-D)`,
             `EMAR_Score,${evaluationData.emar_score ?? '-'},Skor Fusi Liveness EMAR`,
-            `Tantangan_Acak_EMAR,${evaluationData.active_challenge || '-'},Instruksi Challenge-Response Acak (BLINK / OPEN_MOUTH)`,
-            `Status_Tantangan,${evaluationData.challenge_status || '-'},Hasil Evaluasi Tantangan (PASS_LIVENESS / REJECT)`,
+            `Urutan_Panduan_Gerakan,${evaluationData.active_challenge || '-'},Urutan Langkah Panduan Browser (telemetri; liveness diputuskan dlib mesin)`,
+            `Status_Panduan_Browser,${evaluationData.challenge_status || '-'},Hasil Langkah Panduan di Browser (telemetri; bukan keputusan PAD)`,
             `Kedipan_Mata_EAR,${evaluationData.ear_blinks},Jumlah Kedipan Mata Terdeteksi (EAR < 0.20)`,
             `Gerakan_Mulut_MAR,${evaluationData.mar_mouths},Jumlah Gerakan Mulut Terdeteksi (MAR >= 0.10)`,
             `Kestabilan_Wajah_Pct,${evaluationData.face_detected_pct}%,Persentase Frame Wajah Terlacak Stabil (Min 80.0%)`,
@@ -1650,6 +1653,7 @@ export default function Presensi({
                                 soloGate={soloCell ? { targetCm: soloCell.distanceCm, attack: isAttack(soloCell.sample) } : null}
                                 onStageChange={soloCell ? handleSoloStage : undefined}
                                 collectFrameSeries={soloCell !== null}
+                                forceVoice={soloCell !== null}
                                 distanceCalibration={distanceCalibration}
                                 onCameraInfoChange={setCameraInfo}
                                 luxCalibration={luxCalibration}

@@ -91,3 +91,25 @@ def test_video_rusak_menjadi_400(monkeypatch):
     r = _post(_client(monkeypatch, verify))
     assert r.status_code == 400
     assert "tidak mengandung frame" in r.text
+
+
+def test_telemetri_dlib_dan_latensi_diteruskan(monkeypatch):
+    latency = {"emar_pass": 812.4, "facenet_total": 401.0, "mtcnn": 300.2,
+               "facenet_embedding": 95.1, "total": 1290.7, "lock_wait": 0.1}
+    verify = lambda *_: _result(
+        frames_total=96, landmark_frames=90, candidates_evaluated=2,
+        emar_series=[[0.0, 0.31, 0.04], [33.3, 0.18, 0.12]], latency_ms=latency,
+    )
+    body = _post(_client(monkeypatch, verify)).json()
+    assert body["landmark_frames"] == 90
+    assert body["frames_total"] == 96
+    assert body["emar_series"][1] == [33.3, 0.18, 0.12]
+    assert body["latency_ms"] == latency
+
+
+def test_tahap_tak_terukur_tetap_null(monkeypatch):
+    latency = {"emar_pass": 10.0, "facenet_total": 5.0, "mtcnn": None,
+               "facenet_embedding": None, "total": 16.0}
+    body = _post(_client(monkeypatch, lambda *_: _result(latency_ms=latency))).json()
+    assert body["latency_ms"]["mtcnn"] is None
+    assert body["latency_ms"]["facenet_embedding"] is None

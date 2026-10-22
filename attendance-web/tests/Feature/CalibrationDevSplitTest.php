@@ -98,14 +98,27 @@ it('mewajibkan spesies untuk serangan dan menolaknya untuk bona fide', function 
 
 it('tidak mengalihkan partisipan tanpa akun ke akun yang sedang login', function () {
     Http::fake(['*' => Http::response(['distance' => 0.31])]);
+    $this->dev->delete();
 
-    submitCalibration($this, $this->researcher, calibrationPayload(['participant_id' => 'P_DEV_02', 'subject_id' => 'P_DEV_02']))
+    submitCalibration($this, $this->researcher, calibrationPayload())
         ->assertStatus(422)
         ->assertJsonValidationErrors(['participant_id']);
 
     expect(AttendanceRecord::count())->toBe(0);
     Http::assertNothingSent();
 });
+
+it('D12: subjek TEST yang punya akun tidak boleh masuk split calibration_dev', function (string $id) {
+    Http::fake(['*' => Http::response(['distance' => 0.31])]);
+    User::factory()->create(['role' => 'teacher', 'embedding_id' => $id, 'is_active' => true]);
+
+    submitCalibration($this, $this->researcher, calibrationPayload(['participant_id' => $id, 'subject_id' => $id]))
+        ->assertStatus(422)
+        ->assertJsonValidationErrors(['participant_id']);
+
+    expect(AttendanceRecord::count())->toBe(0);
+    Http::assertNothingSent();
+})->with(['S05', 'P_DEV_02']);
 
 it('memverifikasi terhadap templat partisipan dan mencatat label tanpa menyentuh dataset TEST', function () {
     Http::fake(['*' => Http::response([

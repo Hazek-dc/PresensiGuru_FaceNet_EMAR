@@ -24,8 +24,8 @@ verifikasi 1:1 ketat, tanpa pencarian 1:N. Ikuti CLAUDE.md bagian 3, 5, dan 7.
 
 ## Belum dikunci tes
 
-- `s_embed = max(0, 1 - d / D_REF)` dengan `D_REF = 1,20` (mesin). Hanya dijaga thesis-guard. Jangan diubah
-  tanpa tes dan persetujuan. Rumus S3 (a) di web memakai skala 1,5, jadi keduanya tidak sebanding.
+- `s_embed = max(0, 1 - d / D_REF)` dengan `D_REF = FUSION_D_REF = 1,20` dari `parameter_penelitian.py` (keputusan D1),
+  dikunci tes `test_fusi_s3_keputusan_d1` dan `test_konstanta_mesin_dari_parameter_naskah`.
 
 ## Aturan khusus
 
@@ -43,7 +43,7 @@ verifikasi 1:1 ketat, tanpa pencarian 1:N. Ikuti CLAUDE.md bagian 3, 5, dan 7.
 | 512-D, L2, S1 = d <= 0,40 | Sudah. |
 | `min_l2_dist` dan `median_l2_dist` per sesi | Hanya sebagai field telemetri tambahan dari kandidat yang dievaluasi dan tidak menggantikan `distance` (`distance` sekarang sudah minimum kandidat yang dievaluasi). Loop kandidat ada di `_verify_video_file` dan respons dibatasi `AttendanceResponse` di `routers/attendance.py`. Keduanya wilayah `vision-preproc-agent`, jadi kerjakan bersama agen itu. |
 | D_L2 per frame untuk semua frame | Tidak layak sekarang. Estimasi dari komentar kode (bukan hasil ukur): 154-240 frame x sekitar 0,3 s MTCNN = 46-72 s untuk MTCNN saja, belum termasuk InceptionResnetV1. Komentar `config/biometrics.php` menyebut pemrosesan sekarang sekitar 15 s per video di CPU. Berisiko mendekati atau melewati `verify_timeout` 90 s di CPU (verifikasi berjalan satu per satu karena `_VERIFY_LOCK`). Jangan dikutip sebagai hasil ukur. |
-| `latency_facenet_ms` | Boleh (instrumentasi), koordinasi dengan `vision-preproc-agent`. |
+| `latency_facenet_ms` | Sudah: `_extract_embedding` mencatat waktu MTCNN dan InceptionResnetV1 (`_EXTRACT_TIMING`), dikirim sebagai `latency_ms.mtcnn` dan `latency_ms.facenet_embedding`. |
 
 ## Selesai berarti
 

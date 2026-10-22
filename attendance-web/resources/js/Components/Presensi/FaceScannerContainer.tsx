@@ -40,6 +40,7 @@ import {
     EAR_BLINK_THRESHOLD,
     MAR_OPEN_THRESHOLD,
 } from '../../Utils/emarGeometry';
+import { challengeLabel, challengeOrder, combineChallengeStatuses, faceDetectedPercent } from '../../Utils/livenessGuidance';
 import {
     ScannerVisualState,
     useThreeFaceMesh,
@@ -75,11 +76,15 @@ export type ActiveChallengeStatus =
 export interface ScanMetrics {
     earBlinks: number;
     marMouths: number;
-    facePct: number;
+    /** % frame berwajah dari semua frame yang diproses; null bila tidak ada frame (D10). */
+    facePct: number | null;
+    /** Durasi rekaman terukur (detik), bukan konstanta 8,0. */
     durationS: number;
-    earVal?: number;
-    marVal?: number;
-    activeChallenge?: ActiveChallengeType;
+    /** EAR terendah/MAR tertinggi browser; null bila tidak ada frame berwajah (D10). */
+    earVal?: number | null;
+    marVal?: number | null;
+    /** Urutan langkah panduan, mis. "BLINK>OPEN_MOUTH" (telemetri, D2). */
+    activeChallenge?: string;
     challengeStatus?: ActiveChallengeStatus;
     /** [ms sejak awal rekaman, EAR, MAR] tiap pembaruan landmark; hanya bila collectFrameSeries. */
     frameSeries?: Array<[number, number, number]>;
@@ -133,6 +138,11 @@ interface FaceScannerContainerProps {
     collectFrameSeries?: boolean;
     /** Pesan selama paused; bawaannya untuk pendaftaran wajah. */
     pausedMessage?: string;
+    /**
+     * Panduan suara wajib aktif (mode solo: peneliti tidak melihat layar). Tanpa
+     * suara, instruksi kedip/mulut terlewat dan presentasi gagal liveness.
+     */
+    forceVoice?: boolean;
 }
 
 /* ------------------------------------------------------------------ */
@@ -172,6 +182,7 @@ export function FaceScannerContainer({
     onStageChange,
     collectFrameSeries = false,
     pausedMessage = 'Pemindaian presensi dijeda selama pendaftaran wajah.',
+    forceVoice = false,
 }: FaceScannerContainerProps) {
     /* Refs */
     const videoRef = useRef<HTMLVideoElement | null>(null);
@@ -348,7 +359,7 @@ export function FaceScannerContainer({
 
     const speakGuidance = useCallback(
         (text: string, force = false) => {
-            if (!isVoiceEnabled || typeof window === 'undefined' || !('speechSynthesis' in window)) return;
+            if (!(isVoiceEnabled || forceVoice) || typeof window === 'undefined' || !('speechSynthesis' in window)) return;
             const now = Date.now();
             if (!force && lastSpokenRef.current.text === text && now - lastSpokenRef.current.time < 3500) {
                 return;
@@ -364,7 +375,7 @@ export function FaceScannerContainer({
                 console.warn('Speech synthesis error:', e);
             }
         },
-        [isVoiceEnabled],
+        [isVoiceEnabled, forceVoice],
     );
 
     /* MediaPipe Hook */
@@ -702,6 +713,30 @@ export function FaceScannerContainer({
     const activeChallengeStatusRef = useRef<ActiveChallengeStatus>('WAITING_FOR_ACTION');
     const challengeStartTimeRef = useRef<number | null>(null);
     const challengeTrackerRef = useRef<ChallengeTracker | null>(null);
+    // D2: dlib butuh siklus kedip DAN mulut, jadi panduan meminta keduanya berurutan.
+    const challengeOrderRef = useRef<ActiveChallengeType[]>(['BLINK', 'OPEN_MOUTH']);
+    const challengeStepRef = useRef<number>(0);
+    const challengeResultsRef = useRef<ActiveChallengeStatus[]>([]);
+    const [challengeStep, setChallengeStep] = useState<number>(0);
+
+    /** Mulai langkah panduan ke-step (0 atau 1) dari urutan acak rekaman ini. */
+    const beginChallengeStep = useCallback(
+        (step: number) => {
+            const ch = challengeOrderRef.current[step];
+            challengeStepRef.current = step;
+            setChallengeStep(step);
+            activeChallengeRef.current = ch;
+            setActiveChallenge(ch);
+            activeChallengeStatusRef.current = 'WAITING_FOR_ACTION';
+            setActiveChallengeStatus('WAITING_FOR_ACTION');
+            challengeStartTimeRef.current = performance.now();
+            challengeTrackerRef.current = new ChallengeTracker(ch, performance.now() / 1000);
+            const action = ch === 'BLINK' ? 'kedipkan mata' : 'buka lalu tutup mulut';
+            setStatusMessage(`LANGKAH ${step + 1} DARI 2: ${action.toUpperCase()} SEKARANG!`);
+            speakGuidance(`Langkah ${step + 1}. ${action[0].toUpperCase()}${action.slice(1)} sekarang.`, true);
+        },
+        [speakGuidance],
+    );
 
     /* Refs for accumulation */
     const blinkCycleRef = useRef(new CycleCounter());
@@ -710,8 +745,8 @@ export function FaceScannerContainer({
     const mouthsCountRef = useRef<number>(0);
     const detectedFramesRef = useRef<number>(0);
     const totalFramesRef = useRef<number>(0);
-    const minEarRef = useRef<number>(0.30);
-    const maxMarRef = useRef<number>(0.05);
+    const minEarRef = useRef<number | null>(null);
+    const maxMarRef = useRef<number | null>(null);
     const frameSeriesRef = useRef<Array<[number, number, number]>>([]);
     const scanStartRef = useRef<number>(0);
     const collectFrameSeriesRef = useRef(collectFrameSeries);
@@ -736,12 +771,10 @@ export function FaceScannerContainer({
 
         // Track live counters during 8-second scan
         if (livenessStage === 'SCANNING_8S') {
-            totalFramesRef.current++;
-            detectedFramesRef.current++;
-
+            // Frame dihitung di loop pemrosesan (semua frame, berwajah atau tidak).
             // Accumulate min EAR (deepest blink) and max MAR (widest mouth open)
-            if (ear < minEarRef.current) minEarRef.current = ear;
-            if (mar > maxMarRef.current) maxMarRef.current = mar;
+            if (minEarRef.current === null || ear < minEarRef.current) minEarRef.current = ear;
+            if (maxMarRef.current === null || mar > maxMarRef.current) maxMarRef.current = mar;
             if (collectFrameSeriesRef.current) {
                 frameSeriesRef.current.push([
                     Math.round((performance.now() - scanStartRef.current) * 10) / 10,
@@ -760,33 +793,31 @@ export function FaceScannerContainer({
                 setMarMouthsCount(mouthsCountRef.current);
             }
 
-            // Evaluasi respons terhadap tantangan acak (EMAR aktif)
+            // Langkah panduan (telemetri browser). Keputusan liveness tetap dari dlib
+            // mesin (D2), jadi langkah yang gagal tidak menolak dan langkah berikutnya
+            // langsung dimulai.
             const tracker = challengeTrackerRef.current;
             if (tracker && activeChallengeStatusRef.current === 'WAITING_FOR_ACTION') {
                 const verdict = tracker.update(ear, mar, performance.now() / 1000);
                 if (verdict !== 'WAITING_FOR_ACTION') {
                     activeChallengeStatusRef.current = verdict;
                     setActiveChallengeStatus(verdict);
-                    if (verdict === 'PASS_LIVENESS') {
-                        const msg = tracker.challenge === 'BLINK'
-                            ? 'Tantangan kedip valid (Bona Fide) ✓'
-                            : 'Tantangan buka mulut valid (Bona Fide) ✓';
-                        setStatusMessage(msg);
-                        speakGuidance(tracker.challenge === 'BLINK'
-                            ? 'Bagus, kedipan mata valid!'
-                            : 'Bagus, gerakan mulut valid!');
-                    } else if (verdict === 'REJECT_WRONG_ACTION') {
-                        setStatusMessage('Aksi salah terdeteksi! Diminta kedip tetapi mulut terus terbuka.');
-                        speakGuidance('Aksi salah terdeteksi.');
+                    challengeResultsRef.current.push(verdict);
+                    const next = challengeStepRef.current + 1;
+                    if (next < challengeOrderRef.current.length) {
+                        beginChallengeStep(next);
+                    } else if (verdict === 'PASS_LIVENESS') {
+                        setStatusMessage('Kedua gerakan tercatat. Tetap hadap kamera sampai rekaman selesai.');
+                        speakGuidance('Bagus. Tahan posisi sampai rekaman selesai.');
                     } else {
-                        setStatusMessage('Waktu respons habis (> 4 detik). Akses ditolak.');
-                        speakGuidance('Waktu respons habis.');
+                        setStatusMessage('Ulangi kedip dan buka-tutup mulut sebelum rekaman selesai.');
+                        speakGuidance('Ulangi kedip dan buka tutup mulut.');
                     }
                 }
             }
 
         }
-    }, [geometricEar, geometricMar, hasFace, qualityScore, livenessStage, onMetricsUpdate, speakGuidance]);
+    }, [geometricEar, geometricMar, hasFace, qualityScore, livenessStage, onMetricsUpdate, speakGuidance, beginChallengeStep]);
 
     /* ---- Live Metric Distance Sensor & Human Face ROI for Photometry ---- */
     useEffect(() => {
@@ -900,8 +931,8 @@ export function FaceScannerContainer({
             mouthsCountRef.current = 0;
             detectedFramesRef.current = 0;
             totalFramesRef.current = 0;
-            minEarRef.current = 0.30;
-            maxMarRef.current = 0.05;
+            minEarRef.current = null;
+            maxMarRef.current = null;
             frameSeriesRef.current = [];
             scanStartRef.current = performance.now();
             blinkCycleRef.current.reset();
@@ -916,6 +947,10 @@ export function FaceScannerContainer({
             activeChallengeStatusRef.current = 'WAITING_FOR_ACTION';
             challengeStartTimeRef.current = null;
             challengeTrackerRef.current = null;
+            challengeOrderRef.current = challengeOrder(Math.random());
+            challengeStepRef.current = 0;
+            challengeResultsRef.current = [];
+            setChallengeStep(0);
             setActiveChallenge(null);
             setActiveChallengeStatus('WAITING_FOR_ACTION');
 
@@ -945,23 +980,9 @@ export function FaceScannerContainer({
                 setScanProgressPct(progress);
                 setScanElapsedSec(parseFloat(elapsedSec.toFixed(1)));
 
-                // Fase 2: Trigger Random Challenge at T >= 1.0s
+                // Fase 2: langkah panduan pertama pada t >= 1,0 s
                 if (elapsedSec >= 1.0 && !activeChallengeRef.current) {
-                    const ch: ActiveChallengeType = Math.random() < 0.5 ? 'BLINK' : 'OPEN_MOUTH';
-                    activeChallengeRef.current = ch;
-                    setActiveChallenge(ch);
-                    activeChallengeStatusRef.current = 'WAITING_FOR_ACTION';
-                    setActiveChallengeStatus('WAITING_FOR_ACTION');
-                    challengeStartTimeRef.current = performance.now();
-                    challengeTrackerRef.current = new ChallengeTracker(ch, performance.now() / 1000);
-
-                    if (ch === 'BLINK') {
-                        setStatusMessage('INSTRUKSI: KEDIPKAN MATA ANDA SEKARANG!');
-                        speakGuidance('Instruksi: Kedipkan mata Anda sekarang!', true);
-                    } else {
-                        setStatusMessage('INSTRUKSI: BUKA MULUT ANDA SEKARANG!');
-                        speakGuidance('Instruksi: Buka mulut Anda sekarang!', true);
-                    }
+                    beginChallengeStep(0);
                 }
             }, 50);
 
@@ -971,29 +992,26 @@ export function FaceScannerContainer({
                     scanTimerIntervalRef.current = null;
                 }
                 const blob = new Blob(chunksRef.current, { type: 'video/webm' });
-                const facePct = totalFramesRef.current > 0
-                    ? parseFloat(((detectedFramesRef.current / totalFramesRef.current) * 100).toFixed(1))
-                    : 100.0;
-                setFaceDetectedPct(facePct);
+                const facePct = faceDetectedPercent(detectedFramesRef.current, totalFramesRef.current);
+                setFaceDetectedPct(facePct ?? 0);
+                const durationS = Math.round(performance.now() - startTime) / 1000;
 
                 setLivenessStage('COMPLETED');
                 setVisualState('VERIFYING_IDENTITY');
                 setStatusMessage('Menganalisis vektor biometrik FaceNet & liveness EMAR...');
                 speakGuidance('Menganalisis biometrik wajah...');
 
-                const finalStatus =
-                    activeChallengeStatusRef.current === 'WAITING_FOR_ACTION'
-                        ? 'REJECT_TIMEOUT'
-                        : activeChallengeStatusRef.current;
+                const finalStatus = combineChallengeStatuses(challengeResultsRef.current, challengeOrderRef.current.length);
+                const round3 = (v: number | null) => (v === null ? null : parseFloat(v.toFixed(3)));
 
                 onVerificationSubmit(blob, {
                     earBlinks: blinksCountRef.current,
                     marMouths: mouthsCountRef.current,
                     facePct,
-                    durationS: 8.0,
-                    earVal: parseFloat(minEarRef.current.toFixed(3)),
-                    marVal: parseFloat(maxMarRef.current.toFixed(3)),
-                    activeChallenge: activeChallengeRef.current || 'BLINK',
+                    durationS,
+                    earVal: round3(minEarRef.current),
+                    marVal: round3(maxMarRef.current),
+                    activeChallenge: challengeLabel(challengeOrderRef.current),
                     challengeStatus: finalStatus,
                     ...(collectFrameSeriesRef.current ? { frameSeries: frameSeriesRef.current } : {}),
                 });
@@ -1011,7 +1029,7 @@ export function FaceScannerContainer({
             setVisualState('FAILED');
             setStatusMessage('Gagal memulai perekaman scanner.');
         }
-    }, [onVerificationSubmit, speakGuidance]);
+    }, [onVerificationSubmit, speakGuidance, beginChallengeStep]);
 
     /* ---- 3-Second Pre-Scan Countdown ---- */
     const startCountdown = useCallback(() => {
@@ -1164,6 +1182,11 @@ export function FaceScannerContainer({
         const onFrame = (now: DOMHighResTimeStamp) => {
             if (video.readyState >= 2) {
                 processFrame(video, now);
+                // D10: kestabilan = frame berwajah / semua frame yang diproses selama rekaman.
+                if (livenessStageRef.current === 'SCANNING_8S') {
+                    totalFramesRef.current++;
+                    if (landmarksRef.current !== null) detectedFramesRef.current++;
+                }
             }
             if (
                 typeof videoWithCallback.requestVideoFrameCallback ===
@@ -1198,7 +1221,7 @@ export function FaceScannerContainer({
                 frameCallbackIdRef.current = null;
             }
         };
-    }, [processFrame, isLoaded]);
+    }, [processFrame, isLoaded, landmarksRef]);
 
     /* ---- Reset Scanner Session Thoroughly ---- */
     const handleReset = useCallback(() => {
@@ -1630,15 +1653,22 @@ export function FaceScannerContainer({
                         <button
                             type="button"
                             onClick={toggleVoice}
-                            className={`pointer-events-auto flex h-8 w-8 sm:h-8.5 sm:w-8.5 items-center justify-center rounded-full border shadow-sm backdrop-blur-md transition active:scale-95 cursor-pointer touch-manipulation ${
-                                isVoiceEnabled
+                            disabled={forceVoice}
+                            className={`pointer-events-auto flex h-8 w-8 sm:h-8.5 sm:w-8.5 items-center justify-center rounded-full border shadow-sm backdrop-blur-md transition active:scale-95 cursor-pointer touch-manipulation disabled:cursor-not-allowed ${
+                                isVoiceEnabled || forceVoice
                                     ? 'border-sky-400/60 bg-sky-500/25 text-sky-300 shadow-sky-500/20 ring-1 ring-sky-400/30'
                                     : 'border-slate-700/60 bg-slate-900/80 text-slate-400 hover:text-slate-200'
                             }`}
-                            title={isVoiceEnabled ? 'Nonaktifkan Panduan Suara' : 'Aktifkan Panduan Suara (Indonesia)'}
+                            title={
+                                forceVoice
+                                    ? 'Panduan suara selalu aktif di mode solo'
+                                    : isVoiceEnabled
+                                      ? 'Nonaktifkan Panduan Suara'
+                                      : 'Aktifkan Panduan Suara (Indonesia)'
+                            }
                             aria-label="Toggle Panduan Suara"
                         >
-                            {isVoiceEnabled ? (
+                            {isVoiceEnabled || forceVoice ? (
                                 <Volume2 className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-sky-400 animate-pulse" />
                             ) : (
                                 <VolumeX className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
@@ -1764,33 +1794,34 @@ export function FaceScannerContainer({
                                     </div>
                                     <div className="min-w-0">
                                         <p className="text-[11px] sm:text-xs font-black tracking-wide uppercase text-white drop-shadow">
+                                            {`LANGKAH ${challengeStep + 1}/2: `}
                                             {activeChallenge === 'BLINK'
-                                                ? 'INSTRUKSI: KEDIPKAN MATA ANDA SEKARANG!'
-                                                : 'INSTRUKSI: BUKA MULUT ANDA SEKARANG!'}
+                                                ? 'KEDIPKAN MATA ANDA SEKARANG!'
+                                                : 'BUKA LALU TUTUP MULUT SEKARANG!'}
                                         </p>
                                         <div className="text-[10px] sm:text-[11px] font-semibold flex items-center gap-1.5 mt-0.5">
                                             {activeChallengeStatus === 'PASS_LIVENESS' && (
                                                 <span className="text-emerald-300 font-bold flex items-center gap-1">
                                                     <CheckCircle2 className="h-3 w-3 sm:h-3.5 sm:w-3.5" />
-                                                    <span>Tantangan Berhasil (Bona Fide)</span>
+                                                    <span>Gerakan terlihat di browser</span>
                                                 </span>
                                             )}
                                             {activeChallengeStatus === 'REJECT_WRONG_ACTION' && (
                                                 <span className="text-rose-300 font-bold flex items-center gap-1">
                                                     <XCircle className="h-3 w-3 sm:h-3.5 sm:w-3.5" />
-                                                    <span>Aksi Salah Terdeteksi!</span>
+                                                    <span>Gerakan lain terdeteksi, ikuti instruksi</span>
                                                 </span>
                                             )}
                                             {activeChallengeStatus === 'REJECT_TIMEOUT' && (
                                                 <span className="text-rose-300 font-bold flex items-center gap-1">
                                                     <AlertTriangle className="h-3 w-3 sm:h-3.5 sm:w-3.5" />
-                                                    <span>Waktu Respons Habis ({'>'}4 Detik)</span>
+                                                    <span>Waktu langkah habis ({'>'}4 detik)</span>
                                                 </span>
                                             )}
                                             {activeChallengeStatus === 'WAITING_FOR_ACTION' && (
                                                 <span className="text-amber-300 flex items-center gap-1">
                                                     <span className="h-1.5 w-1.5 rounded-full bg-amber-400 animate-ping" />
-                                                    <span>Menunggu Respons (Batas Waktu 4s)</span>
+                                                    <span>Menunggu gerakan (batas waktu 4 s)</span>
                                                 </span>
                                             )}
                                         </div>

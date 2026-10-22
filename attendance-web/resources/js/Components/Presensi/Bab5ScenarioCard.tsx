@@ -15,6 +15,7 @@ import {
     ExternalLink,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import { bab5View, FUSION } from '../../Utils/fusionDecision';
 
 export interface Bab5EvaluationData {
     evaluated?: boolean;
@@ -23,12 +24,17 @@ export interface Bab5EvaluationData {
     s2_decision?: number | null;
     s3_decision?: number | null;
     euclidean_distance?: number | null;
-    p_face?: number;
-    p_live?: number;
-    s_final?: number;
-    liveness_valid?: boolean;
-    ear_val?: number;
-    mar_val?: number;
+    p_face?: number | null;
+    p_live?: number | null;
+    s_final?: number | null;
+    liveness_valid?: boolean | null;
+    /** Siklus dlib mesin, sumber liveness S2/S3 sejak D2. */
+    blink_cycles?: number | null;
+    mouth_cycles?: number | null;
+    landmark_frames?: number | null;
+    /** EAR/MAR browser (MediaPipe), telemetri saja. */
+    ear_val?: number | null;
+    mar_val?: number | null;
     ear_blinks?: number;
     mar_mouths?: number;
     subject_id?: string;
@@ -84,18 +90,17 @@ export function Bab5ScenarioCard({
     const distanceText = (digits: number) =>
         measuredDistance === null ? '—' : measuredDistance.toFixed(digits);
 
-    const euclideanDist = measuredDistance ?? 0;
-    const s1 = data?.s1_decision != null ? data.s1_decision : (euclideanDist <= 0.40 ? 1 : 0);
-
-    const earVal = data?.ear_val ?? (data?.ear_blinks && data.ear_blinks > 0 ? 0.18 : 0.28);
-    const marVal = data?.mar_val ?? (data?.mar_mouths && data.mar_mouths > 0 ? 0.40 : 0.05);
-    const livenessValid = data?.liveness_valid !== undefined ? data.liveness_valid : (earVal < 0.20 && marVal >= 0.10);
-    const s2 = data?.s2_decision != null ? data.s2_decision : (s1 === 1 && livenessValid ? 1 : 0);
-
-    const pFace = data?.p_face ?? Math.max(0, 1 - euclideanDist / 1.5);
-    const pLive = data?.p_live ?? (livenessValid ? 1.0 : 0.0);
-    const sFinal = data?.s_final ?? (0.6 * pFace + 0.4 * pLive);
-    const s3 = data?.s3_decision != null ? data.s3_decision : (sFinal >= 0.75 ? 1 : 0);
+    // D1 = rumus S3 (b), D2 = liveness dlib mesin. Tanpa P_live dlib, S2/S3 FTA.
+    const { s1, s2, s3, pFace, pLive, sFinal, livenessValid } = bab5View(data);
+    const fixed = (v: number | null, digits: number) => (v === null ? '—' : v.toFixed(digits));
+    const cycles = (v: number | null | undefined) => (v == null ? '—' : `${v}x`);
+    const verdict = (v: 0 | 1 | null) => (v === null ? 'FTA' : v === 1 ? 'ACCEPT' : 'REJECT');
+    const tone = (v: 0 | 1 | null) =>
+        v === null
+            ? { box: 'border-amber-500/30 bg-amber-500/10', text: 'text-amber-600 dark:text-amber-400' }
+            : v === 1
+              ? { box: 'border-emerald-500/30 bg-emerald-500/10', text: 'text-emerald-600 dark:text-emerald-400' }
+              : { box: 'border-rose-500/30 bg-rose-500/10', text: 'text-rose-600 dark:text-rose-400' };
 
     const handleDownloadBab5Csv = async () => {
         setIsDownloading(true);
@@ -194,33 +199,17 @@ export function Bab5ScenarioCard({
                                 </div>
 
                                 {/* S2 */}
-                                <div className={`p-2 rounded-xl border ${
-                                    s2 === 1
-                                        ? 'border-emerald-500/30 bg-emerald-500/10'
-                                        : 'border-rose-500/30 bg-rose-500/10'
-                                }`}>
+                                <div className={`p-2 rounded-xl border ${tone(s2).box}`}>
                                     <div className="text-[10px] font-extrabold text-slate-500 dark:text-slate-400">S2 Rule-Gate</div>
-                                    <div className={`text-xs font-black mt-0.5 ${
-                                        s2 === 1 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'
-                                    }`}>
-                                        {s2 === 1 ? 'ACCEPT' : 'REJECT'}
-                                    </div>
-                                    <div className="text-[9px] font-mono text-slate-400 mt-0.5">EAR/MAR</div>
+                                    <div className={`text-xs font-black mt-0.5 ${tone(s2).text}`}>{verdict(s2)}</div>
+                                    <div className="text-[9px] font-mono text-slate-400 mt-0.5">siklus dlib</div>
                                 </div>
 
                                 {/* S3 */}
-                                <div className={`p-2 rounded-xl border ${
-                                    s3 === 1
-                                        ? 'border-emerald-500/30 bg-emerald-500/10'
-                                        : 'border-rose-500/30 bg-rose-500/10'
-                                }`}>
+                                <div className={`p-2 rounded-xl border ${tone(s3).box}`}>
                                     <div className="text-[10px] font-extrabold text-slate-500 dark:text-slate-400">S3 Fusi 0.6</div>
-                                    <div className={`text-xs font-black mt-0.5 ${
-                                        s3 === 1 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'
-                                    }`}>
-                                        {s3 === 1 ? 'ACCEPT' : 'REJECT'}
-                                    </div>
-                                    <div className="text-[9px] font-mono text-slate-400 mt-0.5">S={sFinal.toFixed(2)}</div>
+                                    <div className={`text-xs font-black mt-0.5 ${tone(s3).text}`}>{verdict(s3)}</div>
+                                    <div className="text-[9px] font-mono text-slate-400 mt-0.5">S={fixed(sFinal, 2)}</div>
                                 </div>
                             </div>
 
@@ -346,11 +335,7 @@ export function Bab5ScenarioCard({
 
                 {/* Skenario 2 (S2): Rule-Based Gate */}
                 <div
-                    className={`rounded-2xl border p-3 flex flex-col justify-between transition-all ${
-                        s2 === 1
-                            ? 'border-emerald-500/30 bg-emerald-500/5 dark:bg-emerald-500/10'
-                            : 'border-rose-500/30 bg-rose-500/5 dark:bg-rose-500/10'
-                    }`}
+                    className={`rounded-2xl border p-3 flex flex-col justify-between transition-all ${tone(s2).box}`}
                 >
                     <div>
                         <div className="flex items-center justify-between mb-1.5">
@@ -361,13 +346,13 @@ export function Bab5ScenarioCard({
                                 </span>
                             </div>
                             <span
-                                className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-black uppercase ${
-                                    s2 === 1
-                                        ? 'bg-emerald-500/20 text-emerald-700 dark:text-emerald-300'
-                                        : 'bg-rose-500/20 text-rose-700 dark:text-rose-300'
-                                }`}
+                                className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-black uppercase ${tone(s2).text}`}
                             >
-                                {s2 === 1 ? (
+                                {s2 === null ? (
+                                    <>
+                                        <Info className="h-3 w-3" /> FTA (liveness)
+                                    </>
+                                ) : s2 === 1 ? (
                                     <>
                                         <CheckCircle2 className="h-3 w-3" /> ACCEPT (1)
                                     </>
@@ -379,7 +364,7 @@ export function Bab5ScenarioCard({
                             </span>
                         </div>
                         <div className="text-[10px] font-medium text-slate-500 dark:text-slate-400 mb-2">
-                            Rule-Based Gate (FaceNet + EMAR Hard AND)
+                            Rule-Based Gate (FaceNet DAN siklus kedip DAN siklus mulut dlib)
                         </div>
 
                         {/* Parameter details */}
@@ -391,34 +376,32 @@ export function Bab5ScenarioCard({
                                 </span>
                             </div>
                             <div className="flex justify-between items-center">
-                                <span className="text-slate-500 dark:text-slate-400">Min EAR (Kedipan):</span>
-                                <span className={`font-mono font-bold ${earVal < 0.20 ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-600 dark:text-slate-300'}`}>
-                                    {earVal.toFixed(3)} (&lt; 0.20)
+                                <span className="text-slate-500 dark:text-slate-400">Siklus kedip dlib (EAR &lt; 0.20):</span>
+                                <span className={`font-mono font-bold ${(data?.blink_cycles ?? 0) >= 1 ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-600 dark:text-slate-300'}`}>
+                                    {cycles(data?.blink_cycles)} (≥ 1)
                                 </span>
                             </div>
                             <div className="flex justify-between items-center">
-                                <span className="text-slate-500 dark:text-slate-400">Max MAR (Mulut):</span>
-                                <span className={`font-mono font-bold ${marVal >= 0.10 ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-600 dark:text-slate-300'}`}>
-                                    {marVal.toFixed(3)} (≥ 0.10)
+                                <span className="text-slate-500 dark:text-slate-400">Siklus mulut dlib (MAR ≥ 0.10):</span>
+                                <span className={`font-mono font-bold ${(data?.mouth_cycles ?? 0) >= 1 ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-600 dark:text-slate-300'}`}>
+                                    {cycles(data?.mouth_cycles)} (≥ 1)
                                 </span>
                             </div>
                         </div>
                     </div>
 
                     <div className="mt-2.5 pt-2 border-t border-slate-200/40 dark:border-white/5 text-[9px] text-slate-500 dark:text-slate-400 leading-tight">
-                        {s2 === 1
-                            ? '✓ Wajib lolos kemiripan wajah DAN kedua ambang batas fisik (kedip & mulut).'
-                            : '✗ Ditolak gerbang keras: ' + (s1 !== 1 ? 'Wajah tidak cocok' : !livenessValid ? 'Liveness (EAR/MAR) belum terlampaui' : '')}
+                        {s2 === null
+                            ? 'Landmark atau skor liveness dlib tidak tersedia (FTA), S2 tidak dinilai.'
+                            : s2 === 1
+                              ? '✓ Wajib lolos kemiripan wajah DAN siklus kedip DAN siklus mulut dlib.'
+                              : '✗ Ditolak gerbang keras: ' + (s1 !== 1 ? 'Wajah tidak cocok' : !livenessValid ? 'Siklus kedip/mulut dlib belum lengkap' : '')}
                     </div>
                 </div>
 
                 {/* Skenario 3 (S3): Weighted Fusion */}
                 <div
-                    className={`rounded-2xl border p-3 flex flex-col justify-between transition-all ${
-                        s3 === 1
-                            ? 'border-emerald-500/30 bg-emerald-500/5 dark:bg-emerald-500/10'
-                            : 'border-rose-500/30 bg-rose-500/5 dark:bg-rose-500/10'
-                    }`}
+                    className={`rounded-2xl border p-3 flex flex-col justify-between transition-all ${tone(s3).box}`}
                 >
                     <div>
                         <div className="flex items-center justify-between mb-1.5">
@@ -429,13 +412,13 @@ export function Bab5ScenarioCard({
                                 </span>
                             </div>
                             <span
-                                className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-black uppercase ${
-                                    s3 === 1
-                                        ? 'bg-emerald-500/20 text-emerald-700 dark:text-emerald-300'
-                                        : 'bg-rose-500/20 text-rose-700 dark:text-rose-300'
-                                }`}
+                                className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-black uppercase ${tone(s3).text}`}
                             >
-                                {s3 === 1 ? (
+                                {s3 === null ? (
+                                    <>
+                                        <Info className="h-3 w-3" /> FTA (liveness)
+                                    </>
+                                ) : s3 === 1 ? (
                                     <>
                                         <CheckCircle2 className="h-3 w-3" /> ACCEPT (1)
                                     </>
@@ -447,40 +430,44 @@ export function Bab5ScenarioCard({
                             </span>
                         </div>
                         <div className="text-[10px] font-medium text-slate-500 dark:text-slate-400 mb-2">
-                            Weighted Fusion (Skor Bobot α=0.60, Threshold=0.75)
+                            Weighted Fusion (α={FUSION.alpha.toFixed(2)}, D_REF={FUSION.dRef.toFixed(2)}, Threshold={FUSION.threshold.toFixed(2)}, gerbang D ≤ 0.40)
                         </div>
 
                         {/* Parameter details */}
                         <div className="space-y-1.5 bg-white/60 dark:bg-slate-950/40 rounded-xl p-2 border border-slate-200/50 dark:border-white/5 text-[10px]">
                             <div className="flex justify-between items-center">
-                                <span className="text-slate-500 dark:text-slate-400">P_face (0.60):</span>
-                                <span className="font-mono font-bold text-sky-600 dark:text-sky-400">{pFace.toFixed(3)}</span>
+                                <span className="text-slate-500 dark:text-slate-400">s_embed = 1 − D/1.20 (0.60):</span>
+                                <span className="font-mono font-bold text-sky-600 dark:text-sky-400">{fixed(pFace, 3)}</span>
                             </div>
                             <div className="flex justify-between items-center">
-                                <span className="text-slate-500 dark:text-slate-400">P_live (0.40):</span>
-                                <span className="font-mono font-bold text-purple-600 dark:text-purple-400">{pLive.toFixed(3)}</span>
+                                <span className="text-slate-500 dark:text-slate-400">P_live dlib (0.40):</span>
+                                <span className="font-mono font-bold text-purple-600 dark:text-purple-400">{fixed(pLive, 3)}</span>
                             </div>
                             <div className="flex justify-between items-center">
                                 <span className="text-slate-500 dark:text-slate-400">Skor Fusi S_final:</span>
-                                <span className="font-mono font-extrabold text-indigo-600 dark:text-indigo-400">{sFinal.toFixed(3)} ≥ 0.75</span>
+                                <span className="font-mono font-extrabold text-indigo-600 dark:text-indigo-400">{fixed(sFinal, 3)} ≥ {FUSION.threshold.toFixed(2)}</span>
                             </div>
 
                             {/* Progress bar */}
                             <div className="mt-1 h-1.5 w-full rounded-full bg-slate-200 dark:bg-slate-800 overflow-hidden">
                                 <div
                                     className={`h-full rounded-full transition-all duration-500 ${
-                                        s3 === 1 ? 'bg-emerald-500' : 'bg-rose-500'
+                                        s3 === 1 ? 'bg-emerald-500' : s3 === null ? 'bg-amber-500' : 'bg-rose-500'
                                     }`}
-                                    style={{ width: `${Math.min(100, Math.max(0, sFinal * 100))}%` }}
+                                    style={{ width: `${Math.min(100, Math.max(0, (sFinal ?? 0) * 100))}%` }}
                                 />
                             </div>
                         </div>
                     </div>
 
                     <div className="mt-2.5 pt-2 border-t border-slate-200/40 dark:border-white/5 text-[9px] text-slate-500 dark:text-slate-400 leading-tight">
-                        {s3 === 1
-                            ? '✓ Skor gabungan adaptif melampaui 0.75. Toleran variasi liveness.'
-                            : '✗ Skor fusi di bawah threshold 0.75.'}
+                        {s3 === null
+                            ? 'Landmark atau skor liveness dlib tidak tersedia (FTA), S3 tidak dinilai.'
+                            : s3 === 1
+                              ? '✓ Identitas cocok dan skor fusi melampaui 0.50.'
+                              : s1 !== 1
+                                ? '✗ Gerbang identitas: jarak melebihi 0.40.'
+                                : '✗ Skor fusi di bawah threshold 0.50.'}
                     </div>
                 </div>
             </div>
@@ -490,11 +477,11 @@ export function Bab5ScenarioCard({
                 <div className="flex items-center gap-1.5 truncate">
                     <Info className="h-3.5 w-3.5 text-indigo-500 shrink-0" />
                     <span className="truncate">
-                        Vektor Keputusan: <strong className="font-mono text-slate-900 dark:text-white">[{s1}, {s2}, {s3}]</strong> • Otomatis tersimpan ke <span className="font-mono text-indigo-600 dark:text-indigo-400 font-semibold">Dataset_Eksperimen_Bab5.csv</span>
+                        Vektor Keputusan: <strong className="font-mono text-slate-900 dark:text-white">[{s1 ?? '-'}, {s2 ?? 'FTA'}, {s3 ?? 'FTA'}]</strong> • Otomatis tersimpan ke <span className="font-mono text-indigo-600 dark:text-indigo-400 font-semibold">Dataset_Eksperimen_Bab5.csv</span>
                     </span>
                 </div>
                 <span className="shrink-0 text-[9px] bg-slate-200 dark:bg-slate-800 px-2 py-0.5 rounded font-mono">
-                    N=10/kondisi
+                    N=5/kondisi
                 </span>
             </div>
         </div>

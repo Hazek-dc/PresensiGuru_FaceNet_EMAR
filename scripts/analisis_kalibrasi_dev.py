@@ -8,6 +8,7 @@ Masukan:
 
 Keluaran di --out (bawaan exports/kalibrasi_dev/):
   presentasi_anonim.csv     satu baris per presentasi, tanpa nama/email/IP/perangkat
+  tabel1_latensi_komponen.csv  waktu per tahap mesin per presentasi (deskriptif)
   tabel2a_ambang_l2.csv     FNMR bona fide dan IAPMR per spesies untuk tiap ambang L2
   tabel2b_ambang_emar.csv   APCER/BPCER/ACER untuk tiap pasangan ambang EAR x MAR
   tabel2c_bobot_alpha.csv   keputusan S3 untuk tiap alpha, termasuk ambang L2 tersiratnya
@@ -19,10 +20,17 @@ Aturan yang dipakai (sama dengan sistem, lihat parameter_penelitian.py):
   - Kondisi dikelompokkan menurut target skenario (Target Lux/Jarak Skenario),
     bukan hasil ukur: pada serangan, jarak kamera membaca ukuran wajah di foto
     atau layar, bukan jarak artefak.
-  - Tabel 2b menghitung ulang siklus kedip/mulut dari deret per frame dengan
-    aturan pasif naskah (>= 1 siklus kedip DAN >= 1 siklus mulut). Keputusan
-    sistem yang tercatat memakai tantangan acak, yang waktunya tidak tercatat
-    per frame, sehingga 2b adalah analisis ambang, bukan ulangan keputusan sistem.
+  - Keputusan peneliti D1/D2 (21 Oktober 2026): liveness = siklus dlib mesin dan
+    S3 = FusionModule.decide_s3 (rumus b). Hanya presentasi dengan Versi Keputusan
+    yang sama dengan DECISION_VERSION yang dianalisis; versi lama dihitung dan
+    dikeluarkan agar dua definisi tidak tercampur.
+  - Tabel 2b menghitung ulang siklus kedip/mulut dari deret dlib mesin
+    (landmark_source engine_dlib) dengan aturan mesin: >= 1 siklus kedip DAN
+    >= 1 siklus mulut, satu siklus = aktif paling sedikit BLINK_CONSEC_FRAMES /
+    MOUTH_OPEN_FRAMES frame. Pada ambang 0,20/0,10 hasilnya mengulang keputusan
+    sistem. --frame-source browser_mediapipe membuat tabel pembanding terpisah.
+  - Presentasi tanpa landmark dlib (Prediksi PAD = UNAVAILABLE) adalah FTA untuk
+    tabel PAD, tetapi tetap masuk Tabel 2a karena jarak L2-nya terukur.
   - ACER = (APCER spesies terburuk + BPCER) / 2, mengikuti protokol OULU-NPU.
     ACER bukan metrik normatif ISO/IEC 30107-3; laporkan APCER per spesies juga.
 
@@ -46,8 +54,13 @@ sys.path.insert(0, str(BASE_DIR))
 
 from parameter_penelitian import (  # noqa: E402
     ATTACK_LABELS,
+    BLINK_CONSEC_FRAMES,
+    DECISION_VERSION,
     DISTANCE_CM,
     FACENET_DISTANCE_THRESHOLD,
+    FUSION_D_REF,
+    FUSION_THRESHOLD,
+    MOUTH_OPEN_FRAMES,
     kategori_lux,
 )
 
@@ -55,9 +68,19 @@ SPLIT = "calibration_dev"
 ENGINE_LABEL = "Mesin biometrik"
 UNAVAILABLE_LABEL = "Mesin tidak dapat dihubungi"
 
-# Bobot dan ambang S3 sama dengan PresensiController: S = a*P_face + (1-a)*P_live >= 0,75.
-S3_ACCEPT = 0.75
-P_FACE_SCALE = 1.5
+# S3 keputusan D1 (rumus b), sama dengan FusionModule.decide_s3 dan FusionDecision.php:
+# d <= 0,40 DAN a * max(0, 1 - d/1,20) + (1 - a) * P_live >= 0,50.
+S3_ACCEPT = FUSION_THRESHOLD
+P_FACE_SCALE = FUSION_D_REF
+FRAME_SOURCES = ("engine_dlib", "browser_mediapipe")
+LATENCY_COLUMNS = {
+    "emar_pass": "Latensi Pass EMAR (ms)",
+    "facenet_total": "Latensi FaceNet Total (ms)",
+    "mtcnn": "Latensi MTCNN (ms)",
+    "facenet_embedding": "Latensi Embedding (ms)",
+    "total": "Latensi Total Mesin (ms)",
+    "lock_wait": "Tunggu Antrean Mesin (ms)",
+}
 
 # Tidak di bawah 0,35: mesin berhenti mengevaluasi kandidat begitu d <= 0,35
 # (FACENET_EARLY_EXIT_DISTANCE), jadi d tercatat bukan minimum semua kandidat dan
@@ -97,6 +120,14 @@ ANON_COLUMNS = {
     "S2": "s2",
     "S3": "s3",
     "S Final": "s_final",
+    "Skor EMAR": "p_live_dlib",
+    "Versi Keputusan": "decision_version",
+    "Sumber Liveness": "liveness_source",
+    "Siklus Kedip dlib": "blink_cycles_dlib",
+    "Siklus Mulut dlib": "mouth_cycles_dlib",
+    "Frame Berlandmark dlib": "landmark_frames",
+    "Frame Total Mesin": "frames_total",
+    **{col: f"latency_{key}_ms" for key, col in LATENCY_COLUMNS.items()},
 }
 
 
@@ -143,9 +174,20 @@ def load_trials(rows: Iterable[Dict[str, str]], participant: str) -> List[Dict[s
             "fta": source != ENGINE_LABEL and source != UNAVAILABLE_LABEL,
             "l2": _float(row.get("Jarak Euclidean (L2)", "")),
             "pad_bona_fide": row.get("Prediksi PAD") == "BONA_FIDE",
-            "challenge_pass": row.get("Hasil Tantangan") == "PASS_LIVENESS" if row.get("Hasil Tantangan") else None,
+            # Tanpa landmark dlib PAD tidak terukur: FTA untuk tabel PAD (D2).
+            "liveness_fta": row.get("Prediksi PAD") == "UNAVAILABLE",
+            "p_live": _float(row.get("Skor EMAR", "")),
+            "version": row.get("Versi Keputusan", ""),
+            "frames_total": _float(row.get("Frame Total Mesin", "")),
+            "latency": {key: _float(row.get(col, "")) for key, col in LATENCY_COLUMNS.items()},
         })
     return trials
+
+
+def current_version(trials: Sequence[Dict[str, object]]) -> Tuple[List[Dict[str, object]], int]:
+    """Presentasi dengan definisi keputusan D1/D2 sekarang, dan jumlah versi lama."""
+    current = [t for t in trials if t["version"] == DECISION_VERSION]
+    return current, len(trials) - len(current)
 
 
 def write_anonymized(trials: Sequence[Dict[str, object]], path: Path) -> None:
@@ -160,6 +202,11 @@ def write_anonymized(trials: Sequence[Dict[str, object]], path: Path) -> None:
 def measured(trials: Iterable[Dict[str, object]]) -> List[Dict[str, object]]:
     """Presentasi yang masuk penyebut: bukan FTA dan mesin terhubung."""
     return [t for t in trials if not t["fta"] and not t["unavailable"] and t["l2"] is not None]
+
+
+def pad_measured(trials: Iterable[Dict[str, object]]) -> List[Dict[str, object]]:
+    """Penyebut tabel PAD: terukur dan liveness dlib terukur (bukan FTA liveness)."""
+    return [t for t in measured(trials) if not t["liveness_fta"]]
 
 
 def rate(errors: int, total: int) -> Optional[float]:
@@ -202,6 +249,21 @@ def table_l2(trials: Sequence[Dict[str, object]], grid: Sequence[float] = L2_GRI
 
 # ---------------------------------------------------------------- Tabel 2b
 
+def count_full_cycles(active: Iterable[bool], min_frames: int) -> int:
+    """Siklus penuh dlib mesin, sama dengan facenet_emar_system.count_full_cycles."""
+    cycles, run, seen_inactive = 0, 0, False
+    for is_active in active:
+        if is_active:
+            if seen_inactive:
+                run += 1
+        else:
+            if run >= min_frames:
+                cycles += 1
+            run = 0
+            seen_inactive = True
+    return cycles
+
+
 def count_cycles(active: Iterable[bool]) -> int:
     """Siklus penuh nonaktif -> aktif -> nonaktif, sama dengan CycleCounter di emarGeometry.ts."""
     count, is_active, seen_inactive = 0, False, False
@@ -217,9 +279,13 @@ def count_cycles(active: Iterable[bool]) -> int:
     return count
 
 
-def load_frames(path: Path) -> Dict[str, List[Tuple[float, float, float]]]:
+def load_frames(path: Path, source: str = "engine_dlib") -> Dict[str, List[Tuple[float, float, float]]]:
+    """Deret per presentasi dari satu sumber landmark saja; dua sumber tidak dicampur."""
     series: Dict[str, List[Tuple[int, float, float, float]]] = defaultdict(list)
     for row in read_csv(path):
+        # Log lama tanpa kolom landmark_source hanya berisi deret browser.
+        if (row.get("landmark_source") or "browser_mediapipe") != source:
+            continue
         ear, mar = _float(row.get("raw_ear", "")), _float(row.get("raw_mar", ""))
         t_ms = _float(row.get("t_ms", ""))
         if ear is None or mar is None or t_ms is None:
@@ -228,9 +294,14 @@ def load_frames(path: Path) -> Dict[str, List[Tuple[float, float, float]]]:
     return {k: [(t, e, m) for _, t, e, m in sorted(v)] for k, v in series.items()}
 
 
-def passive_live(frames: Sequence[Tuple[float, float, float]], ear_tau: float, mar_tau: float) -> bool:
-    blinks = count_cycles(ear < ear_tau for _, ear, _ in frames)
-    mouths = count_cycles(mar >= mar_tau for _, _, mar in frames)
+def passive_live(frames: Sequence[Tuple[float, float, float]], ear_tau: float, mar_tau: float,
+                 source: str = "engine_dlib") -> bool:
+    if source == "engine_dlib":
+        blinks = count_full_cycles((ear < ear_tau for _, ear, _ in frames), BLINK_CONSEC_FRAMES)
+        mouths = count_full_cycles((mar >= mar_tau for _, _, mar in frames), MOUTH_OPEN_FRAMES)
+    else:
+        blinks = count_cycles(ear < ear_tau for _, ear, _ in frames)
+        mouths = count_cycles(mar >= mar_tau for _, _, mar in frames)
     return blinks >= 1 and mouths >= 1
 
 
@@ -254,13 +325,15 @@ def pad_errors(decisions: Sequence[Tuple[str, bool]]) -> Dict[str, Optional[floa
 
 
 def table_emar(trials: Sequence[Dict[str, object]], frames: Dict[str, List[Tuple[float, float, float]]],
-               ear_grid: Sequence[float] = EAR_GRID, mar_grid: Sequence[float] = MAR_GRID) -> List[List[str]]:
-    usable = [t for t in measured(trials) if frames.get(str(t["trial_id"]))]
+               ear_grid: Sequence[float] = EAR_GRID, mar_grid: Sequence[float] = MAR_GRID,
+               source: str = "engine_dlib") -> List[List[str]]:
+    usable = [t for t in pad_measured(trials) if frames.get(str(t["trial_id"]))]
     keys = ["n_bona_fide", "bpcer"] + [f"{k}_{s}" for s in ATTACK_LABELS for k in ("n", "apcer")] + ["apcer_max", "acer"]
     rows = [["ambang_ear", "ambang_mar"] + keys]
     for ear_tau in ear_grid:
         for mar_tau in mar_grid:
-            decisions = [(str(t["label"]), passive_live(frames[str(t["trial_id"])], ear_tau, mar_tau)) for t in usable]
+            decisions = [(str(t["label"]), passive_live(frames[str(t["trial_id"])], ear_tau, mar_tau, source))
+                         for t in usable]
             res = pad_errors(decisions)
             rows.append([f"{ear_tau:.2f}", f"{mar_tau:.2f}"]
                         + [str(res[k]) if k.startswith("n_") else fmt(res[k]) for k in keys])
@@ -269,37 +342,74 @@ def table_emar(trials: Sequence[Dict[str, object]], frames: Dict[str, List[Tuple
 
 # ---------------------------------------------------------------- Tabel 2c
 
-def implied_l2(alpha: float) -> Optional[float]:
-    """Jarak L2 terbesar yang masih diterima S3 bila P_live = 1; None bila tidak ada."""
-    p_face_min = (S3_ACCEPT - (1 - alpha)) / alpha
-    if p_face_min > 1:
+def implied_l2(alpha: float, p_live: float = 1.0) -> Optional[float]:
+    """
+    Jarak L2 terbesar yang diterima S3 untuk P_live tertentu; None bila tidak ada.
+    Gerbang identitas membatasi hasilnya paling besar 0,40.
+    """
+    s_embed_min = (S3_ACCEPT - (1 - alpha) * p_live) / alpha
+    if s_embed_min > 1:
         return None
-    return P_FACE_SCALE * (1 - max(0.0, p_face_min))
+    return min(FACENET_DISTANCE_THRESHOLD, P_FACE_SCALE * (1 - max(0.0, s_embed_min)))
 
 
-def s3_accept(l2: float, live: bool, alpha: float) -> bool:
-    p_face = max(0.0, 1.0 - l2 / P_FACE_SCALE)
-    return alpha * p_face + (1 - alpha) * (1.0 if live else 0.0) >= S3_ACCEPT
+def s3_accept(l2: float, p_live: float, alpha: float) -> bool:
+    """S3 rumus b: gerbang d <= 0,40 DAN a * s_embed + (1 - a) * P_live >= 0,50."""
+    s_embed = max(0.0, 1.0 - l2 / P_FACE_SCALE)
+    return l2 <= FACENET_DISTANCE_THRESHOLD and alpha * s_embed + (1.0 - alpha) * p_live >= S3_ACCEPT
 
 
 def table_alpha(trials: Sequence[Dict[str, object]], grid: Sequence[float] = ALPHA_GRID) -> List[List[str]]:
-    usable = [t for t in measured(trials) if t["challenge_pass"] is not None]
-    rows = [["alpha", "l2_maks_tersirat_saat_live", "diterima_tanpa_live", "n_bona_fide", "bona_fide_ditolak"]
+    usable = [t for t in pad_measured(trials) if t["p_live"] is not None]
+    rows = [["alpha", "l2_maks_saat_p_live_1", "l2_maks_saat_p_live_0_5", "l2_maks_tanpa_live",
+             "n_bona_fide", "bona_fide_ditolak"]
             + [f"{k}_{s}" for s in ATTACK_LABELS for k in ("n", "serangan_diterima")]]
     for alpha in grid:
         bona = [t for t in usable if t["label"] == "bona_fide"]
         line = [
             f"{alpha:.2f}",
-            fmt(implied_l2(alpha)),
-            # P_live = 0: S = alpha * P_face <= alpha, jadi tidak pernah diterima bila alpha < 0,75.
-            "ya" if alpha >= S3_ACCEPT else "tidak",
+            fmt(implied_l2(alpha, 1.0)),
+            fmt(implied_l2(alpha, 0.5)),
+            fmt(implied_l2(alpha, 0.0)),
             str(len(bona)),
-            fmt(rate(sum(not s3_accept(t["l2"], t["challenge_pass"], alpha) for t in bona), len(bona))),
+            fmt(rate(sum(not s3_accept(t["l2"], t["p_live"], alpha) for t in bona), len(bona))),
         ]
         for species in ATTACK_LABELS:
             attacks = [t for t in usable if t["label"] == species]
-            line += [str(len(attacks)), fmt(rate(sum(s3_accept(t["l2"], t["challenge_pass"], alpha) for t in attacks), len(attacks)))]
+            line += [str(len(attacks)), fmt(rate(sum(s3_accept(t["l2"], t["p_live"], alpha) for t in attacks), len(attacks)))]
         rows.append(line)
+    return rows
+
+
+# ---------------------------------------------------------------- Tabel 1
+
+def percentile(values: Sequence[float], q: float) -> Optional[float]:
+    """Persentil dengan interpolasi linear (sama dengan numpy bawaan)."""
+    if not values:
+        return None
+    ordered = sorted(values)
+    pos = (len(ordered) - 1) * q
+    lo, hi = math.floor(pos), math.ceil(pos)
+    return ordered[lo] + (ordered[hi] - ordered[lo]) * (pos - lo)
+
+
+def table_latency(trials: Sequence[Dict[str, object]]) -> List[List[str]]:
+    """
+    Waktu per tahap mesin per presentasi (video 8 s), deskriptif. Dekode video dan
+    pass EMAR berjalan paralel sehingga tercatat sebagai satu tahap. ms per frame
+    pass EMAR = latensi pass EMAR / frame total, rata-rata yang diamortisasi oleh
+    thread paralel, bukan waktu satu frame.
+    """
+    rows = [["tahap", "n", "median_ms", "p90_ms", "maks_ms"]]
+    data = measured(trials)
+    for key in LATENCY_COLUMNS:
+        values = [t["latency"][key] for t in data if t["latency"][key] is not None]
+        rows.append([key, str(len(values)), fmt(percentile(values, 0.5)), fmt(percentile(values, 0.9)),
+                     fmt(max(values) if values else None)])
+    per_frame = [t["latency"]["emar_pass"] / t["frames_total"] for t in data
+                 if t["latency"]["emar_pass"] is not None and t["frames_total"]]
+    rows.append(["emar_pass_per_frame", str(len(per_frame)), fmt(percentile(per_frame, 0.5)),
+                 fmt(percentile(per_frame, 0.9)), fmt(max(per_frame) if per_frame else None)])
     return rows
 
 
@@ -309,7 +419,7 @@ def table_conditions(trials: Sequence[Dict[str, object]]) -> List[List[str]]:
     keys = ["n_bona_fide", "bpcer"] + [f"{k}_{s}" for s in ATTACK_LABELS for k in ("n", "apcer")]
     rows = [["lux_kategori", "jarak_target_cm"] + keys + ["iapmr_" + s for s in ATTACK_LABELS]
             + ["bpcer_ci95", "apcer_max_ci95"]]
-    data = measured(trials)
+    data = pad_measured(trials)
     cells = [(lux, d) for lux in LUX_ORDER for d in DISTANCE_CM] + [("semua", "semua")]
     for lux, distance in cells:
         subset = [t for t in data if (lux == "semua" or t["lux"] == lux) and (distance == "semua" or t["distance"] == distance)]
@@ -338,28 +448,36 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     parser.add_argument("--riwayat", required=True, type=Path)
     parser.add_argument("--frames", type=Path, default=None)
     parser.add_argument("--participant", default="P_DEV_01")
+    parser.add_argument("--frame-source", choices=FRAME_SOURCES, default="engine_dlib",
+                        help="Sumber deret Tabel 2b; engine_dlib = sumber keputusan (D2)")
     parser.add_argument("--out", type=Path, default=BASE_DIR / "exports" / "kalibrasi_dev")
     args = parser.parse_args(argv)
 
-    trials = load_trials(read_csv(args.riwayat), args.participant)
+    trials, n_old = current_version(load_trials(read_csv(args.riwayat), args.participant))
+    if n_old:
+        print(f"{n_old} presentasi versi keputusan lama (sebelum {DECISION_VERSION}) dikeluarkan.")
     if not trials:
-        print(f"Tidak ada presentasi {SPLIT} untuk {args.participant}.", file=sys.stderr)
+        print(f"Tidak ada presentasi {SPLIT} versi {DECISION_VERSION} untuk {args.participant}.", file=sys.stderr)
         return 1
     args.out.mkdir(parents=True, exist_ok=True)
 
     write_anonymized(trials, args.out / "presentasi_anonim.csv")
+    write_table(table_latency(trials), args.out / "tabel1_latensi_komponen.csv")
     write_table(table_l2(trials), args.out / "tabel2a_ambang_l2.csv")
     write_table(table_alpha(trials), args.out / "tabel2c_bobot_alpha.csv")
     write_table(table_conditions(trials), args.out / "tabel3_apcer_kondisi.csv")
     if args.frames is not None:
-        write_table(table_emar(trials, load_frames(args.frames)), args.out / "tabel2b_ambang_emar.csv")
+        name = "tabel2b_ambang_emar.csv" if args.frame_source == "engine_dlib" else "tabel2b_ambang_emar_browser.csv"
+        write_table(table_emar(trials, load_frames(args.frames, args.frame_source), source=args.frame_source),
+                    args.out / name)
 
     n_fta = sum(bool(t["fta"]) for t in trials)
     n_unavailable = sum(bool(t["unavailable"]) for t in trials)
-    print(f"{len(trials)} presentasi: {len(measured(trials))} terukur, {n_fta} FTA, {n_unavailable} mesin tidak terhubung.")
+    n_live_fta = sum(bool(t["liveness_fta"]) for t in measured(trials))
+    print(f"{len(trials)} presentasi: {len(measured(trials))} terukur, {n_fta} FTA, {n_unavailable} mesin tidak "
+          f"terhubung, {n_live_fta} tanpa landmark dlib (FTA liveness).")
     if args.frames is None:
         print("Tabel 2b dilewati: berikan --frames logs/log_raw_frames_dev.csv.")
-    print("Tabel 1 (waktu per komponen) belum bisa dibuat: mesin belum mencatat waktu MTCNN/FaceNet/dlib per presentasi.")
     print(f"Hasil di {args.out}")
     return 0
 

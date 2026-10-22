@@ -6,8 +6,11 @@ Gejala yang dilaporkan: $ARGUMENTS
 
 Ikuti CLAUDE.md. Langkah:
 
-1. Reproduksi gejala dari kode: telusuri jalurnya di `FaceScannerContainer.tsx`, `Utils/emarGeometry.ts`,
-   `Utils/soloSession.ts`, dan `PresensiController::store()`. Sebutkan penyebab dengan `file:line`.
+1. Reproduksi gejala dari kode: telusuri jalurnya di `FaceScannerContainer.tsx`, `Utils/livenessGuidance.ts`,
+   `Utils/emarGeometry.ts`, `Utils/soloSession.ts`, `PresensiController::store()`, `FusionDecision.php`, dan jawaban
+   `/verify` (`blink_cycles`, `mouth_cycles`, `landmark_frames`). Sebutkan penyebab dengan `file:line`. Ingat D2:
+   liveness diputuskan dlib mesin, tantangan browser hanya panduan, jadi "lolos di layar tetapi ditolak" biasanya
+   berarti salah satu siklus dlib tidak terjadi dalam 8,0 s.
 2. Klasifikasikan penyebabnya:
    - **Cacat UI/alur** (instruksi tidak terdengar, panel tidak menampilkan status, antrean tidak lanjut):
      perbaiki lewat `frontend-mediapipe-agent`.

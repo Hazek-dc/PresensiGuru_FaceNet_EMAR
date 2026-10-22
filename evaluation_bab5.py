@@ -38,6 +38,9 @@ from parameter_penelitian import (
     ALPHA_DEFAULT,
     EAR_BLINK_THRESHOLD,
     FACENET_DISTANCE_THRESHOLD,
+    FUSION_D_REF,
+    FUSION_THRESHOLD,
+    LIVENESS_THRESHOLD,
     MAR_OPEN_THRESHOLD,
 )
 
@@ -50,60 +53,43 @@ def evaluate_trial(
     ear: float,
     mar: float,
     alpha: float = ALPHA_DEFAULT,
-    threshold_s3: float = 0.75
+    threshold_s3: float = FUSION_THRESHOLD
 ) -> Tuple[int, int, int]:
     """
-    Mengevaluasi satu percobaan (trial) biometrik ke dalam tiga skenario serentak:
-    
+    Mengevaluasi satu percobaan (trial) biometrik ke dalam tiga skenario serentak,
+    dengan definisi keputusan peneliti D1 (S3 = FusionModule.decide_s3, rumus b).
+
+    Jalur desktop hanya punya EAR terendah dan MAR tertinggi satu sesi, bukan
+    siklus. Kedip dianggap ada bila EAR < 0,20 dan mulut bila MAR >= 0,10, lalu
+    P_live = 0,5 * kedip + 0,5 * mulut seperti EMARModule. Aturan ini lebih lemah
+    dari siklus penuh dlib karena tidak memeriksa urutan buka-tutup.
+
     Args:
         euclidean_dist: Jarak Euclidean L2 FaceNet (0.0 = identik, > 0.40 = non-match)
-        ear: Eye Aspect Ratio (EAR < 0.20 indikasi kedipan mata)
-        mar: Mouth Aspect Ratio (MAR >= 0.10 indikasi gerakan mulut terbuka)
+        ear: EAR terendah sesi (EAR < 0.20 indikasi kedipan mata)
+        mar: MAR tertinggi sesi (MAR >= 0.10 indikasi mulut terbuka)
         alpha: Bobot komponen wajah pada S3 (default: 0.6)
-        threshold_s3: Ambang batas skor fusi S3 untuk ACCEPT (default: 0.75)
-        
+        threshold_s3: Ambang skor fusi S3 (default FUSION_THRESHOLD = 0.50)
+
     Returns:
         Tuple[int, int, int]: (s1_decision, s2_decision, s3_decision)
                               1 = ACCEPT (Bona-fide), 0 = REJECT (Spoof / Unrecognized)
     """
-    # ==========================================
-    # SKENARIO 1 (S1): FaceNet Stand-alone
-    # Mengabaikan liveness, hanya melihat kemiripan wajah
-    # ==========================================
-    if euclidean_dist <= FACENET_DISTANCE_THRESHOLD:
-        s1_decision = 1  # 1 = ACCEPT (Bona-fide)
-    else:
-        s1_decision = 0  # 0 = REJECT (Spoof/Unrecognized)
+    # S1: FaceNet stand-alone, d <= 0,40.
+    s1_decision = 1 if euclidean_dist <= FACENET_DISTANCE_THRESHOLD else 0
 
-    # ==========================================
-    # SKENARIO 2 (S2): Rule-Based Gate (FaceNet + EMAR)
-    # Wajib Lolos Wajah DAN Lolos Kedipan/Mulut
-    # ==========================================
-    liveness_valid = (ear < EAR_BLINK_THRESHOLD) and (mar >= MAR_OPEN_THRESHOLD)
-    
-    if (s1_decision == 1) and liveness_valid:
-        s2_decision = 1
-    else:
-        s2_decision = 0
+    # P_live tiga tingkat {0; 0,5; 1} seperti EMARModule.liveness_from_sequence.
+    blink = 1.0 if ear < EAR_BLINK_THRESHOLD else 0.0
+    mouth = 1.0 if mar >= MAR_OPEN_THRESHOLD else 0.0
+    p_live = round(min(0.5 * blink + 0.5 * mouth, 1.0), 6)
 
-    # ==========================================
-    # SKENARIO 3 (S3): Weighted Fusion (FaceNet + EMAR)
-    # Menghitung probabilitas fusi menggunakan bobot alpha
-    # ==========================================
-    # Mengubah Euclidean L2 menjadi probabilitas (P_face) 
-    # (Asumsi: Jarak 0 = 100% mirip, Jarak 1.5 = 0% mirip)
-    p_face = max(0.0, 1.0 - (euclidean_dist / 1.5)) 
-    
-    # Probabilitas Liveness (P_live)
-    p_live = 1.0 if liveness_valid else 0.0
-    
-    # Kalkulasi Skor Fusi: S_final = a(P_face) + (1-a)(P_live)
-    s_final = (alpha * p_face) + ((1.0 - alpha) * p_live)
-    
-    if s_final >= threshold_s3:
-        s3_decision = 1
-    else:
-        s3_decision = 0
+    # S2: identitas DAN liveness penuh (kedip DAN mulut).
+    s2_decision = 1 if (s1_decision == 1 and p_live >= LIVENESS_THRESHOLD) else 0
+
+    # S3: gerbang identitas DAN s_final = alpha * s_embed + (1 - alpha) * P_live >= 0,50.
+    s_embed = max(0.0, 1.0 - euclidean_dist / FUSION_D_REF)
+    s_final = alpha * s_embed + (1.0 - alpha) * p_live
+    s3_decision = 1 if (s1_decision == 1 and s_final >= threshold_s3) else 0
 
     return s1_decision, s2_decision, s3_decision
 
@@ -173,7 +159,7 @@ def evaluate_and_log(
     ear: float,
     mar: float,
     alpha: float = ALPHA_DEFAULT,
-    threshold_s3: float = 0.75,
+    threshold_s3: float = FUSION_THRESHOLD,
     filename: str = DEFAULT_CSV_PATH
 ) -> Dict[str, Any]:
     """
@@ -207,11 +193,11 @@ def evaluate_and_log(
         filename=filename
     )
 
-    # Hitung probabilitas pendukung untuk telemetri
-    liveness_valid = (ear < EAR_BLINK_THRESHOLD) and (mar >= MAR_OPEN_THRESHOLD)
-    p_face = max(0.0, 1.0 - (euclidean_dist / 1.5))
-    p_live = 1.0 if liveness_valid else 0.0
-    s_final = (alpha * p_face) + ((1.0 - alpha) * p_live)
+    # Skor pendukung untuk telemetri, rumus yang sama dengan evaluate_trial (D1).
+    p_live = round(min(0.5 * (ear < EAR_BLINK_THRESHOLD) + 0.5 * (mar >= MAR_OPEN_THRESHOLD), 1.0), 6)
+    liveness_valid = p_live >= LIVENESS_THRESHOLD
+    p_face = max(0.0, 1.0 - euclidean_dist / FUSION_D_REF)
+    s_final = alpha * p_face + (1.0 - alpha) * p_live
 
     return {
         "participant_id": participant_id,
@@ -243,7 +229,7 @@ def main():
     parser.add_argument("--ear", type=float, default=0.18, help="Nilai Eye Aspect Ratio (default: 0.18)")
     parser.add_argument("--mar", type=float, default=0.40, help="Nilai Mouth Aspect Ratio (default: 0.40)")
     parser.add_argument("--alpha", type=float, default=ALPHA_DEFAULT, help="Bobot alpha S3 (default: 0.6)")
-    parser.add_argument("--thresh-s3", type=float, default=0.75, help="Ambang batas S3 (default: 0.75)")
+    parser.add_argument("--thresh-s3", type=float, default=FUSION_THRESHOLD, help="Ambang batas S3 (default: 0.50, keputusan D1)")
     parser.add_argument("--participant", type=str, default="P01", help="ID Partisipan (contoh: P01, Guru-01)")
     parser.add_argument("--jarak", type=float, default=None, help="Jarak fisik cm (baca dari sensor jika kosong)")
     parser.add_argument("--lux", type=float, default=None, help="Intensitas cahaya lux (baca dari sensor jika kosong)")

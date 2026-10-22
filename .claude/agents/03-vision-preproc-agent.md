@@ -40,7 +40,7 @@ Anda Computer Vision Pipeline Engineer untuk mesin biometrik. Jalur produksi:
 
 | Butir | Status |
 |---|---|
-| Latensi per tahap (MTCNN, FaceNet, pass EMAR, total) | Boleh dan direkomendasikan (instrumentasi saja). Belum ada di respons `/verify`. |
+| Latensi per tahap (MTCNN, FaceNet, pass EMAR, total) | Sudah: `latency_ms` di respons `/verify` (`emar_pass`, `facenet_total`, `mtcnn`, `facenet_embedding`, `total`, `lock_wait`). Dekode dan pass EMAR paralel, jadi satu tahap. Tahap yang tidak terukur null. |
 | MTCNN `margin=14`, `thresholds=[...,0.9]` | Terblokir D8, milik facenet-identity-agent. Nilai sekarang `margin=20`, `[0.6, 0.7, 0.7]`, filter confidence 0,90. |
 | Affine alignment 5 titik, crop MiniFASNet | Terblokir D8/D6. |
 | Jendela "8,0 s sejak instruksi" | Butuh keputusan: rekaman sekarang 8,0 s sejak mulai dan tantangan muncul di t >= 1,0 s; versi PRD butuh rekaman sekitar 9 s. |
