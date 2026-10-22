@@ -1055,7 +1055,7 @@ export default function History({
                 final_decision: r.final_decision,
                 euclidean_distance: r.euclidean_distance,
                 pad_pred: r.pad_pred,
-                blinks: `${r.ear_blinks}x / ${r.mar_mouths}x`,
+                blinks: `${r.ear_blinks != null ? `${r.ear_blinks}x` : '–'} / ${r.mar_mouths != null ? `${r.mar_mouths}x` : '–'}`,
                 decision_reason: r.decision_reason || '-',
             }));
 

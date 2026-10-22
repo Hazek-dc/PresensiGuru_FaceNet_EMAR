@@ -1,5 +1,31 @@
 {
   "enabledPlugins": {
     "laravel-boost@anthropic-plugin-directory": false
+  },
+  "effortLevel": "xhigh",
+  "permissions": {
+    "allow": [
+      "Bash(git status*)",
+      "Bash(git diff*)",
+      "Bash(git log*)",
+      "Bash(git show*)",
+      "Bash(md5sum *)",
+      "Bash(php artisan test*)",
+      "Bash(vendor/bin/pint --dirty*)",
+      "Bash(npx vitest run*)",
+      "Bash(npx tsc --noEmit*)",
+      "Bash(npm run build*)",
+      "Bash(python3 -m pytest*)",
+      "Bash(python3 -m unittest*)"
+    ],
+    "deny": [
+      "Read(gallery/**)",
+      "Edit(gallery/**)",
+      "Edit(Dataset_Eksperimen_Bab5.csv)",
+      "Edit(dataset/video_singkat/Matriks_Evaluasi_Bab4.csv)",
+      "Edit(logs/**)",
+      "Edit(dataset/self_qalwani/**)",
+      "Edit(dataset/foto_selfie/**)"
+    ]
   }
 }

@@ -564,3 +564,80 @@ def test_rasio_lebar_wajah_paralel_sama_dengan_berurutan(fes, emar_module, face_
     assert body["face_width_ratio"] == round(float(np.median(ratios)), 5)
     assert body["face_width_frames"] == len(ratios)
     assert (body["frame_height"], body["frame_width"]) == decoded[0].shape[:2]
+
+
+def test_telemetri_dlib_dan_latensi_tidak_mengubah_keputusan(fes, tmp_path):
+    """Deret EAR/MAR, hitungan frame berlandmark, dan latensi hanya ditambahkan."""
+    pytest.importorskip("cv2")
+    video = _graded_video(tmp_path, 20, "telemetri.avi")
+
+    class HalfFaceEmar:
+        """Frame genap berlandmark dengan EAR/MAR yang bisa ditebak dari urutan."""
+
+        def __init__(self):
+            self.calls = 0
+
+        def reset_temporal(self):
+            self.calls = 0
+
+        def measure(self, frame):
+            return None
+
+        def push_measurement(self, m, timestamp=None):
+            i = self.calls
+            self.calls += 1
+            if i % 2:
+                return fes.EMARResult()
+            return fes.EMARResult(ear_avg=0.30 - i / 100, mar=i / 100, landmark_count=68,
+                                  emar_score=0.5, blink_cycles=1)
+
+    body = fes.verify_video_file(_stub_system(fes, HalfFaceEmar(), []), str(video), "S01")
+    assert body["frames_total"] == 20
+    assert body["landmark_frames"] == 10
+    fps = 10.0
+    assert body["emar_series"][:2] == [[0.0, 0.3, 0.0], [round(2 / fps * 1000, 1), 0.28, 0.02]]
+    # Keputusan tetap dari hasil berlandmark terakhir (frame 18), seperti sebelumnya.
+    assert body["emar_score"] == 0.5 and body["blink_cycles"] == 1
+    assert body["liveness_passed"] is False
+    lat = body["latency_ms"]
+    assert set(lat) == {"emar_pass", "facenet_total", "mtcnn", "facenet_embedding", "total", "lock_wait"}
+    assert lat["total"] >= lat["emar_pass"] >= 0
+    # FaceNet tiruan tidak memanggil _extract_embedding: tahapnya tidak terukur, bukan 0.
+    assert lat["mtcnn"] is None and lat["facenet_embedding"] is None
+    assert body["candidates_evaluated"] == 9
+
+
+def test_waktu_mtcnn_dicatat_saat_wajah_tidak_lolos(fes):
+    module = fes.FaceNetModule.__new__(fes.FaceNetModule)
+    module.mtcnn = type("NoFace", (), {"detect": lambda self, img, landmarks=True: (None, None, None)})()
+    assert module._extract_embedding(np.zeros((8, 8, 3), np.uint8)) is None
+    mtcnn_ms, embedding_ms = fes._EXTRACT_TIMING.last
+    assert mtcnn_ms >= 0 and embedding_ms is None
+
+
+def test_latensi_embedding_none_bila_mtcnn_gagal_di_semua_kandidat(fes, tmp_path):
+    """MTCNN berjalan tetapi tidak menemukan wajah: InceptionResnetV1 tidak pernah
+    dipanggil, jadi latensi embedding None (bukan 0,0) dan waktu MTCNN tetap terukur."""
+    pytest.importorskip("cv2")
+    video = _graded_video(tmp_path, 20, "tanpa_wajah.avi")
+
+    class StubEmar:
+        def reset_temporal(self):
+            pass
+
+        def measure(self, frame):
+            return None
+
+        def push_measurement(self, m, timestamp=None):
+            return fes.EMARResult()
+
+    system = _stub_system(fes, StubEmar(), [])
+
+    def verify_no_face(frame, claimed_id):
+        fes._EXTRACT_TIMING.last = (2.5, None)
+        return fes.FaceNetResult(claimed_id=claimed_id)
+
+    system.facenet.verify = verify_no_face
+    lat = fes.verify_video_file(system, str(video), "S01")["latency_ms"]
+    assert lat["facenet_embedding"] is None
+    assert lat["mtcnn"] == pytest.approx(2.5 * 9, abs=0.1)

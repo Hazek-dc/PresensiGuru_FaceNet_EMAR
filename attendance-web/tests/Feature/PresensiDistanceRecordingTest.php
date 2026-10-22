@@ -234,18 +234,23 @@ it('keputusan identik dengan dan tanpa data jarak', function () {
     ];
 
     // Satu fake saja: stub Http::fake berikutnya tidak menimpa yang pertama.
+    // Liveness diputuskan dlib mesin (D2), jadi variasinya ada di jawaban mesin.
     $faceWidth = [];
-    Http::fake(function () use (&$faceWidth) {
-        return Http::response(presensiEngineResult($faceWidth));
+    $liveness = [];
+    Http::fake(function () use (&$faceWidth, &$liveness) {
+        return Http::response(array_merge(presensiEngineResult($faceWidth), $liveness));
     });
 
-    foreach ([['ear_blinks' => 2, 'mar_mouths' => 1], ['ear_blinks' => 0, 'mar_mouths' => 1]] as $liveness) {
+    foreach ([
+        ['emar_score' => 1.0, 'blink_cycles' => 2, 'mouth_cycles' => 1],
+        ['emar_score' => 0.5, 'blink_cycles' => 0, 'mouth_cycles' => 1],
+    ] as $liveness) {
         $faceWidth = [];
-        $without = submitPresensi($this, $this->teacher, $liveness);
+        $without = submitPresensi($this, $this->teacher);
 
         $cal = presensiCalibration();
         $faceWidth = presensiFaceWidth(0.14);
-        $with = submitPresensi($this, $this->teacher, $liveness + PRESENSI_BROWSER_FIELDS + ['calibration_id' => $cal->id]);
+        $with = submitPresensi($this, $this->teacher, PRESENSI_BROWSER_FIELDS + ['calibration_id' => $cal->id]);
         $cal->delete();
 
         expect($with['evaluation']['distance_source'])->toBe('engine')

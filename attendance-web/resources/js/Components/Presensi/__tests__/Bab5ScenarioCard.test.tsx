@@ -1,5 +1,6 @@
 import { createRoot, Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { FUSION } from '../../../Utils/fusionDecision';
 import { Bab5EvaluationData, Bab5ScenarioCard } from '../Bab5ScenarioCard';
 
 let container: HTMLDivElement;
@@ -49,20 +50,58 @@ describe('latar kartu Bab 5', () => {
     });
 
     it('isDark yang dikirim tetap dipakai apa adanya', async () => {
-        const dark = await renderCard({ data: evaluated, variant: 'full', isDark: true });
+        const dark = await renderCard({
+            data: evaluated,
+            variant: 'full',
+            isDark: true,
+        });
         expect(dark.classList.contains('bg-slate-900/80')).toBe(true);
         expect(dark.classList.contains('bg-slate-50/90')).toBe(false);
 
-        const light = await renderCard({ data: evaluated, variant: 'full', isDark: false });
+        const light = await renderCard({
+            data: evaluated,
+            variant: 'full',
+            isDark: false,
+        });
         expect(light.classList.contains('bg-slate-50/90')).toBe(true);
         expect(light.classList.contains('dark:bg-slate-900/80')).toBe(false);
     });
 
     it('kartu "belum dinilai" juga mengikuti tema tanpa prop isDark', async () => {
-        const card = await renderCard({ data: { evaluated: false }, variant: 'modal' });
+        const card = await renderCard({
+            data: { evaluated: false },
+            variant: 'modal',
+        });
 
         expect(card.textContent).toContain('belum dinilai');
         expect(card.classList.contains('bg-white')).toBe(true);
         expect(card.classList.contains('dark:bg-slate-900/95')).toBe(true);
+    });
+});
+
+describe('penanda versi keputusan', () => {
+    it('keputusan versi berjalan tidak diberi catatan', async () => {
+        await renderCard({
+            data: { ...evaluated, decision_version: FUSION.version },
+            variant: 'full',
+        });
+        expect(container.querySelector('[role="note"]')).toBeNull();
+    });
+
+    it('riwayat lama tanpa versi ditandai tidak sebanding', async () => {
+        await renderCard({ data: evaluated, variant: 'full' });
+        expect(container.querySelector('[role="note"]')?.textContent).toContain(
+            'definisi lama',
+        );
+    });
+
+    it('hasil hitung ulang ditandai bukan keputusan saat presensi', async () => {
+        await renderCard({
+            data: { ...evaluated, recomputed: true },
+            variant: 'full',
+        });
+        expect(container.querySelector('[role="note"]')?.textContent).toContain(
+            'Dihitung ulang',
+        );
     });
 });

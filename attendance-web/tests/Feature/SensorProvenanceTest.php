@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Models\AttendanceRecord;
 use App\Models\EvaluationMatrix;
 use App\Models\User;
+use App\Services\FusionDecision;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Client\Request as HttpRequest;
 use Illuminate\Http\UploadedFile;
@@ -22,8 +23,9 @@ class SensorProvenanceTest extends TestCase
 {
     use RefreshDatabase;
 
-    private const MATRIKS_HEADER = 'File_Uji,Claimed_ID,Sample_Type,PAI_Species,Lux,Jarak_cm,Session,PAD_Pred,ID_Pred,Jarak,Kedipan,Mulut,Wajah_%,Durasi_s,Final,Error';
-    private const BAB5_HEADER = 'participant_id,jarak_cm,lux,label_aktual,euclidean_dist,ear,mar,keputusan_S1,keputusan_S2,keputusan_S3';
+    private const MATRIKS_HEADER = 'File_Uji,Claimed_ID,Sample_Type,PAI_Species,Lux,Jarak_cm,Session,PAD_Pred,ID_Pred,Jarak,Kedipan,Mulut,Wajah_%,Durasi_s,Final,Error,Versi_Keputusan,Sumber_Liveness';
+
+    private const BAB5_HEADER = 'participant_id,jarak_cm,lux,label_aktual,euclidean_dist,ear,mar,keputusan_S1,keputusan_S2,keputusan_S3,decision_version,liveness_source';
 
     private User $teacher;
 
@@ -104,17 +106,46 @@ class SensorProvenanceTest extends TestCase
 
         [$header, $row] = $this->csvRow('matriks');
         $this->assertSame(self::MATRIKS_HEADER, $header);
-        $this->assertCount(16, $row);
+        $this->assertCount(18, $row);
+        $this->assertSame([FusionDecision::VERSION, 'engine_dlib'], array_slice($row, 16));
         $this->assertSame('', $row[4], 'Lux');
         $this->assertSame('', $row[5], 'Jarak_cm');
         $this->assertSame('0.310', $row[9]);
 
         [$header, $row] = $this->csvRow('bab5');
         $this->assertSame(self::BAB5_HEADER, $header);
-        $this->assertCount(10, $row);
+        $this->assertCount(12, $row);
+        $this->assertSame([FusionDecision::VERSION, 'engine_dlib'], array_slice($row, 10));
         $this->assertSame('', $row[1], 'jarak_cm');
         $this->assertSame('', $row[2], 'lux');
         $this->assertSame('0.31', $row[4]);
+    }
+
+    public function test_csv_riset_versi_lama_tidak_ditambah_baris(): void
+    {
+        // Berkas rumus (a) dengan header tanpa versi dibekukan: baris D1/D2 tidak
+        // boleh tercampur di dalamnya, dan isinya tidak boleh berubah.
+        $legacy = [
+            'matriks' => "File_Uji,Claimed_ID,Sample_Type,PAI_Species,Lux,Jarak_cm,Session,PAD_Pred,ID_Pred,Jarak,Kedipan,Mulut,Wajah_%,Durasi_s,Final,Error\nLAMA,S01,BONA_FIDE,NONE,300,30,TEST,BONA_FIDE,MATCH,0.300,1,1,100.0,8.00,ACCEPT,\n",
+            'bab5' => "participant_id,jarak_cm,lux,label_aktual,euclidean_dist,ear,mar,keputusan_S1,keputusan_S2,keputusan_S3\nS01,30,300,BONA_FIDE,0.3,0.18,0.4,1,1,1\n",
+        ];
+        foreach ($legacy as $key => $content) {
+            file_put_contents(config("biometrics.research_csv.{$key}"), $content);
+        }
+
+        $this->submit([]);
+
+        foreach ($legacy as $key => $content) {
+            $this->assertSame($content, file_get_contents(config("biometrics.research_csv.{$key}")), $key);
+        }
+    }
+
+    public function test_berkas_csv_riset_bawaan_memuat_versi_keputusan(): void
+    {
+        // TestCase mengarahkan config ke sandbox, jadi nilai bawaan dibaca dari berkasnya.
+        $defaults = (require config_path('biometrics.php'))['research_csv'];
+        $this->assertStringContainsString(FusionDecision::VERSION, basename($defaults['bab5']));
+        $this->assertStringContainsString(FusionDecision::VERSION, basename($defaults['matriks']));
     }
 
     public function test_kestabilan_wajah_nol_persen_tidak_menjadi_seratus(): void
@@ -252,9 +283,10 @@ class SensorProvenanceTest extends TestCase
 
         Http::assertSent(function (HttpRequest $request) {
             $names = array_column($request->data(), 'name');
+
             return in_array('attempt_id', $names, true)
-                && !in_array('lux', $names, true)
-                && !in_array('distance_cm', $names, true);
+                && ! in_array('lux', $names, true)
+                && ! in_array('distance_cm', $names, true);
         });
     }
 

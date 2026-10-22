@@ -37,7 +37,19 @@ import {
 import { AnimatePresence, motion } from 'motion/react';
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { DistanceMeterWidget } from '../../Components/Presensi/DistanceMeterWidget';
-import { FaceScannerContainer } from '../../Components/Presensi/FaceScannerContainer';
+import { FaceScannerContainer, LivenessStage } from '../../Components/Presensi/FaceScannerContainer';
+import { SoloBatchPanel } from '../../Components/Presensi/SoloBatchPanel';
+import { useSoloBatch } from '../../Hooks/useSoloBatch';
+import { playCue } from '../../Utils/audioCue';
+import {
+    cellKey,
+    isAttack,
+    SOLO_HOLD_MS,
+    SOLO_LUX_TARGETS,
+    SOLO_PARTICIPANT_ID,
+    SOLO_SESSION_TYPE,
+    soloFormFields,
+} from '../../Utils/soloSession';
 import { LuxometerWidget } from '../../Components/Presensi/LuxometerWidget';
 import { BiometricStatusPanel, LightingMonitorPanel } from '../../Components/Presensi/LightingMonitorPanel';
 import { ManualEnrollmentModal } from '../../Components/Presensi/ManualEnrollmentModal';
@@ -78,6 +90,7 @@ import {
     CameraDistanceSource,
     DistanceSource,
     formatLux,
+    formatCount,
     formatMeasured,
     freshReading,
     luxSourceLabel,
@@ -720,11 +733,60 @@ export default function Presensi({
         [],
     );
 
+    /* ---- Mode Solo calibration_dev (P_DEV_01, tanpa sentuhan) ---- */
+    // handleReset didefinisikan di bawah; antrean memanggilnya lewat ref.
+    const handleResetRef = useRef<() => void>(() => {});
+    const solo = useSoloBatch(useCallback(() => handleResetRef.current(), []));
+    const { markSubmitted: soloMarkSubmitted, recordResult: soloRecordResult } = solo;
+    // Hanya Admin/Peneliti: kemajuan tersimpan di peramban tidak boleh menjeda kiosk guru.
+    const soloCell = canCalibrate ? solo.activeCell : null;
+    const soloCellKey = soloCell ? cellKey(soloCell) : null;
+    const soloSubmitRef = useRef(soloCell);
+    soloSubmitRef.current = soloCell;
+    const soloPaused = soloCell !== null && solo.batch.phase !== 'armed' && solo.batch.phase !== 'processing';
+
+    useEffect(() => {
+        if (!soloCell) return;
+        setLuxTarget(SOLO_LUX_TARGETS[soloCell.lux]);
+        setDistanceTarget(soloCell.distanceCm);
+        setSampleType(isAttack(soloCell.sample) ? 'ATTACK' : 'BONA_FIDE');
+        setSessionType(SOLO_SESSION_TYPE);
+        setSubjectId(SOLO_PARTICIPANT_ID);
+        setKioskId(SOLO_PARTICIPANT_ID);
+        // soloCellKey mewakili soloCell; objeknya dibuat ulang tiap render.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [soloCellKey]);
+
+    const wasSoloRef = useRef(soloCell !== null);
+    useEffect(() => {
+        if (wasSoloRef.current && soloCell === null) {
+            setSessionType(searchParams?.get('session_type') || 'TEST');
+            setSampleType(searchParams?.get('sample_type') || 'BONA_FIDE');
+        }
+        wasSoloRef.current = soloCell !== null;
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [soloCell === null]);
+
+    const handleSoloStage = useCallback((stage: LivenessStage) => {
+        if (stage === 'COUNTDOWN') playCue('countdown');
+        else if (stage === 'SCANNING_8S') playCue('record');
+    }, []);
+
+    const soloParticipant = useMemo(() => {
+        const subject = studioSubjects.find((s) => s.id === SOLO_PARTICIPANT_ID);
+        if (!subject) return null;
+        const r = readinessOf(subject.template, template_status_available);
+        return { label: r.label, level: r.level };
+    }, [studioSubjects, template_status_available]);
+
     /* ---- Verification Callbacks ---- */
     const handleVerificationSubmit = useCallback(
         async (videoBlob: Blob, scanMetrics: any) => {
             if (abortRef.current) abortRef.current.abort();
             abortRef.current = new AbortController();
+            // Sel dibaca saat submit: callback ini ditangkap pemindai di awal perekaman.
+            const soloTrial = soloSubmitRef.current;
+            if (soloTrial) soloMarkSubmitted();
 
             const startTime = performance.now();
             setStatus('verifying');
@@ -764,12 +826,15 @@ export default function Presensi({
 
             formData.append('ear_blinks', String(scanMetrics.earBlinks));
             formData.append('mar_mouths', String(scanMetrics.marMouths));
-            formData.append('face_pct', String(scanMetrics.facePct));
+            // D10: nilai yang tidak terukur tidak dikirim, sehingga server mencatat null.
+            if (scanMetrics.facePct != null) {
+                formData.append('face_pct', String(scanMetrics.facePct));
+            }
             formData.append('scan_duration_s', String(scanMetrics.durationS));
-            if (scanMetrics.earVal !== undefined) {
+            if (scanMetrics.earVal != null) {
                 formData.append('ear_val', String(scanMetrics.earVal));
             }
-            if (scanMetrics.marVal !== undefined) {
+            if (scanMetrics.marVal != null) {
                 formData.append('mar_val', String(scanMetrics.marVal));
             }
             if (scanMetrics.activeChallenge !== undefined) {
@@ -777,6 +842,15 @@ export default function Presensi({
             }
             if (scanMetrics.challengeStatus !== undefined) {
                 formData.append('challenge_status', scanMetrics.challengeStatus);
+            }
+            if (soloTrial) {
+                // set(), bukan append(): label, target, dan identitas mengikuti sel antrean.
+                for (const [key, value] of soloFormFields(soloTrial)) formData.set(key, value);
+                formData.set('lux_target', String(SOLO_LUX_TARGETS[soloTrial.lux]));
+                formData.set('distance_target_cm', String(soloTrial.distanceCm));
+                if (Array.isArray(scanMetrics.frameSeries) && scanMetrics.frameSeries.length > 0) {
+                    formData.set('frame_series', JSON.stringify(scanMetrics.frameSeries));
+                }
             }
 
             if (simulatedSession !== 'REALTIME') {
@@ -812,8 +886,10 @@ export default function Presensi({
 
                 if (response.data.evaluation) {
                     setEvaluationData(response.data.evaluation);
-                    setIsEvalModalOpen(true);
+                    // Mode solo: tidak ada orang di depan laptop untuk menutup laporan.
+                    if (!soloTrial) setIsEvalModalOpen(true);
                 }
+                if (soloTrial) soloRecordResult({ ok: true, cell: soloTrial });
 
                 if (response.data.metadata) {
                     setFacenetScore(response.data.metadata.facenet_score ?? null);
@@ -836,9 +912,10 @@ export default function Presensi({
                 setErrorMsg(serverMsg);
                 setStatusText(serverMsg);
                 addToast('error', serverMsg, 'error');
+                if (soloTrial) soloRecordResult({ ok: false, error: serverMsg });
             }
         },
-        [mode, kioskId, subjectId, sessionType, sampleType, simulatedSession, addToast],
+        [mode, kioskId, subjectId, sessionType, sampleType, simulatedSession, addToast, soloMarkSubmitted, soloRecordResult],
     );
 
     const handleReset = useCallback(() => {
@@ -857,6 +934,7 @@ export default function Presensi({
         setIsEvalModalOpen(false);
         setResetKey((prev) => prev + 1);
     }, []);
+    handleResetRef.current = handleReset;
 
     /* ---- Advance to Next Subject (S01 -> S02 -> ... -> S18) ---- */
     const handleNextSubject = useCallback(() => {
@@ -920,15 +998,17 @@ export default function Presensi({
             `Jarak_Euclidean_L2,${evaluationData.euclidean_distance ?? '-'},Jarak Euclidean Vektor Embedding (Threshold <= 0.40)`,
             `FaceNet_Score,${evaluationData.facenet_score ?? '-'},Skor Kesamaan Wajah FaceNet (128-D)`,
             `EMAR_Score,${evaluationData.emar_score ?? '-'},Skor Fusi Liveness EMAR`,
-            `Tantangan_Acak_EMAR,${evaluationData.active_challenge || '-'},Instruksi Challenge-Response Acak (BLINK / OPEN_MOUTH)`,
-            `Status_Tantangan,${evaluationData.challenge_status || '-'},Hasil Evaluasi Tantangan (PASS_LIVENESS / REJECT)`,
-            `Kedipan_Mata_EAR,${evaluationData.ear_blinks},Jumlah Kedipan Mata Terdeteksi (EAR < 0.20)`,
-            `Gerakan_Mulut_MAR,${evaluationData.mar_mouths},Jumlah Gerakan Mulut Terdeteksi (MAR >= 0.10)`,
-            `Kestabilan_Wajah_Pct,${evaluationData.face_detected_pct}%,Persentase Frame Wajah Terlacak Stabil (Min 80.0%)`,
+            `Urutan_Panduan_Gerakan,${evaluationData.active_challenge || '-'},Urutan Langkah Panduan Browser (telemetri; liveness diputuskan dlib mesin)`,
+            `Status_Panduan_Browser,${evaluationData.challenge_status || '-'},Hasil Langkah Panduan di Browser (telemetri; bukan keputusan PAD)`,
+            `Siklus_Kedip_dlib,${formatCount(evaluationData.blink_cycles)},Siklus Kedip dlib Mesin (dasar keputusan liveness D2)`,
+            `Siklus_Mulut_dlib,${formatCount(evaluationData.mouth_cycles)},Siklus Buka-Tutup Mulut dlib Mesin (dasar keputusan liveness D2)`,
+            `Kedipan_Mata_Browser,${formatCount(evaluationData.ear_blinks)},Hitungan Kedip MediaPipe Browser (telemetri)`,
+            `Gerakan_Mulut_Browser,${formatCount(evaluationData.mar_mouths)},Hitungan Mulut MediaPipe Browser (telemetri)`,
+            `Kestabilan_Wajah_Pct,${formatMeasured(evaluationData.face_detected_pct, '%', 1)},Persentase Frame Wajah Terlacak Stabil (Min 80.0%)`,
             `Jarak_Pengujian_cm,${formatMeasured(evaluationData.distance_cm, 'cm', 1)},Jarak Kamera ke Wajah (${evaluationData.distance_source || 'none'})`,
             `Intensitas_Cahaya_Lux,${formatMeasured(evaluationData.lux_value, 'Lux', 1)},Kondisi Pencahayaan Lingkungan Uji (${evaluationData.lighting?.source_label ?? evaluationData.lux_source ?? 'none'})`,
             ...lightingCsvRows(evaluationData.lighting),
-            `Durasi_Scan_Detik,${evaluationData.scan_duration_s || 8.0} Detik,Jendela Waktu Pemindaian Biometrik`,
+            `Durasi_Scan_Detik,${formatMeasured(evaluationData.scan_duration_s, 'Detik', 2)},Durasi Rekaman Terukur`,
             `Pesan_Evaluasi,"${(evaluationData.message || statusText || '').replace(/"/g, '""')}",Penjelasan Keputusan Engine Biometrik`,
         ].join('\n');
 
@@ -1206,7 +1286,9 @@ export default function Presensi({
                                 <div className="flex items-center gap-1.5 rounded-2xl border border-sky-400/30 bg-sky-500/10 dark:bg-sky-500/15 px-3 py-1.5 text-xs font-bold text-royal-blue dark:text-sky-300">
                                     <span className="material-symbols-outlined text-[15px]">badge</span>
                                     <span className="font-mono font-black text-deep-navy dark:text-white">{currentSubjectInfo.id}</span>
-                                    <span className="truncate max-w-[130px] sm:max-w-[200px] text-deep-navy dark:text-white">{currentSubjectInfo.name}</span>
+                                    {!soloCell && (
+                                        <span className="truncate max-w-[130px] sm:max-w-[200px] text-deep-navy dark:text-white">{currentSubjectInfo.name}</span>
+                                    )}
                                     {mode === 'kiosk' && (
                                         <button
                                             type="button"
@@ -1494,7 +1576,11 @@ export default function Presensi({
                                         <span className="flex items-center gap-1.5 rounded-xl border border-purple-500/30 bg-purple-500/10 dark:bg-purple-500/15 px-2.5 py-1.5 font-bold text-purple-800 dark:text-purple-300">
                                             <span className="material-symbols-outlined text-[14px]">tune</span>
                                             <span className="font-mono">
-                                                {sessionType === 'ENROLLMENT' ? 'Session-E' : 'Session-T'}
+                                                {sessionType === 'ENROLLMENT'
+                                                    ? 'Session-E'
+                                                    : sessionType === 'CALIBRATION'
+                                                      ? 'Session-C'
+                                                      : 'Session-T'}
                                             </span>
                                         </span>
 
@@ -1560,7 +1646,17 @@ export default function Presensi({
                                 onVideoRefReady={handleVideoRefReady}
                                 onDistanceUpdate={handleDistanceLiveUpdate}
                                 onFaceROIUpdate={setFaceROI}
-                                paused={isEnrollModalOpen || calSections !== null}
+                                paused={isEnrollModalOpen || calSections !== null || soloPaused}
+                                pausedMessage={
+                                    soloPaused && !isEnrollModalOpen && calSections === null
+                                        ? 'Mode solo: pemindai menunggu antrean dimulai.'
+                                        : undefined
+                                }
+                                holdMs={soloCell ? SOLO_HOLD_MS : undefined}
+                                soloGate={soloCell ? { targetCm: soloCell.distanceCm, attack: isAttack(soloCell.sample) } : null}
+                                onStageChange={soloCell ? handleSoloStage : undefined}
+                                collectFrameSeries={soloCell !== null}
+                                forceVoice={soloCell !== null}
                                 distanceCalibration={distanceCalibration}
                                 onCameraInfoChange={setCameraInfo}
                                 luxCalibration={luxCalibration}
@@ -1659,6 +1755,14 @@ export default function Presensi({
                     {/* RIGHT COLUMN: 2-Tab Bento Layout (Operasional vs Riset) */}
                     {/* ---------------------------------------------------- */}
                     <div className="flex flex-col gap-4 lg:col-span-4">
+                        {canCalibrate && (
+                            <SoloBatchPanel
+                                solo={solo}
+                                distanceCalibrated={calibrationMatch.applies && distanceCalibration !== null}
+                                participantStatus={soloParticipant}
+                            />
+                        )}
+
                         {/* Tab Segmented Control */}
                         <div className="grid grid-cols-2 rounded-2xl border border-outline-variant/60 dark:border-white/10 bg-surface-container-low/90 dark:bg-black/30 p-1 shadow-xs backdrop-blur-md">
                             <button
@@ -1721,7 +1825,15 @@ export default function Presensi({
                                         </span>
                                     </h4>
 
-                                    {mode === 'personal' && user ? (
+                                    {soloCell ? (
+                                        // Mode solo direkam layar/difoto untuk naskah: tanpa nama, email, atau ID akun login.
+                                        <div className="rounded-2xl border border-outline-variant/30 dark:border-white/10 bg-surface-container-low dark:bg-slate-900/60 p-3.5">
+                                            <p className="font-mono text-sm font-bold text-deep-navy dark:text-white">{SOLO_PARTICIPANT_ID}</p>
+                                            <p className="text-xs text-on-surface-variant dark:text-slate-400">
+                                                Partisipan anonim, split calibration_dev
+                                            </p>
+                                        </div>
+                                    ) : mode === 'personal' && user ? (
                                         <>
                                             <div className="flex items-center gap-3 rounded-2xl border border-outline-variant/30 dark:border-white/10 bg-surface-container-low dark:bg-slate-900/60 p-3.5 mb-3.5">
                                                 <div className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-2xl bg-gradient-to-tr from-royal-blue to-sky-accent font-bold text-white text-base shadow-sm">
@@ -2394,32 +2506,35 @@ export default function Presensi({
                                                 {/* Card 3: Refleks Kedipan Mata Alami */}
                                                 <div className="rounded-2xl border border-outline-variant/30 dark:border-white/10 bg-surface-container-low/70 dark:bg-slate-900/60 p-3 sm:p-3.5 flex flex-col justify-between shadow-xs">
                                                     <div className="flex items-center justify-between text-on-surface-variant dark:text-slate-400 text-[11px]">
-                                                        <span className="font-bold">Refleks Kedipan</span>
+                                                        <span className="font-bold">Siklus Kedip dlib</span>
                                                         <Eye className="h-4 w-4 text-royal-blue dark:text-sky-400" />
                                                     </div>
                                                     <div className="my-1.5">
                                                         <div className="flex items-baseline justify-between">
                                                             <span className="text-lg font-black text-deep-navy dark:text-white">
-                                                                {evaluationData.ear_blinks}x
+                                                                {formatCount(evaluationData.blink_cycles)}
                                                             </span>
                                                             <span
                                                                 className={`rounded-md px-1.5 py-0.5 text-[9px] font-extrabold uppercase ${
-                                                                    evaluationData.ear_blinks >= 1
+                                                                    (evaluationData.blink_cycles ?? 0) >= 1
                                                                         ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300'
                                                                         : 'bg-amber-500/15 text-amber-700 dark:text-amber-300'
                                                                 }`}
                                                             >
-                                                                {evaluationData.ear_blinks >= 1 ? 'Alami ✓' : 'Min 1x'}
+                                                                {evaluationData.blink_cycles == null
+                                                                    ? 'FTA'
+                                                                    : evaluationData.blink_cycles >= 1
+                                                                      ? 'Terdeteksi ✓'
+                                                                      : 'Min 1x'}
                                                             </span>
                                                         </div>
                                                         <span className="text-[10px] text-slate-500 dark:text-slate-400 block mt-0.5">
-                                                            Kedipan fisiologis tervalidasi
+                                                            Siklus mulut dlib: {formatCount(evaluationData.mouth_cycles)}
                                                         </span>
                                                     </div>
                                                     <span className="text-[10px] text-slate-500 dark:text-slate-400 leading-tight">
-                                                        {evaluationData.mar_mouths > 0
-                                                            ? `${evaluationData.mar_mouths}x respons mikromimik terdeteksi.`
-                                                            : 'Respon liveness mata 8 detik normal.'}
+                                                        Hitungan browser (telemetri): {formatCount(evaluationData.ear_blinks)} kedip,{' '}
+                                                        {formatCount(evaluationData.mar_mouths)} mulut.
                                                     </span>
                                                 </div>
 
@@ -2432,16 +2547,22 @@ export default function Presensi({
                                                     <div className="my-1.5">
                                                         <div className="flex items-baseline justify-between">
                                                             <span className="text-lg font-black text-deep-navy dark:text-white">
-                                                                {evaluationData.face_detected_pct}%
+                                                                {formatMeasured(evaluationData.face_detected_pct, '%', 1)}
                                                             </span>
                                                             <span
                                                                 className={`rounded-md px-1.5 py-0.5 text-[9px] font-extrabold uppercase ${
-                                                                    evaluationData.face_detected_pct >= 80
-                                                                        ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300'
-                                                                        : 'bg-rose-500/15 text-rose-700 dark:text-rose-300'
+                                                                    evaluationData.face_detected_pct == null
+                                                                        ? 'bg-slate-500/15 text-slate-600 dark:text-slate-300'
+                                                                        : evaluationData.face_detected_pct >= 80
+                                                                          ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300'
+                                                                          : 'bg-rose-500/15 text-rose-700 dark:text-rose-300'
                                                                 }`}
                                                             >
-                                                                {evaluationData.face_detected_pct >= 80 ? 'Stabil ✓' : 'Goyang'}
+                                                                {evaluationData.face_detected_pct == null
+                                                                    ? 'Tidak terukur'
+                                                                    : evaluationData.face_detected_pct >= 80
+                                                                      ? 'Stabil ✓'
+                                                                      : 'Goyang'}
                                                             </span>
                                                         </div>
                                                         <span className="text-[10px] text-slate-500 dark:text-slate-400 block mt-0.5">
@@ -2558,16 +2679,16 @@ export default function Presensi({
                                                             </div>
                                                             {/* 7. EAR & MAR */}
                                                             <div className="rounded-xl border border-outline-variant/20 dark:border-white/5 bg-white/60 dark:bg-slate-900/60 p-2.5">
-                                                                <span className="text-[9px] text-slate-500 dark:text-slate-400 block">EAR & MAR:</span>
+                                                                <span className="text-[9px] text-slate-500 dark:text-slate-400 block">Siklus dlib:</span>
                                                                 <p className="font-mono font-bold text-deep-navy dark:text-white text-xs mt-0.5 truncate">
-                                                                    {evaluationData.ear_blinks}x kedip • {evaluationData.mar_mouths}x mulut
+                                                                    {formatCount(evaluationData.blink_cycles)} kedip • {formatCount(evaluationData.mouth_cycles)} mulut
                                                                 </p>
                                                             </div>
                                                             {/* 8. Stability & Lingkungan */}
                                                             <div className="rounded-xl border border-outline-variant/20 dark:border-white/5 bg-white/60 dark:bg-slate-900/60 p-2.5">
                                                                 <span className="text-[9px] text-slate-500 dark:text-slate-400 block">Kestabilan & Uji:</span>
                                                                 <p className="font-mono font-bold text-deep-navy dark:text-white text-xs mt-0.5 truncate">
-                                                                    {evaluationData.face_detected_pct}% • {formatMeasured(evaluationData.distance_cm, 'cm')}
+                                                                    {formatMeasured(evaluationData.face_detected_pct, '%', 1)} • {formatMeasured(evaluationData.distance_cm, 'cm')}
                                                                 </p>
                                                             </div>
                                                         </div>

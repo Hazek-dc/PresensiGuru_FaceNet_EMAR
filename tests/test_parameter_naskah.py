@@ -36,6 +36,29 @@ class TestNilaiNaskah:
         assert P.ALPHA_DEFAULT == 0.60
         assert P.OBSERVATION_WINDOW_S == 8.0
 
+    def test_fusi_s3_keputusan_d1(self):
+        """Keputusan peneliti D1 (21 Oktober 2026): S3 = FusionModule.decide_s3."""
+        assert P.FUSION_D_REF == 1.20
+        assert P.FUSION_THRESHOLD == 0.50
+        assert P.LIVENESS_THRESHOLD == 1.0
+
+    def test_versi_keputusan_terikat_konstanta(self):
+        """DECISION_VERSION menandai satu set konstanta keputusan. Bila salah satu
+        berubah, tes ini gagal: naikkan DECISION_VERSION (dan FusionDecision::VERSION,
+        FUSION.version di TS) lalu perbarui snapshot di bawah, agar data versi lama
+        dan baru tidak bercampur di CSV dan ekspor."""
+        snapshot = {
+            "D1b-D2dlib-2026-10-21": dict(
+                FACENET_DISTANCE_THRESHOLD=0.40, EAR_BLINK_THRESHOLD=0.20, MAR_OPEN_THRESHOLD=0.10,
+                ALPHA_DEFAULT=0.60, FUSION_D_REF=1.20, FUSION_THRESHOLD=0.50, LIVENESS_THRESHOLD=1.0,
+                EMAR_W1=0.50, EMAR_W2=0.50, BLINK_CONSEC_FRAMES=2, MOUTH_OPEN_FRAMES=3,
+                MIN_BLINK_CYCLES=1, MIN_MOUTH_CYCLES=1, OBSERVATION_WINDOW_S=8.0,
+            ),
+        }
+        assert P.DECISION_VERSION in snapshot, "DECISION_VERSION baru belum punya snapshot"
+        current = {k: getattr(P, k) for k in snapshot[P.DECISION_VERSION]}
+        assert current == snapshot[P.DECISION_VERSION]
+
     def test_jarak_0_40_setara_kesamaan_0_92(self):
         """Tabel 5.2: 'd <= 0,40 (Skor Kesamaan >= 0,92)'."""
         assert P.cosine_from_distance(0.40) == pytest.approx(0.92)
@@ -72,6 +95,17 @@ class TestNilaiNaskah:
 
 class TestSiklusTransisi:
     """Subbab 5.3: kedip dan gerakan mulut wajib 'minimal satu siklus transisi penuh'."""
+
+    def test_penghitung_skrip_analisis_sama_dengan_mesin(self, fes):
+        """Tabel 2b (scripts/analisis_kalibrasi_dev.py) memakai aturan siklus mesin."""
+        import random
+        sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
+        import analisis_kalibrasi_dev as ak
+        rng = random.Random(21)
+        for _ in range(300):
+            seq = [rng.random() < 0.4 for _ in range(rng.randint(0, 40))]
+            for min_frames in (1, 2, 3):
+                assert ak.count_full_cycles(seq, min_frames) == fes.count_full_cycles(seq, min_frames)
 
     def test_foto_statis_bermulut_terbuka_tidak_menghasilkan_siklus(self, fes):
         assert fes.count_full_cycles([True] * 50, min_frames=3) == 0
@@ -164,6 +198,28 @@ class TestKeputusanFusi:
 
     def test_alpha_default_0_60(self, fes):
         assert fes.FusionModule().alpha == 0.60
+
+    def test_konstanta_mesin_dari_parameter_naskah(self, fes):
+        assert fes.D_REF == P.FUSION_D_REF == 1.20
+        assert fes.FINAL_THRESHOLD == P.FUSION_THRESHOLD == 0.50
+        assert fes.EMAR_LIVENESS_THRESHOLD == P.LIVENESS_THRESHOLD
+        assert (fes.EMAR_W1, fes.EMAR_W2) == (P.EMAR_W1, P.EMAR_W2)
+
+    @pytest.mark.parametrize("d", [0.0, 0.10, 0.19, 0.20, 0.30, 0.40, 0.41, 0.60])
+    @pytest.mark.parametrize("blink,mouth", [(0, 0), (1, 0), (0, 1), (1, 1)])
+    def test_evaluate_trial_sama_dengan_decide_s3(self, fes, d, blink, mouth):
+        """Jalur desktop (EAR/MAR sesi) dan mesin (siklus dlib) memakai satu rumus S3."""
+        p_live = 0.5 * blink + 0.5 * mouth
+        emar = fes.EMARResult(emar_score=p_live, landmark_count=68)
+        fusion = fes.FusionModule()
+        expected = (
+            int(fusion.decide_s1(self._facenet(fes, d), emar).is_accepted),
+            int(fusion.decide_s2(self._facenet(fes, d), emar).is_accepted),
+            int(fusion.decide_s3(self._facenet(fes, d), emar).is_accepted),
+        )
+        ear = 0.15 if blink else 0.30
+        mar = 0.40 if mouth else 0.05
+        assert fes.evaluate_trial(d, ear, mar) == expected
 
     def _verify_at(self, fes, d):
         m = fes.FaceNetModule.__new__(fes.FaceNetModule)

@@ -2,10 +2,8 @@
 
 namespace Tests\Feature;
 
-use App\Models\User;
-use App\Models\AttendanceRecord;
-use App\Models\EvaluationMatrix;
 use App\Http\Controllers\Admin\ModelSettingController;
+use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -19,6 +17,7 @@ class BiometricDecisionGateTest extends TestCase
     use RefreshDatabase;
 
     private User $teacher;
+
     private User $admin;
 
     protected function setUp(): void
@@ -229,8 +228,10 @@ class BiometricDecisionGateTest extends TestCase
     }
 
     /**
-     * Skenario Bab 5 (S1/S2) memakai ambang Tabel 5.2:
-     * cocok jika d <= 0,40; kedip jika EAR < 0,20; mulut terbuka jika MAR >= 0,10.
+     * Skenario Bab 5 setelah keputusan peneliti D1 (S3 = FusionModule.decide_s3,
+     * rumus b) dan D2 (liveness = siklus dlib mesin). Ambang Tabel 5.2: cocok jika
+     * d <= 0,40; S2 butuh siklus kedip DAN siklus mulut; S3 = gerbang d <= 0,40 DAN
+     * 0,6 * (1 - d/1,20) + 0,4 * P_live >= 0,50.
      */
     public function test_bab5_scenarios_use_thesis_thresholds(): void
     {
@@ -240,8 +241,8 @@ class BiometricDecisionGateTest extends TestCase
                     'subject_id' => 'S01',
                     'sample_type' => 'BONA_FIDE',
                     'session_type' => 'TEST',
-                    'ear_blinks' => 1,
-                    'mar_mouths' => 1,
+                    'blink_cycles' => 1,
+                    'mouth_cycles' => 1,
                     'face_pct' => 95.0,
                     'euclidean_distance' => 0.20,
                     'scan_duration_s' => 8.0,
@@ -255,108 +256,108 @@ class BiometricDecisionGateTest extends TestCase
         $this->assertSame(1, $post(['euclidean_distance' => 0.40])['s1_decision']);
         $this->assertSame(0, $post(['euclidean_distance' => 0.41])['s1_decision']);
 
-        $atBoundary = $post(['ear_val' => 0.19, 'mar_val' => 0.10]);
-        $this->assertTrue($atBoundary['liveness_valid']);
-        $this->assertSame(1, $atBoundary['s2_decision']);
+        $full = $post([]);
+        $this->assertTrue($full['liveness_valid']);
+        $this->assertSame(1.0, (float) $full['p_live']);
+        $this->assertSame([1, 1, 1], [$full['s1_decision'], $full['s2_decision'], $full['s3_decision']]);
+        // Jalur simulasi (tes) tidak dilabeli dlib: label sumber mengikuti asal P_live.
+        $this->assertSame('simulated', $full['liveness_source']);
 
-        $this->assertFalse($post(['ear_val' => 0.20, 'mar_val' => 0.50])['liveness_valid']);
-        $this->assertFalse($post(['ear_val' => 0.10, 'mar_val' => 0.099])['liveness_valid']);
+        // Satu siklus saja: S2 menolak, S3 menerima (P_live 0,5; s_final 0,65).
+        $mouthOnly = $post(['euclidean_distance' => 0.30, 'blink_cycles' => 0]);
+        $this->assertSame(0.5, (float) $mouthOnly['p_live']);
+        $this->assertSame(0, $mouthOnly['s2_decision']);
+        $this->assertSame(1, $mouthOnly['s3_decision']);
+        $this->assertEqualsWithDelta(0.65, $mouthOnly['s_final'], 1e-9);
 
-        // Tanpa mar_val, fallback "mulut tertutup" harus berada di bawah 0,10.
-        $noMouth = $post(['mar_mouths' => 0]);
-        $this->assertLessThan(0.10, $noMouth['mar_val']);
-        $this->assertFalse($noMouth['liveness_valid']);
-        $this->assertSame(0, $noMouth['s2_decision']);
+        // Tanpa liveness: d = 0,20 tepat memberi 0,49999999999999994 (ditolak),
+        // d = 0,19 diterima S3 (sifat rumus b yang harus dilaporkan di naskah).
+        $this->assertSame(0, $post(['blink_cycles' => 0, 'mouth_cycles' => 0])['s3_decision']);
+        $this->assertSame(1, $post(['euclidean_distance' => 0.19, 'blink_cycles' => 0, 'mouth_cycles' => 0])['s3_decision']);
+
+        // Gerbang identitas: liveness penuh tidak meloloskan S3 bila d > 0,40.
+        $this->assertSame(0, $post(['euclidean_distance' => 0.41])['s3_decision']);
+
+        // EAR/MAR browser hanya telemetri dan tidak lagi diisi bawaan (D10).
+        $browserOnly = $post(['mouth_cycles' => 0, 'ear_val' => 0.10, 'mar_val' => 0.50]);
+        $this->assertFalse($browserOnly['liveness_valid']);
+        $this->assertSame(0.5, (float) $browserOnly['mar_val']);
+        $this->assertNull($post([])['mar_val']);
     }
 
     /**
-     * Test Case Active EMAR: Pass Liveness
-     * Tantangan acak berhasil dipenuhi dalam batas waktu
+     * D2: tantangan browser hanya panduan dan telemetri. PASS_LIVENESS dari browser
+     * tidak meloloskan presentasi tanpa siklus dlib.
      */
-    public function test_active_challenge_response_pass_accepted(): void
+    public function test_browser_challenge_pass_does_not_override_engine_liveness(): void
     {
-        $response = $this->actingAs($this->teacher)
+        $data = $this->actingAs($this->teacher)
+            ->postJson(route('api.presensi'), [
+                'subject_id' => 'S01',
+                'sample_type' => 'ATTACK',
+                'session_type' => 'TEST',
+                'active_challenge' => 'BLINK',
+                'challenge_status' => 'PASS_LIVENESS',
+                'blink_cycles' => 0,
+                'mouth_cycles' => 0,
+                'euclidean_distance' => 0.15,
+                'scan_duration_s' => 8.0,
+            ])
+            ->assertOk()
+            ->json();
+
+        $this->assertFalse($data['success']);
+        $this->assertEquals('REJECT', $data['final_decision']);
+        $this->assertEquals('ATTACK', $data['pad_pred']);
+        $this->assertEquals('PASS_LIVENESS', $data['challenge_status']);
+        $this->assertStringContainsString('Tidak Terdeteksi Kedipan dan Gerakan Mulut', $data['message']);
+    }
+
+    /** D2: aksi browser yang salah tidak menolak presentasi yang siklus dlib-nya lengkap. */
+    public function test_browser_wrong_action_does_not_reject_engine_live(): void
+    {
+        $data = $this->actingAs($this->teacher)
             ->postJson(route('api.presensi'), [
                 'subject_id' => 'S01',
                 'sample_type' => 'BONA_FIDE',
                 'session_type' => 'TEST',
                 'active_challenge' => 'BLINK',
-                'challenge_status' => 'PASS_LIVENESS',
+                'challenge_status' => 'REJECT_WRONG_ACTION',
+                'blink_cycles' => 1,
+                'mouth_cycles' => 1,
                 'euclidean_distance' => 0.15,
                 'scan_duration_s' => 8.0,
-                'distance_cm' => 30,
-                'lux_value' => 320,
-            ]);
-
-        $response->assertOk();
-        $data = $response->json();
+            ])
+            ->assertOk()
+            ->json();
 
         $this->assertTrue($data['success']);
         $this->assertEquals('ACCEPT', $data['final_decision']);
         $this->assertEquals('BONA_FIDE', $data['pad_pred']);
-        $this->assertEquals('MATCH', $data['id_pred']);
-        $this->assertEquals('BLINK', $data['active_challenge']);
-        $this->assertEquals('PASS_LIVENESS', $data['challenge_status']);
-    }
-
-    /**
-     * Test Case Active EMAR: Wrong Action Rejected
-     * Subjek melakukan aksi salah (misal instruksi BLINK tetapi malah membuka mulut)
-     */
-    public function test_active_challenge_response_wrong_action_rejected(): void
-    {
-        $response = $this->actingAs($this->teacher)
-            ->postJson(route('api.presensi'), [
-                'subject_id' => 'S01',
-                'sample_type' => 'ATTACK',
-                'session_type' => 'TEST',
-                'active_challenge' => 'BLINK',
-                'challenge_status' => 'REJECT_WRONG_ACTION',
-                'euclidean_distance' => 0.15,
-                'scan_duration_s' => 8.0,
-                'distance_cm' => 30,
-                'lux_value' => 320,
-            ]);
-
-        $response->assertOk();
-        $data = $response->json();
-
-        $this->assertFalse($data['success']);
-        $this->assertEquals('REJECT', $data['final_decision']);
-        $this->assertEquals('ATTACK', $data['pad_pred']);
-        $this->assertEquals('BLINK', $data['active_challenge']);
         $this->assertEquals('REJECT_WRONG_ACTION', $data['challenge_status']);
-        $this->assertStringContainsString('Aksi Tidak Sesuai Tantangan Acak (BLINK)', $data['message']);
     }
 
-    /**
-     * Test Case Active EMAR: Timeout Rejected
-     * Subjek tidak merespons dalam 4 detik (indikasi foto statis / replay)
-     */
-    public function test_active_challenge_response_timeout_rejected(): void
+    /** D2: tanpa landmark dlib, liveness tidak terukur: S2/S3 null dan presentasi ditolak. */
+    public function test_engine_without_landmarks_is_liveness_fta(): void
     {
-        $response = $this->actingAs($this->teacher)
+        $data = $this->actingAs($this->teacher)
             ->postJson(route('api.presensi'), [
                 'subject_id' => 'S01',
-                'sample_type' => 'ATTACK',
+                'sample_type' => 'BONA_FIDE',
                 'session_type' => 'TEST',
-                'active_challenge' => 'OPEN_MOUTH',
-                'challenge_status' => 'REJECT_TIMEOUT',
+                'blink_cycles' => 1,
+                'mouth_cycles' => 1,
+                'landmark_frames' => 0,
                 'euclidean_distance' => 0.15,
-                'scan_duration_s' => 8.0,
-                'distance_cm' => 30,
-                'lux_value' => 320,
-            ]);
+            ])
+            ->assertOk()
+            ->json();
 
-        $response->assertOk();
-        $data = $response->json();
-
-        $this->assertFalse($data['success']);
         $this->assertEquals('REJECT', $data['final_decision']);
-        $this->assertEquals('ATTACK', $data['pad_pred']);
-        $this->assertEquals('OPEN_MOUTH', $data['active_challenge']);
-        $this->assertEquals('REJECT_TIMEOUT', $data['challenge_status']);
-        $this->assertStringContainsString('Batas Waktu Respons Habis (>4s)', $data['message']);
+        $this->assertEquals('UNAVAILABLE', $data['pad_pred']);
+        $this->assertSame(1, $data['evaluation']['s1_decision']);
+        $this->assertNull($data['evaluation']['s2_decision']);
+        $this->assertNull($data['evaluation']['s3_decision']);
+        $this->assertStringContainsString('Landmark wajah dlib tidak terdeteksi', $data['message']);
     }
 }
-

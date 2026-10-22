@@ -1,6 +1,6 @@
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
 import { engineDistanceNoteLabel, recordedDistance } from '@/Utils/distanceCalibration';
-import { formatMeasured } from '@/Utils/sensorReading';
+import { formatCount, formatMeasured } from '@/Utils/sensorReading';
 import { Head, Link } from '@inertiajs/react';
 import { useState } from 'react';
 import { Bab5ScenarioCard } from '@/Components/Presensi/Bab5ScenarioCard';
@@ -269,25 +269,31 @@ export default function Show({ record, isResearcher, lighting }: any) {
                                 <div className="mt-4 grid grid-cols-2 gap-3 text-center">
                                     <div className="rounded-2xl bg-slate-50 dark:bg-white/5 p-3 border border-slate-200/60 dark:border-white/5">
                                         <span className="text-[11px] text-slate-500 dark:text-slate-400 block font-medium">
-                                            Kedipan (EAR)
+                                            Siklus Kedip (dlib)
                                         </span>
                                         <span className="text-xl font-black font-mono text-deep-navy dark:text-white mt-1 block">
-                                            {meta.ear_blinks ?? 0}x
+                                            {formatCount(meta.blink_cycles)}
+                                        </span>
+                                        <span className="text-[10px] text-slate-500 dark:text-slate-400 block">
+                                            Browser: {formatCount(meta.ear_blinks)}
                                         </span>
                                     </div>
                                     <div className="rounded-2xl bg-slate-50 dark:bg-white/5 p-3 border border-slate-200/60 dark:border-white/5">
                                         <span className="text-[11px] text-slate-500 dark:text-slate-400 block font-medium">
-                                            Mulut (MAR)
+                                            Siklus Mulut (dlib)
                                         </span>
                                         <span className="text-xl font-black font-mono text-deep-navy dark:text-white mt-1 block">
-                                            {meta.mar_mouths ?? 0}x
+                                            {formatCount(meta.mouth_cycles)}
+                                        </span>
+                                        <span className="text-[10px] text-slate-500 dark:text-slate-400 block">
+                                            Browser: {formatCount(meta.mar_mouths)}
                                         </span>
                                     </div>
                                 </div>
                             </div>
 
                             <p className="mt-4 text-xs text-slate-500 dark:text-slate-400 leading-relaxed border-t border-slate-100 dark:border-white/5 pt-3">
-                                Durasi pemindaian: {meta.scan_duration_s ?? 8} detik • Akurasi deteksi wajah: {meta.face_detected_pct ?? 100}%
+                                Durasi pemindaian: {formatMeasured(meta.scan_duration_s, 'detik', 2)} • Kestabilan wajah: {formatMeasured(meta.face_detected_pct, '%', 1)}
                             </p>
                         </div>
                     </div>
@@ -333,7 +339,7 @@ export default function Show({ record, isResearcher, lighting }: any) {
                                 timer
                             </span>
                             <span>
-                                Waktu Sesi: <strong className="text-deep-navy dark:text-white font-bold">{meta.scan_duration_s ?? 8}s</strong>
+                                Waktu Sesi: <strong className="text-deep-navy dark:text-white font-bold">{formatMeasured(meta.scan_duration_s, 's', 2)}</strong>
                             </span>
                         </div>
                     </div>

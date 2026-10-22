@@ -28,6 +28,12 @@ class AttendanceResponse(BaseModel):
     face_width_frames: int | None = None
     frame_width: int | None = None
     frame_height: int | None = None
+    # Telemetri dlib dan latensi per tahap; tidak ikut keputusan verifikasi.
+    frames_total: int | None = None
+    landmark_frames: int | None = None
+    emar_series: list[list[float]] | None = None
+    candidates_evaluated: int | None = None
+    latency_ms: dict[str, float | None] | None = None
     request_id: str | None = None
 
 UPLOAD_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "storage", "temp_video")
