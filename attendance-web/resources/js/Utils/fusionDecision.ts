@@ -3,8 +3,12 @@
  * (app/Services/FusionDecision.php = FusionModule.decide_s1/s2/s3 di mesin):
  * D1 = rumus S3 (b), D2 = liveness dlib mesin. Rumus di sini hanya dipakai bila
  * catatan tidak membawa nilai server, dan tidak pernah mengisi EAR/MAR bawaan.
+ *
+ * Nilai FUSION wajib sama dengan parameter_penelitian.py dan config fusion
+ * (dikunci tests/test_analisis_kalibrasi_dev.py::TestParitasWeb).
  */
 export const FUSION = {
+    version: 'D1b-D2dlib-2026-10-21',
     alpha: 0.6,
     dRef: 1.2,
     threshold: 0.5,
@@ -22,7 +26,19 @@ export interface Bab5Input {
     s_final?: number | null;
     liveness_valid?: boolean | null;
     landmark_frames?: number | null;
+    decision_version?: string | null;
+    /** Riwayat lama tanpa evaluation_bab5 yang dihitung ulang server untuk tampilan. */
+    recomputed?: boolean | null;
+    /** Ambang L2 aktif saat keputusan dibuat (bisa diubah admin). */
+    l2_threshold?: number | null;
 }
+
+/**
+ * current: keputusan tersimpan versi berjalan. recomputed: dihitung ulang dari
+ * riwayat lama, bukan keputusan yang pernah dibuat. legacy: keputusan tersimpan
+ * dengan definisi lama (rumus a, liveness browser), tidak sebanding.
+ */
+export type Bab5Version = 'current' | 'recomputed' | 'legacy';
 
 export interface Bab5View {
     s1: 0 | 1 | null;
@@ -34,6 +50,8 @@ export interface Bab5View {
     livenessValid: boolean | null;
     /** Liveness tidak terukur (tanpa landmark dlib atau P_live): S2/S3 = FTA. */
     livenessFta: boolean;
+    l2Threshold: number;
+    version: Bab5Version;
 }
 
 const bit = (v: number | null | undefined): 0 | 1 | null =>
@@ -55,7 +73,16 @@ export function bab5View(data: Bab5Input | null | undefined): Bab5View {
         (pFace === null || livenessFta
             ? null
             : FUSION.alpha * pFace + (1 - FUSION.alpha) * (pLive as number));
-    const verified = d === null ? null : d <= FUSION.l2Threshold;
+    const l2Threshold =
+        typeof data?.l2_threshold === 'number'
+            ? data.l2_threshold
+            : FUSION.l2Threshold;
+    const version: Bab5Version = data?.recomputed
+        ? 'recomputed'
+        : data?.decision_version === FUSION.version
+          ? 'current'
+          : 'legacy';
+    const verified = d === null ? null : d <= l2Threshold;
     const livenessValid =
         data?.liveness_valid ??
         (livenessFta ? null : (pLive as number) >= FUSION.livenessThreshold);
@@ -85,5 +112,16 @@ export function bab5View(data: Bab5Input | null | undefined): Bab5View {
                 ? 1
                 : 0;
 
-    return { s1, s2, s3, pFace, pLive, sFinal, livenessValid, livenessFta };
+    return {
+        s1,
+        s2,
+        s3,
+        pFace,
+        pLive,
+        sFinal,
+        livenessValid,
+        livenessFta,
+        l2Threshold,
+        version,
+    };
 }

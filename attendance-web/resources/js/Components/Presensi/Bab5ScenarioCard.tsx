@@ -35,8 +35,12 @@ export interface Bab5EvaluationData {
     /** EAR/MAR browser (MediaPipe), telemetri saja. */
     ear_val?: number | null;
     mar_val?: number | null;
-    ear_blinks?: number;
-    mar_mouths?: number;
+    ear_blinks?: number | null;
+    mar_mouths?: number | null;
+    /** Versi definisi keputusan tersimpan; null pada riwayat lama atau hitung ulang. */
+    decision_version?: string | null;
+    recomputed?: boolean | null;
+    l2_threshold?: number | null;
     subject_id?: string;
     distance_cm?: number;
     lux_value?: number;
@@ -91,7 +95,9 @@ export function Bab5ScenarioCard({
         measuredDistance === null ? '—' : measuredDistance.toFixed(digits);
 
     // D1 = rumus S3 (b), D2 = liveness dlib mesin. Tanpa P_live dlib, S2/S3 FTA.
-    const { s1, s2, s3, pFace, pLive, sFinal, livenessValid } = bab5View(data);
+    const { s1, s2, s3, pFace, pLive, sFinal, livenessValid, l2Threshold, version } = bab5View(data);
+    const l2Text = l2Threshold.toFixed(2);
+    const thresholdText = FUSION.threshold.toFixed(2);
     const fixed = (v: number | null, digits: number) => (v === null ? '—' : v.toFixed(digits));
     const cycles = (v: number | null | undefined) => (v == null ? '—' : `${v}x`);
     const verdict = (v: 0 | 1 | null) => (v === null ? 'FTA' : v === 1 ? 'ACCEPT' : 'REJECT');
@@ -317,7 +323,7 @@ export function Bab5ScenarioCard({
                             </div>
                             <div className="flex justify-between items-center">
                                 <span className="text-slate-500 dark:text-slate-400">Ambang Batas:</span>
-                                <span className="font-mono text-slate-600 dark:text-slate-300">D ≤ 0.40</span>
+                                <span className="font-mono text-slate-600 dark:text-slate-300">D ≤ {l2Text}</span>
                             </div>
                             <div className="flex justify-between items-center">
                                 <span className="text-slate-500 dark:text-slate-400">Liveness Gate:</span>
@@ -329,7 +335,7 @@ export function Bab5ScenarioCard({
                     <div className="mt-2.5 pt-2 border-t border-slate-200/40 dark:border-white/5 text-[9px] text-slate-500 dark:text-slate-400 leading-tight">
                         {s1 === 1
                             ? '✓ Wajah cocok dengan template. Rentan terhadap spoofing foto/layar.'
-                            : '✗ Jarak kemiripan melebihi 0.40 (Wajah tidak dikenali).'}
+                            : `✗ Jarak kemiripan melebihi ${l2Text} (Wajah tidak dikenali).`}
                     </div>
                 </div>
 
@@ -430,17 +436,17 @@ export function Bab5ScenarioCard({
                             </span>
                         </div>
                         <div className="text-[10px] font-medium text-slate-500 dark:text-slate-400 mb-2">
-                            Weighted Fusion (α={FUSION.alpha.toFixed(2)}, D_REF={FUSION.dRef.toFixed(2)}, Threshold={FUSION.threshold.toFixed(2)}, gerbang D ≤ 0.40)
+                            Weighted Fusion (α={FUSION.alpha.toFixed(2)}, D_REF={FUSION.dRef.toFixed(2)}, Threshold={thresholdText}, gerbang D ≤ {l2Text})
                         </div>
 
                         {/* Parameter details */}
                         <div className="space-y-1.5 bg-white/60 dark:bg-slate-950/40 rounded-xl p-2 border border-slate-200/50 dark:border-white/5 text-[10px]">
                             <div className="flex justify-between items-center">
-                                <span className="text-slate-500 dark:text-slate-400">s_embed = 1 − D/1.20 (0.60):</span>
+                                <span className="text-slate-500 dark:text-slate-400">s_embed = 1 − D/{FUSION.dRef.toFixed(2)} ({FUSION.alpha.toFixed(2)}):</span>
                                 <span className="font-mono font-bold text-sky-600 dark:text-sky-400">{fixed(pFace, 3)}</span>
                             </div>
                             <div className="flex justify-between items-center">
-                                <span className="text-slate-500 dark:text-slate-400">P_live dlib (0.40):</span>
+                                <span className="text-slate-500 dark:text-slate-400">P_live dlib ({(1 - FUSION.alpha).toFixed(2)}):</span>
                                 <span className="font-mono font-bold text-purple-600 dark:text-purple-400">{fixed(pLive, 3)}</span>
                             </div>
                             <div className="flex justify-between items-center">
@@ -464,13 +470,24 @@ export function Bab5ScenarioCard({
                         {s3 === null
                             ? 'Landmark atau skor liveness dlib tidak tersedia (FTA), S3 tidak dinilai.'
                             : s3 === 1
-                              ? '✓ Identitas cocok dan skor fusi melampaui 0.50.'
+                              ? `✓ Identitas cocok dan skor fusi mencapai ${thresholdText}.`
                               : s1 !== 1
-                                ? '✗ Gerbang identitas: jarak melebihi 0.40.'
-                                : '✗ Skor fusi di bawah threshold 0.50.'}
+                                ? `✗ Gerbang identitas: jarak melebihi ${l2Text}.`
+                                : `✗ Skor fusi di bawah threshold ${thresholdText}.`}
                     </div>
                 </div>
             </div>
+
+            {version !== 'current' && (
+                <p
+                    className="mt-3 rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-[10px] leading-relaxed text-amber-700 dark:text-amber-300"
+                    role="note"
+                >
+                    {version === 'recomputed'
+                        ? `Dihitung ulang untuk tampilan dari riwayat lama dengan definisi ${FUSION.version}. Ini bukan keputusan yang dibuat saat presensi.`
+                        : 'Keputusan tersimpan memakai definisi lama (rumus S3 a dan liveness browser). Rumus di atas adalah definisi sekarang, jadi angka ini tidak sebanding dengan data baru.'}
+                </p>
+            )}
 
             {/* Scientific Note & Dataset Sync Banner */}
             <div className="mt-3 flex items-center justify-between gap-2 p-2.5 rounded-xl bg-slate-100 dark:bg-slate-950/60 border border-slate-200 dark:border-white/5 text-[10px] text-slate-600 dark:text-slate-400">

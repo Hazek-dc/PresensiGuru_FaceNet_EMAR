@@ -47,6 +47,15 @@ class PresensiController extends Controller
     /** D12: split calibration_dev hanya untuk peneliti, bukan subjek TEST S01-S18. */
     public const CALIBRATION_DEV_PARTICIPANT = 'P_DEV_01';
 
+    /**
+     * Header CSV riset versi keputusan berjalan: kolom lama ditambah versi keputusan
+     * dan sumber liveness. Sejak D2, Kedipan/Mulut berisi siklus dlib mesin dan
+     * ear/mar berisi EAR terendah/MAR tertinggi dlib.
+     */
+    public const MATRIKS_HEADER = ['File_Uji', 'Claimed_ID', 'Sample_Type', 'PAI_Species', 'Lux', 'Jarak_cm', 'Session', 'PAD_Pred', 'ID_Pred', 'Jarak', 'Kedipan', 'Mulut', 'Wajah_%', 'Durasi_s', 'Final', 'Error', 'Versi_Keputusan', 'Sumber_Liveness'];
+
+    public const BAB5_HEADER = ['participant_id', 'jarak_cm', 'lux', 'label_aktual', 'euclidean_dist', 'ear', 'mar', 'keputusan_S1', 'keputusan_S2', 'keputusan_S3', 'decision_version', 'liveness_source'];
+
     /** Sama dengan ATTACK_LABELS di parameter_penelitian.py. */
     public const PAI_SPECIES = ['print_attack', 'screen_attack', 'replay_video'];
 
@@ -200,9 +209,9 @@ class PresensiController extends Controller
         $sessionType = $request->input('session_type') ?: 'TEST';
         $sampleType = $request->input('sample_type') ?: 'BONA_FIDE';
         // Hitungan siklus dan EAR/MAR browser (MediaPipe) hanya telemetri sejak D2:
-        // liveness diputuskan dlib di mesin.
-        $earBlinks = (int) ($request->input('ear_blinks') ?: 0);
-        $marMouths = (int) ($request->input('mar_mouths') ?: 0);
+        // liveness diputuskan dlib di mesin. Tidak dikirim = null, bukan 0 (D10).
+        $earBlinks = $this->optionalCount($request, 'ear_blinks');
+        $marMouths = $this->optionalCount($request, 'mar_mouths');
         // D10: nilai yang tidak dikirim tetap null. Dulu kestabilan diisi 100 % dan
         // durasi 8,0 s, sehingga presentasi tanpa pengukuran tercatat terukur.
         $facePct = $this->optionalFloat($request, ['face_pct', 'face_detected_pct']);
@@ -344,8 +353,8 @@ class PresensiController extends Controller
         // Perbandingan eksplisit terhadap null: di PHP, null <= 0.40 bernilai true.
         $isIdMatch = ($euclideanDistance !== null && $euclideanDistance <= $thresholdDistance);
         // Hitungan browser; hanya dipakai kolom PAI_Species lama di Matriks CSV.
-        $isBlinkValid = ($earBlinks >= $minBlink);
-        $isMouthValid = ($marMouths >= $minMouth);
+        $isBlinkValid = ($earBlinks !== null && $earBlinks >= $minBlink);
+        $isMouthValid = ($marMouths !== null && $marMouths >= $minMouth);
         // Kestabilan yang tidak diukur tidak menolak dan tidak diisi 100 % (D10).
         $isStabilityValid = ($facePct === null || $facePct >= $minStability);
 
@@ -432,6 +441,13 @@ class PresensiController extends Controller
         $engineEarMin = $engineSeries === [] ? null : min(array_column($engineSeries, 1));
         $engineMarMax = $engineSeries === [] ? null : max(array_column($engineSeries, 2));
         $round3 = fn ($v) => $v === null ? null : round($v, 3);
+        // Asal P_live yang benar-benar dipakai: dlib mesin, masukan simulasi (tes),
+        // atau null bila tidak ada P_live (FTA atau tanpa hasil mesin).
+        $livenessSource = $pLive === null ? null : match ($biometricSource) {
+            'engine' => 'engine_dlib',
+            'simulated' => 'simulated',
+            default => null,
+        };
 
         $evaluationBab5 = [
             'evaluated' => $evaluated,
@@ -441,11 +457,13 @@ class PresensiController extends Controller
             's2_decision' => $s2,
             's3_decision' => $s3,
             'decision_version' => FusionDecision::VERSION,
+            // Ambang L2 aktif (bisa diubah admin), agar S1/S3 tiap baris bisa diperiksa ulang.
+            'l2_threshold' => $thresholdDistance,
             's_final' => $round3($sFinal),
             // s_embed = max(0, 1 - d / D_REF 1,20), P_face pada rumus S3 (b).
             'p_face' => $round3($sEmbed),
             'p_live' => $round3($pLive),
-            'liveness_source' => 'engine_dlib',
+            'liveness_source' => $livenessSource,
             'liveness_valid' => $livenessValid,
             'blink_cycles' => $engineLive['blink_cycles'],
             'mouth_cycles' => $engineLive['mouth_cycles'],
@@ -643,77 +661,50 @@ class PresensiController extends Controller
             ]);
         }
         if ($biometricSource === 'engine' && ! $isTestAccount && ! $isCalibrationDev) {
-            // 3. Auto-Append to Matriks_Evaluasi_Bab4.csv
-            try {
-                $csvPath = (string) config('biometrics.research_csv.matriks');
-                $dir = dirname($csvPath);
-                if (! is_dir($dir)) {
-                    mkdir($dir, 0755, true);
-                }
-                if (! file_exists($csvPath)) {
-                    file_put_contents($csvPath, "File_Uji,Claimed_ID,Sample_Type,PAI_Species,Lux,Jarak_cm,Session,PAD_Pred,ID_Pred,Jarak,Kedipan,Mulut,Wajah_%,Durasi_s,Final,Error\n");
-                }
-                $fileNameUji = "LIVE_{$subjectId}_".now()->format('Ymd_His').'.webm';
-                // Kolom lama: tebakan dari hitungan browser, bukan label (CLAUDE.md bagian 4).
-                // Variabel terpisah agar label spesies di activity log tidak tertimpa.
-                $matrixPaiSpecies = ($sampleType === 'BONA_FIDE') ? 'NONE' : ((! $isMouthValid && $isBlinkValid) ? 'CUT_OUT' : 'PHOTO');
-                $errorCol = ($finalDecision === 'REJECT') ? str_replace(',', ';', $message) : '';
-                $csvLine = sprintf(
-                    "%s,%s,%s,%s,%s,%s,%s,%s,%s,%.3f,%s,%s,%s,%s,%s,%s\n",
-                    $fileNameUji,
-                    $subjectId,
-                    $sampleType,
-                    $matrixPaiSpecies,
-                    $csvNum($luxValue),
-                    $csvNum($distanceCm),
-                    $sessionType,
-                    $padPred,
-                    $idPred,
-                    $euclideanDistance,
-                    // Siklus dlib mesin (D2), sel kosong bila mesin tidak melaporkan.
-                    $engineLive['blink_cycles'] ?? '',
-                    $engineLive['mouth_cycles'] ?? '',
-                    $csvNum($facePct),
-                    $scanDuration === null ? '' : number_format($scanDuration, 2, '.', ''),
-                    $finalDecision,
-                    $errorCol
-                );
-                file_put_contents($csvPath, $csvLine, FILE_APPEND);
-            } catch (\Exception $csvErr) {
-                Log::error('CSV Logger error: '.$csvErr->getMessage());
-            }
+            // 3. Matriks_Evaluasi_Bab4_<versi>.csv dan Dataset_Eksperimen_Bab5_<versi>.csv.
+            // Berkas versi lama (tanpa kolom versi) tidak ditambah: appendResearchCsv
+            // menolak berkas dengan header lain agar dua definisi tidak bercampur.
+            $versionCols = [FusionDecision::VERSION, $livenessSource ?? ''];
+            $fileNameUji = "LIVE_{$subjectId}_".now()->format('Ymd_His').'.webm';
+            // Kolom lama: tebakan dari hitungan browser, bukan label (CLAUDE.md bagian 4).
+            // Variabel terpisah agar label spesies di activity log tidak tertimpa.
+            $matrixPaiSpecies = ($sampleType === 'BONA_FIDE') ? 'NONE' : ((! $isMouthValid && $isBlinkValid) ? 'CUT_OUT' : 'PHOTO');
+            $errorCol = ($finalDecision === 'REJECT') ? str_replace(',', ';', $message) : '';
+            $this->appendResearchCsv((string) config('biometrics.research_csv.matriks'), self::MATRIKS_HEADER, [
+                $fileNameUji,
+                $subjectId,
+                $sampleType,
+                $matrixPaiSpecies,
+                $csvNum($luxValue),
+                $csvNum($distanceCm),
+                $sessionType,
+                $padPred,
+                $idPred,
+                number_format($euclideanDistance, 3, '.', ''),
+                // Siklus dlib mesin (D2), sel kosong bila mesin tidak melaporkan.
+                $engineLive['blink_cycles'] ?? '',
+                $engineLive['mouth_cycles'] ?? '',
+                $csvNum($facePct),
+                $scanDuration === null ? '' : number_format($scanDuration, 2, '.', ''),
+                $finalDecision,
+                $errorCol,
+                ...$versionCols,
+            ]);
 
-            // Auto-Append to Dataset_Eksperimen_Bab5.csv
-            try {
-                $bab5CsvPath = (string) config('biometrics.research_csv.bab5');
-                $bab5Exists = file_exists($bab5CsvPath);
-                $fp = fopen($bab5CsvPath, 'a');
-                if ($fp) {
-                    if (! $bab5Exists) {
-                        fputcsv($fp, [
-                            'participant_id', 'jarak_cm', 'lux', 'label_aktual',
-                            'euclidean_dist', 'ear', 'mar', 'keputusan_S1', 'keputusan_S2', 'keputusan_S3',
-                        ]);
-                    }
-
-                    fputcsv($fp, [
-                        $subjectId,
-                        $csvNum($distanceCm),
-                        $csvNum($luxValue),
-                        $sampleType,
-                        round($euclideanDistance, 3),
-                        // EAR terendah/MAR tertinggi dlib mesin (sumber keputusan D2).
-                        $engineEarMin === null ? '' : round($engineEarMin, 3),
-                        $engineMarMax === null ? '' : round($engineMarMax, 3),
-                        $s1,
-                        $s2 ?? '',
-                        $s3 ?? '',
-                    ]);
-                    fclose($fp);
-                }
-            } catch (\Exception $bab5Err) {
-                Log::error('Bab 5 CSV Logger error: '.$bab5Err->getMessage());
-            }
+            $this->appendResearchCsv((string) config('biometrics.research_csv.bab5'), self::BAB5_HEADER, [
+                $subjectId,
+                $csvNum($distanceCm),
+                $csvNum($luxValue),
+                $sampleType,
+                round($euclideanDistance, 3),
+                // EAR terendah/MAR tertinggi dlib mesin (sumber keputusan D2).
+                $engineEarMin === null ? '' : round($engineEarMin, 3),
+                $engineMarMax === null ? '' : round($engineMarMax, 3),
+                $s1,
+                $s2 ?? '',
+                $s3 ?? '',
+                ...$versionCols,
+            ]);
         }
 
         // 4. Record Spatie Activity Log for Admin Feed
@@ -818,10 +809,11 @@ class PresensiController extends Controller
                 's2_decision' => $s2,
                 's3_decision' => $s3,
                 'decision_version' => FusionDecision::VERSION,
+                'l2_threshold' => $thresholdDistance,
                 'p_face' => $round3($sEmbed),
                 'p_live' => $round3($pLive),
                 's_final' => $round3($sFinal),
-                'liveness_source' => 'engine_dlib',
+                'liveness_source' => $livenessSource,
                 'liveness_valid' => $livenessValid,
                 'blink_cycles' => $engineLive['blink_cycles'],
                 'mouth_cycles' => $engineLive['mouth_cycles'],
@@ -986,6 +978,53 @@ class PresensiController extends Controller
             'emar_series' => is_array($result['emar_series'] ?? null) ? $this->validFrames($result['emar_series']) : null,
             'latency_ms' => $latency,
         ];
+    }
+
+    /**
+     * Menambah satu baris ke CSV riset. Header ditulis bila berkas belum ada atau
+     * kosong. Berkas yang sudah ada dengan header lain tidak disentuh (dicatat di
+     * log), karena berkas riset tidak boleh ditulis ulang.
+     */
+    private function appendResearchCsv(string $path, array $header, array $row): void
+    {
+        try {
+            $dir = dirname($path);
+            if (! is_dir($dir)) {
+                mkdir($dir, 0755, true);
+            }
+            $isNew = ! file_exists($path) || filesize($path) === 0;
+            if (! $isNew) {
+                $in = fopen($path, 'r');
+                $existing = $in ? fgetcsv($in, null, ',', '"', '\\') : false;
+                if ($in) {
+                    fclose($in);
+                }
+                if ($existing !== $header) {
+                    Log::error("CSV riset {$path} memakai header lain (versi keputusan lama); baris tidak ditulis.");
+
+                    return;
+                }
+            }
+            $fp = fopen($path, 'a');
+            if (! $fp) {
+                return;
+            }
+            if ($isNew) {
+                fputcsv($fp, $header, ',', '"', '\\');
+            }
+            fputcsv($fp, array_map(fn ($v) => $v ?? '', $row), ',', '"', '\\');
+            fclose($fp);
+        } catch (\Throwable $e) {
+            Log::error("CSV riset {$path}: ".$e->getMessage());
+        }
+    }
+
+    /** Hitungan bulat >= 0 dari request, null bila tidak dikirim atau bukan angka. */
+    private function optionalCount(Request $request, string $key): ?int
+    {
+        $v = $request->input($key);
+
+        return is_numeric($v) ? max(0, (int) $v) : null;
     }
 
     /** Alasan penolakan liveness dari siklus dlib mesin (D2). */
@@ -1245,16 +1284,16 @@ class PresensiController extends Controller
     {
         $csvPath = (string) config('biometrics.research_csv.bab5');
         if (file_exists($csvPath)) {
-            return response()->download($csvPath, 'Dataset_Eksperimen_Bab5.csv', [
+            return response()->download($csvPath, basename($csvPath), [
                 'Content-Type' => 'text/csv; charset=UTF-8',
             ]);
         }
 
         $headers = [
             'Content-Type' => 'text/csv; charset=UTF-8',
-            'Content-Disposition' => 'attachment; filename="Dataset_Eksperimen_Bab5.csv"',
+            'Content-Disposition' => 'attachment; filename="'.basename((string) config('biometrics.research_csv.bab5')).'"',
         ];
-        $headerRow = "participant_id,jarak_cm,lux,label_aktual,euclidean_dist,ear,mar,keputusan_S1,keputusan_S2,keputusan_S3\n";
+        $headerRow = implode(',', self::BAB5_HEADER)."\n";
 
         return response($headerRow, 200, $headers);
     }

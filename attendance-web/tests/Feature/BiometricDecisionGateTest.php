@@ -260,7 +260,8 @@ class BiometricDecisionGateTest extends TestCase
         $this->assertTrue($full['liveness_valid']);
         $this->assertSame(1.0, (float) $full['p_live']);
         $this->assertSame([1, 1, 1], [$full['s1_decision'], $full['s2_decision'], $full['s3_decision']]);
-        $this->assertSame('engine_dlib', $full['liveness_source']);
+        // Jalur simulasi (tes) tidak dilabeli dlib: label sumber mengikuti asal P_live.
+        $this->assertSame('simulated', $full['liveness_source']);
 
         // Satu siklus saja: S2 menolak, S3 menerima (P_live 0,5; s_final 0,65).
         $mouthOnly = $post(['euclidean_distance' => 0.30, 'blink_cycles' => 0]);

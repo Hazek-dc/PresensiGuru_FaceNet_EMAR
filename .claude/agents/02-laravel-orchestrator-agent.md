@@ -24,8 +24,10 @@ Laravel 13. Middleware dan CSRF diatur di `bootstrap/app.php`, tidak ada `Http/K
   (`Jenis`, `Label Sampel`, `Spesies PAI`, `ID Partisipan`, `Split Dataset`, target). Jangan diganti nama tanpa agen QA.
 - `/api/presensi` dan `/presensi/verify` publik untuk kiosk. Split riset wajib login Admin/Peneliti.
 - Nilai yang tidak diukur tetap null (D10). Yang masih tersisa dan tidak boleh disalin ke kolom baru:
-  `sample_type ?: 'BONA_FIDE'` di CSV Bab 5/Matriks, `ear_blinks`/`mar_mouths` browser `?: 0`, dan kolom tebakan
-  `PAI_Species` di Matriks CSV.
+  `sample_type ?: 'BONA_FIDE'` di CSV Bab 5/Matriks, subjek bawaan `'S01'`, DEFAULT skema `evaluation_matrices`,
+  dan kolom tebakan `PAI_Species` di Matriks CSV.
+- CSV riset ditulis lewat `PresensiController::appendResearchCsv()` ke berkas bernama versi keputusan
+  (`config('biometrics.research_csv.*')`). Berkas berheader lain (versi lama) tidak pernah ditambah.
 - Label kebenaran (`sample_type`, `pai_species`) ada di `attendance_records.metadata` dan activity log. Kolom `PAI_Species` Matriks CSV jalur TEST masih tebakan dari hitungan browser.
 - Ambang runtime dibaca dari `ModelSettingController::getActiveSettings()` dan bisa diubah admin.
   Simpan ambang yang berlaku per baris bila menambah kolom keputusan.

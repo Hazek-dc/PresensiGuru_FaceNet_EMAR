@@ -107,6 +107,21 @@ class TestParitasWeb(unittest.TestCase):
         self.assertEqual(float(values["d_ref"]), P.FUSION_D_REF)
         self.assertEqual(float(values["threshold"]), P.FUSION_THRESHOLD)
         self.assertEqual(float(values["liveness_threshold"]), P.LIVENESS_THRESHOLD)
+        self.assertEqual(float(values["w_blink"]), P.EMAR_W1)
+        self.assertEqual(float(values["w_mouth"]), P.EMAR_W2)
+        # Konfigurasi menjadi satu-satunya salinan web: tanpa angka cadangan di service.
+        self.assertNotRegex(php, r"\?\?\s*[\d.]+\)")
+
+    def test_konstanta_tampilan_typescript(self):
+        ts = (BASE_DIR / "attendance-web" / "resources" / "js" / "Utils" / "fusionDecision.ts").read_text(encoding="utf-8")
+        block = re.search(r"export const FUSION = \{(.*?)\} as const;", ts, re.S).group(1)
+        values = dict(re.findall(r"(\w+): ([\d.]+),", block))
+        self.assertIn(f"version: '{P.DECISION_VERSION}',", block)
+        self.assertEqual(float(values["alpha"]), P.ALPHA_DEFAULT)
+        self.assertEqual(float(values["dRef"]), P.FUSION_D_REF)
+        self.assertEqual(float(values["threshold"]), P.FUSION_THRESHOLD)
+        self.assertEqual(float(values["livenessThreshold"]), P.LIVENESS_THRESHOLD)
+        self.assertEqual(float(values["l2Threshold"]), P.FACENET_DISTANCE_THRESHOLD)
 
 
 class TestTabelKalibrasi(unittest.TestCase):
@@ -173,6 +188,11 @@ class TestTabelKalibrasi(unittest.TestCase):
         self.assertNotIn("Nama Pribadi", (out / "presentasi_anonim.csv").read_text(encoding="utf-8"))
         self.assertEqual({r["decision_version"] for r in anon}, {P.DECISION_VERSION})
 
+        # FTA dilaporkan terpisah, beserta penyebut tabel identitas dan tabel PAD.
+        denom = {r["kategori"]: r["jumlah"] for r in read_table(out / "tabel0_penyebut.csv")}
+        self.assertEqual(denom, {"presentasi": "9", "fta_identitas": "1", "mesin_tidak_terhubung": "1",
+                                 "fta_liveness": "1", "penyebut_tabel2a": "7", "penyebut_tabel_pad": "6"})
+
         overall = read_table(out / "tabel3_apcer_kondisi.csv")[-1]
         self.assertEqual(overall["lux_kategori"], "semua")
         self.assertEqual(overall["n_bona_fide"], "3")
@@ -202,8 +222,8 @@ class TestTabelKalibrasi(unittest.TestCase):
         self.assertEqual(emar[("0.20", "0.10")]["apcer_print_attack"], "0.0000")
 
         alpha = {r["alpha"]: r for r in read_table(out / "tabel2c_bobot_alpha.csv")}
-        self.assertEqual(alpha["0.60"]["l2_maks_saat_p_live_1"], "0.4000")
-        self.assertEqual(alpha["0.60"]["l2_maks_tanpa_live"], "0.2000")
+        self.assertEqual(alpha["0.60"]["l2_batas_saat_p_live_1"], "0.4000")
+        self.assertEqual(alpha["0.60"]["l2_batas_tanpa_live"], "0.2000")
         self.assertEqual(alpha["0.60"]["bona_fide_ditolak"], "0.3333")
         self.assertEqual(alpha["0.60"]["serangan_diterima_print_attack"], "0.0000")
         self.assertEqual(alpha["0.60"]["serangan_diterima_replay_video"], "0.5000")

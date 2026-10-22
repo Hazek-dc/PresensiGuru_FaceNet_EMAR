@@ -56,4 +56,32 @@ describe('bab5View (D1 rumus b, D2 liveness dlib)', () => {
         });
         expect(bab5View(null)).toMatchObject({ s1: null, s2: null, s3: null });
     });
+
+    it('menandai versi keputusan: berjalan, hitung ulang, atau lama', () => {
+        const base = {
+            euclidean_distance: 0.3,
+            p_live: 1,
+            landmark_frames: 10,
+        };
+        expect(
+            bab5View({ ...base, decision_version: FUSION.version }).version,
+        ).toBe('current');
+        expect(
+            bab5View({ ...base, recomputed: true, decision_version: null })
+                .version,
+        ).toBe('recomputed');
+        // Riwayat sebelum 21-10-2026 menyimpan keputusan rumus (a) tanpa versi.
+        expect(bab5View({ ...base, s3_decision: 1 }).version).toBe('legacy');
+    });
+
+    it('S1 memakai ambang L2 yang tercatat, bukan selalu 0,40', () => {
+        const v = bab5View({
+            euclidean_distance: 0.45,
+            p_live: 1,
+            l2_threshold: 0.5,
+        });
+        expect(v.l2Threshold).toBe(0.5);
+        expect(v.s1).toBe(1);
+        expect(bab5View({ euclidean_distance: 0.45, p_live: 1 }).s1).toBe(0);
+    });
 });

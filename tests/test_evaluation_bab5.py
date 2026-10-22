@@ -15,7 +15,8 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(BASE_DIR))
 
 # Impor fungsi yang diuji
-from evaluation_bab5 import evaluate_trial, log_to_csv, evaluate_and_log
+from evaluation_bab5 import DEFAULT_CSV_PATH, evaluate_trial, log_to_csv, evaluate_and_log
+from parameter_penelitian import DECISION_VERSION
 
 class TestEvaluationBab5(unittest.TestCase):
 
@@ -141,12 +142,15 @@ class TestEvaluationBab5(unittest.TestCase):
             # Total 3 baris: 1 header + 2 data
             self.assertEqual(len(reader), 3)
 
-            # Header check
+            # Header: kolom lama ditambah penanda versi, sumber liveness, dan waktu.
             expected_header = [
                 'participant_id', 'jarak_cm', 'lux', 'label_aktual',
-                'euclidean_dist', 'ear', 'mar', 'keputusan_S1', 'keputusan_S2', 'keputusan_S3'
+                'euclidean_dist', 'ear', 'mar', 'keputusan_S1', 'keputusan_S2', 'keputusan_S3',
+                'decision_version', 'liveness_source', 'recorded_at_utc',
             ]
             self.assertEqual(reader[0], expected_header)
+            self.assertEqual(reader[1][10], DECISION_VERSION)
+            self.assertEqual(reader[1][11], "desktop_session_extremes")
 
             # Baris 1
             self.assertEqual(reader[1][0], "P01")
@@ -164,6 +168,31 @@ class TestEvaluationBab5(unittest.TestCase):
             self.assertEqual(reader[2][7], "1")
             self.assertEqual(reader[2][8], "0")
             self.assertEqual(reader[2][9], "0")
+
+    def test_berkas_header_lama_ditolak(self):
+        # Dataset_Eksperimen_Bab5.csv versi rumus (a) tidak boleh ditambah baris D1.
+        with tempfile.TemporaryDirectory() as tmpdir:
+            legacy = os.path.join(tmpdir, "Dataset_Eksperimen_Bab5.csv")
+            old_header = ("participant_id,jarak_cm,lux,label_aktual,euclidean_dist,"
+                          "ear,mar,keputusan_S1,keputusan_S2,keputusan_S3\n")
+            with open(legacy, "w", encoding="utf-8") as f:
+                f.write(old_header)
+            with self.assertRaises(ValueError):
+                log_to_csv("S01", 30, 150, "Bona_Fide", 0.3, 0.15, 0.2, 1, 1, 1, filename=legacy)
+            with open(legacy, encoding="utf-8") as f:
+                self.assertEqual(f.read(), old_header)
+
+    def test_nilai_tak_terukur_sel_kosong(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            out = os.path.join(tmpdir, "bab5.csv")
+            log_to_csv("S01", None, None, "Bona_Fide", None, None, None, None, None, None, filename=out)
+            with open(out, encoding="utf-8") as f:
+                row = list(csv.reader(f))[1]
+            self.assertEqual(row[1:3] + row[4:10], [""] * 8)
+
+    def test_berkas_bawaan_memuat_versi(self):
+        self.assertIn(DECISION_VERSION, DEFAULT_CSV_PATH)
+        self.assertNotEqual(DEFAULT_CSV_PATH, "Dataset_Eksperimen_Bab5.csv")
 
     def test_evaluate_and_log_liveness_boundaries(self):
         with tempfile.TemporaryDirectory() as tmpdir:

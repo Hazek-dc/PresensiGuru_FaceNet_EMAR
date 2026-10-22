@@ -1,5 +1,7 @@
 <?php
 
+use App\Services\FusionDecision;
+
 return [
     /*
     |--------------------------------------------------------------------------
@@ -30,14 +32,17 @@ return [
     /*
     | Fusi S3 = FusionModule.decide_s3 (keputusan D1, rumus b) dan ambang liveness
     | dlib S2 (D2). Sama dengan parameter_penelitian.py (ALPHA_DEFAULT, FUSION_D_REF,
-    | FUSION_THRESHOLD, EMAR_LIVENESS_THRESHOLD). Sengaja tanpa env dan tanpa
-    | pengaturan admin: mengubahnya mengubah definisi skenario di naskah.
+    | FUSION_THRESHOLD, LIVENESS_THRESHOLD, EMAR_W1, EMAR_W2). Sengaja tanpa env dan
+    | tanpa pengaturan admin: mengubahnya mengubah definisi skenario di naskah dan
+    | wajib diikuti kenaikan FusionDecision::VERSION.
     */
     'fusion' => [
         'alpha' => 0.60,
         'd_ref' => 1.20,
         'threshold' => 0.50,
         'liveness_threshold' => 1.0,
+        'w_blink' => 0.5,
+        'w_mouth' => 0.5,
     ],
 
     /*
@@ -101,10 +106,13 @@ return [
     /*
     | Berkas dataset riset yang ditambah setiap presentasi yang diukur mesin
     | biometrik. Presentasi simulasi atau tanpa hasil mesin tidak pernah ditulis.
+    | Nama berkas memuat versi keputusan (FusionDecision::VERSION) karena kolom
+    | S2/S3, EAR/MAR, dan siklus berubah makna antarversi. Berkas tanpa akhiran
+    | versi (rumus a, liveness browser) dibekukan dan tidak ditambah lagi.
     */
     'research_csv' => [
-        'matriks' => env('BIOMETRICS_RESEARCH_CSV_MATRIKS', base_path('../dataset/video_singkat/Matriks_Evaluasi_Bab4.csv')),
-        'bab5' => env('BIOMETRICS_RESEARCH_CSV_BAB5', base_path('../Dataset_Eksperimen_Bab5.csv')),
+        'matriks' => env('BIOMETRICS_RESEARCH_CSV_MATRIKS', base_path('../dataset/video_singkat/Matriks_Evaluasi_Bab4_'.FusionDecision::VERSION.'.csv')),
+        'bab5' => env('BIOMETRICS_RESEARCH_CSV_BAB5', base_path('../Dataset_Eksperimen_Bab5_'.FusionDecision::VERSION.'.csv')),
         // Deret EAR/MAR per frame, hanya untuk presentasi split calibration_dev.
         'raw_frames_dev' => env('BIOMETRICS_RESEARCH_CSV_RAW_FRAMES_DEV', base_path('../logs/log_raw_frames_dev.csv')),
     ],

@@ -10,10 +10,12 @@ Peneliti          : Qalwani Anugerah — NPM 221220048 — UMP 2026
 Skenario Pengujian (ISO/IEC 30107-3):
 - S1: FaceNet Stand-alone (Jarak Euclidean <= 0.40 -> 1, selain itu 0)
 - S2: Rule-Based Gate (S1 == 1 DAN (EAR < 0.20 AND MAR >= 0.10) -> 1, selain itu 0)
-- S3: Weighted Fusion (S_final = alpha*P_face + (1-alpha)*P_live >= threshold_s3 -> 1, selain itu 0)
+- S3: S1 == 1 DAN S_final = alpha * max(0, 1 - d / D_REF) + (1 - alpha) * P_live >= 0,50
+  (keputusan D1, rumus b = FusionModule.decide_s3, D_REF = 1,20)
 
-File Output CSV: Dataset_Eksperimen_Bab5.csv
-Header: participant_id, jarak_cm, lux, label_aktual, euclidean_dist, ear, mar, keputusan_S1, keputusan_S2, keputusan_S3
+File Output CSV: Dataset_Eksperimen_Bab5_desktop_<DECISION_VERSION>.csv
+Header: CSV_HEADER. Dataset_Eksperimen_Bab5.csv (rumus a) dibekukan: penulis ini
+menolak menambah baris ke berkas dengan header lain.
 """
 
 import os
@@ -21,6 +23,7 @@ import sys
 import csv
 import json
 import argparse
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Tuple, Dict, Any, Optional
 
@@ -28,7 +31,10 @@ from typing import Tuple, Dict, Any, Optional
 BASE_DIR = Path(__file__).resolve().parent
 LUX_FILE = BASE_DIR / "attendance-web" / "storage" / "app" / "lux_reading.json"
 DISTANCE_FILE = BASE_DIR / "attendance-web" / "storage" / "app" / "distance_reading.json"
-DEFAULT_CSV_PATH = "Dataset_Eksperimen_Bab5.csv"
+# Berkas lama (rumus a, header tanpa versi) tidak ditambah lagi. Baris desktop
+# punya d dan participant_id dari jalur lain (CLAUDE.md bagian 2), jadi tidak
+# satu berkas dengan baris web.
+LEGACY_CSV_PATH = "Dataset_Eksperimen_Bab5.csv"
 
 # Modul Liveness Deteksi Aktif (Challenge-Response)
 from active_liveness import ActiveLivenessEMAR, evaluate_active_trial
@@ -40,9 +46,21 @@ from parameter_penelitian import (
     FACENET_DISTANCE_THRESHOLD,
     FUSION_D_REF,
     FUSION_THRESHOLD,
+    DECISION_VERSION,
+    EMAR_W1,
+    EMAR_W2,
     LIVENESS_THRESHOLD,
     MAR_OPEN_THRESHOLD,
 )
+
+DEFAULT_CSV_PATH = f"Dataset_Eksperimen_Bab5_desktop_{DECISION_VERSION}.csv"
+# Sumber P_live jalur ini: EAR terendah dan MAR tertinggi satu sesi, bukan siklus dlib.
+LIVENESS_SOURCE = "desktop_session_extremes"
+CSV_HEADER = [
+    'participant_id', 'jarak_cm', 'lux', 'label_aktual',
+    'euclidean_dist', 'ear', 'mar', 'keputusan_S1', 'keputusan_S2', 'keputusan_S3',
+    'decision_version', 'liveness_source', 'recorded_at_utc',
+]
 
 
 # =============================================================================
@@ -81,7 +99,7 @@ def evaluate_trial(
     # P_live tiga tingkat {0; 0,5; 1} seperti EMARModule.liveness_from_sequence.
     blink = 1.0 if ear < EAR_BLINK_THRESHOLD else 0.0
     mouth = 1.0 if mar >= MAR_OPEN_THRESHOLD else 0.0
-    p_live = round(min(0.5 * blink + 0.5 * mouth, 1.0), 6)
+    p_live = round(min(EMAR_W1 * blink + EMAR_W2 * mouth, 1.0), 6)
 
     # S2: identitas DAN liveness penuh (kedip DAN mulut).
     s2_decision = 1 if (s1_decision == 1 and p_live >= LIVENESS_THRESHOLD) else 0
@@ -99,39 +117,51 @@ def evaluate_trial(
 # =============================================================================
 def log_to_csv(
     participant_id: str,
-    jarak: float,
-    lux: float,
+    jarak: Optional[float],
+    lux: Optional[float],
     label_aktual: str,
-    euclidean_dist: float,
-    ear: float,
-    mar: float,
-    s1: int,
-    s2: int,
-    s3: int,
+    euclidean_dist: Optional[float],
+    ear: Optional[float],
+    mar: Optional[float],
+    s1: Optional[int],
+    s2: Optional[int],
+    s3: Optional[int],
     filename: str = DEFAULT_CSV_PATH
 ) -> str:
     """
-    Menyimpan satu baris data pengujian serentak langsung ke format CSV.
-    Membuat file dengan header standar jika file belum ada.
+    Menambah satu baris percobaan ke CSV. Header CSV_HEADER ditulis bila berkas
+    belum ada. Nilai yang tidak diukur (None) ditulis sebagai sel kosong.
+    Berkas yang sudah ada dengan header lain (misalnya Dataset_Eksperimen_Bab5.csv
+    versi rumus a) ditolak agar dua definisi keputusan tidak bercampur.
     """
-    file_exists = os.path.isfile(filename)
-    
+    file_exists = os.path.isfile(filename) and os.path.getsize(filename) > 0
+    if file_exists:
+        with open(filename, newline='', encoding='utf-8') as f:
+            header = next(csv.reader(f), [])
+        if header != CSV_HEADER:
+            raise ValueError(
+                f"{filename} memakai header lain (versi keputusan lama). "
+                f"Tulis ke berkas baru, misalnya {DEFAULT_CSV_PATH}."
+            )
+
+    def cell(v: Optional[float]) -> Any:
+        return '' if v is None else round(float(v), 3)
+
+    def decision(v: Optional[int]) -> Any:
+        return '' if v is None else int(v)
+
     with open(filename, mode='a', newline='', encoding='utf-8') as file:
         writer = csv.writer(file)
-        # Tulis Header jika file baru dibuat
         if not file_exists:
-            writer.writerow([
-                'participant_id', 'jarak_cm', 'lux', 'label_aktual', 
-                'euclidean_dist', 'ear', 'mar', 'keputusan_S1', 'keputusan_S2', 'keputusan_S3'
-            ])
-        
-        # Tulis baris data pengujian
+            writer.writerow(CSV_HEADER)
         writer.writerow([
-            participant_id, jarak, lux, label_aktual, 
-            round(float(euclidean_dist), 3), round(float(ear), 3), round(float(mar), 3),
-            int(s1), int(s2), int(s3)
+            participant_id, '' if jarak is None else jarak, '' if lux is None else lux, label_aktual,
+            cell(euclidean_dist), cell(ear), cell(mar),
+            decision(s1), decision(s2), decision(s3),
+            DECISION_VERSION, LIVENESS_SOURCE,
+            datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ'),
         ])
-        
+
     return filename
 
 
@@ -194,7 +224,7 @@ def evaluate_and_log(
     )
 
     # Skor pendukung untuk telemetri, rumus yang sama dengan evaluate_trial (D1).
-    p_live = round(min(0.5 * (ear < EAR_BLINK_THRESHOLD) + 0.5 * (mar >= MAR_OPEN_THRESHOLD), 1.0), 6)
+    p_live = round(min(EMAR_W1 * (ear < EAR_BLINK_THRESHOLD) + EMAR_W2 * (mar >= MAR_OPEN_THRESHOLD), 1.0), 6)
     liveness_valid = p_live >= LIVENESS_THRESHOLD
     p_face = max(0.0, 1.0 - euclidean_dist / FUSION_D_REF)
     s_final = alpha * p_face + (1.0 - alpha) * p_live
@@ -225,9 +255,10 @@ def main():
     parser = argparse.ArgumentParser(
         description="Evaluasi Serentak 3 Skenario (S1, S2, S3) & Perekam Log CSV Bab 5"
     )
-    parser.add_argument("--dist", type=float, default=0.28, help="Jarak Euclidean L2 FaceNet (default: 0.28)")
-    parser.add_argument("--ear", type=float, default=0.18, help="Nilai Eye Aspect Ratio (default: 0.18)")
-    parser.add_argument("--mar", type=float, default=0.40, help="Nilai Mouth Aspect Ratio (default: 0.40)")
+    # Tanpa nilai bawaan: dulu 0,28/0,18/0,40 tercatat seolah-olah hasil ukur (D10).
+    parser.add_argument("--dist", type=float, default=None, help="Jarak Euclidean L2 FaceNet (wajib tanpa --demo)")
+    parser.add_argument("--ear", type=float, default=None, help="EAR terendah sesi (wajib tanpa --demo)")
+    parser.add_argument("--mar", type=float, default=None, help="MAR tertinggi sesi (wajib tanpa --demo)")
     parser.add_argument("--alpha", type=float, default=ALPHA_DEFAULT, help="Bobot alpha S3 (default: 0.6)")
     parser.add_argument("--thresh-s3", type=float, default=FUSION_THRESHOLD, help="Ambang batas S3 (default: 0.50, keputusan D1)")
     parser.add_argument("--participant", type=str, default="P01", help="ID Partisipan (contoh: P01, Guru-01)")
@@ -244,7 +275,11 @@ def main():
     if args.demo:
         # Demo menulis baris simulasi P01-P04; tanpa --csv lain baris itu
         # masuk ke dataset riset seolah-olah hasil pengujian.
-        research_csv = {(BASE_DIR / DEFAULT_CSV_PATH).resolve(), Path(DEFAULT_CSV_PATH).resolve()}
+        research_csv = {
+            p.resolve()
+            for name in (DEFAULT_CSV_PATH, LEGACY_CSV_PATH)
+            for p in (BASE_DIR / name, Path(name))
+        }
         if Path(args.csv).resolve() in research_csv:
             print("--demo menulis baris simulasi. Tentukan --csv ke berkas lain, bukan "
                   f"{DEFAULT_CSV_PATH} (dataset riset).", file=sys.stderr)
@@ -277,6 +312,10 @@ def main():
         print(f"\n[OK] Seluruh baris simulasi berhasil dicatat ke: {args.csv}")
         print("=" * 70)
         return
+
+    missing = [flag for flag, v in (("--dist", args.dist), ("--ear", args.ear), ("--mar", args.mar)) if v is None]
+    if missing:
+        parser.error("nilai hasil ukur wajib diisi: " + ", ".join(missing))
 
     # Single execution
     res = evaluate_and_log(

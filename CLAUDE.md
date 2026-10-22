@@ -14,10 +14,10 @@ Angka terkunci tersebar di beberapa berkas. Tidak ada satu sumber tunggal.
 | Hal | Sumber |
 |---|---|
 | Ambang naskah (L2, EAR, MAR, alpha, jendela), siklus (`BLINK_CONSEC_FRAMES`, `MOUTH_OPEN_FRAMES`), fusi S3 D1 (`FUSION_D_REF`, `FUSION_THRESHOLD`), liveness D2 (`LIVENESS_THRESHOLD`), `DECISION_VERSION`, kondisi lux/jarak, label, desain | `parameter_penelitian.py` |
-| Konstanta mesin yang juga terkunci | `facenet_emar_system.py`: `EMAR_W1`, `EMAR_W2`, `FACENET_MIN_CONFIDENCE`, `FACENET_CANDIDATE_RATIOS`, `FACENET_EARLY_EXIT_DISTANCE`. `D_REF`, `FINAL_THRESHOLD`, `EMAR_LIVENESS_THRESHOLD` diimpor dari `parameter_penelitian.py` |
+| Konstanta mesin yang juga terkunci | `facenet_emar_system.py`: `FACENET_MIN_CONFIDENCE`, `FACENET_CANDIDATE_RATIOS`, `FACENET_EARLY_EXIT_DISTANCE`. `EMAR_W1`, `EMAR_W2`, `D_REF`, `FINAL_THRESHOLD`, `EMAR_LIVENESS_THRESHOLD` diimpor dari `parameter_penelitian.py` |
 | Ambang web | `attendance-web/config/biometrics.php`: `facenet_threshold` lewat `ModelSettingController::getActiveSettings()` (bisa diubah admin), blok `fusion` (D1/D2, tanpa env dan tanpa pengaturan admin) dibaca `app/Services/FusionDecision.php` |
 | Ambang browser | `Utils/emarGeometry.ts` (`EAR_BLINK_THRESHOLD`, `MAR_OPEN_THRESHOLD`, `CHALLENGE_TIMEOUT_S`), `Utils/distanceCalibration.ts` (rentang jarak), `Utils/fusionDecision.ts` (tampilan S1/S2/S3) |
-| Paritas web dan naskah | tes `tests/test_analisis_kalibrasi_dev.py::TestParitasWeb` membandingkan `FusionDecision.php` dan `config/biometrics.php` dengan `parameter_penelitian.py` |
+| Paritas web dan naskah | tes `tests/test_analisis_kalibrasi_dev.py::TestParitasWeb` membandingkan `FusionDecision::VERSION` (tanpa angka cadangan), blok `fusion` di `config/biometrics.php` (termasuk `w_blink`/`w_mouth`), dan konstanta `FUSION` di `Utils/fusionDecision.ts` dengan `parameter_penelitian.py`. `tests/test_parameter_naskah.py::test_versi_keputusan_terikat_konstanta` mengikat `DECISION_VERSION` ke nilai konstanta keputusan |
 | Aturan metodologi | `docs/specs/THESIS_METHODOLOGY.md`, `docs/specs/DECISION_LOG.md`, `docs/specs/METRIC_DICTIONARY.md`, `.cursor/rules/thesis-methodology.mdc` |
 | Pemeriksaan diff | agen `thesis-guard` (`.claude/agents/thesis-guard.md`) |
 
@@ -50,15 +50,18 @@ Jangan menambah salinan angka baru. Kode Python baru mengimpor dari
   - `/verify` juga mengirim telemetri: `landmark_frames`, `frames_total`,
     `emar_series` (EAR/MAR dlib per frame berlandmark), `candidates_evaluated`, dan
     `latency_ms` (`emar_pass`, `facenet_total`, `mtcnn`, `facenet_embedding`,
-    `total`, `lock_wait`). Tidak ada keputusan yang membacanya.
+    `total`, `lock_wait`). Hanya `landmark_frames` yang ikut keputusan (0 = FTA
+    liveness di web). Tahap yang tidak berjalan dilaporkan null, bukan 0.
 - **Perekam desktop**: `capture_session.py` menulis `logs/telemetry.db`
   (`presentation_log`). `live_inference_pad.py` memanggil
-  `evaluation_bab5.evaluate_trial` dan menulis `Dataset_Eksperimen_Bab5.csv`.
-  d di jalur ini bukan jarak `FaceNetModule` 1:1: ekstraktornya sendiri
-  (keras_facenet atau facenet_pytorch tanpa MTCNN, atau pseudo-embedding Sobel),
-  jarak minimum 1:N terhadap `DATABASE_IDENTITAS_MASTER.pkl`, d = 1,50 bila tidak
-  terukur, dan `participant_id` diisi nama hasil pencocokan. Jangan menggabungkan
-  d atau `participant_id` baris desktop dengan baris web.
+  `evaluation_bab5.evaluate_trial` dan menulis
+  `Dataset_Eksperimen_Bab5_desktop_<DECISION_VERSION>.csv` (`liveness_source`
+  `desktop_session_extremes`). d di jalur ini bukan jarak `FaceNetModule` 1:1:
+  ekstraktornya sendiri (keras_facenet atau facenet_pytorch tanpa MTCNN, atau
+  pseudo-embedding Sobel), jarak minimum 1:N terhadap `DATABASE_IDENTITAS_MASTER.pkl`,
+  dan `participant_id` diisi nama hasil pencocokan. d, EAR, atau MAR yang tidak
+  terukur kini sel kosong (dulu 1,50, 0,28, dan 0,05). Jangan menggabungkan d atau
+  `participant_id` baris desktop dengan baris web.
 - **Tidak ada di repo** (jangan dianggap ada): MiniFASNet, detektor objek browser,
   tabel `self_test_trials`, estimator jarak dari iris,
   `scripts/generate_bab5_evaluation.py`.
@@ -88,6 +91,15 @@ Jangan menambah salinan angka baru. Kode Python baru mengimpor dari
 pengganti EAR/MAR 0,18/0,40, dan 53 baris 30 cm/300 lux yang bisa jadi nilai
 bawaan lama. Saring di analisis, jangan sunting berkasnya.
 
+CSV riset dipisah per versi keputusan. `Dataset_Eksperimen_Bab5.csv` dan
+`Matriks_Evaluasi_Bab4.csv` (rumus a, liveness browser) dibekukan: penulis web dan
+desktop menolak menambah baris ke berkas berheader lain. Baris baru masuk ke
+`Dataset_Eksperimen_Bab5_<versi>.csv` (web) dan `..._desktop_<versi>.csv`, serta
+`dataset/video_singkat/Matriks_Evaluasi_Bab4_<versi>.csv`, dengan kolom versi
+keputusan dan sumber liveness. Berkas berversi diabaikan git karena repo publik.
+Sejak D2, kolom `ear`/`mar` web berisi EAR terendah/MAR tertinggi dlib dan
+`Kedipan`/`Mulut` Matriks berisi siklus dlib.
+
 ## 4. Fakta kode yang sering disalahpahami
 
 1. **Liveness web diputuskan dlib mesin (D2).** S2 dan keputusan presensi di
@@ -97,12 +109,16 @@ bawaan lama. Saring di analisis, jangan sunting berkasnya.
    langkah (kedip lalu buka-tutup mulut, urutan acak) dan `challenge_status` hanya
    telemetri. EAR/MAR dan hitungan siklus browser juga telemetri. Mode simulasi
    tes membaca `blink_cycles`/`mouth_cycles` (atau `ear_blinks`/`mar_mouths`) dari
-   request sebagai pengganti mesin.
+   request sebagai pengganti mesin. Tanpa keduanya P_live null (FTA liveness).
+   `liveness_source` = `engine_dlib`, `simulated`, atau null bila tidak ada P_live.
 2. **Satu rumus S3 (D1 = rumus b) di semua jalur.** `FusionModule.decide_s3`,
    `app/Services/FusionDecision.php` (web), `Utils/fusionDecision.ts` (tampilan),
    `evaluation_bab5.evaluate_trial` (salinan mesin mendelegasikan ke sini), dan
-   `scripts/analisis_kalibrasi_dev.py`. Paritasnya dikunci tes
-   `test_evaluate_trial_sama_dengan_decide_s3`.
+   `scripts/analisis_kalibrasi_dev.py`. Paritas Python (mesin, desktop, analisis)
+   dikunci `test_evaluate_trial_sama_dengan_decide_s3` dan
+   `test_penghitung_skrip_analisis_sama_dengan_mesin`. PHP dan TS tidak dibandingkan
+   lintas bahasa: masing-masing punya tes batas sendiri (d = 0,20 ditolak, d = 0,19
+   diterima) dan konstantanya dikunci `TestParitasWeb`.
    - S3 mencakup S2: setiap presentasi yang diterima S2 juga diterima S3, jadi
      APCER S3 >= APCER S2 dan BPCER S3 <= BPCER S2. S3 menerima presentasi dengan
      satu siklus saja (P_live 0,5, misalnya cut-out bermata asli) untuk setiap
@@ -112,12 +128,18 @@ bawaan lama. Saring di analisis, jangan sunting berkasnya.
      `Dataset_Eksperimen_Bab5.csv`, riwayat tanpa `evaluation_bab5.decision_version`,
      dan presentasi web sebelum 21-10-2026. Jangan digabung dengan data versi
      `D1b-D2dlib-2026-10-21`. Riwayat lama tanpa `evaluation_bab5` dihitung ulang
-     untuk tampilan dengan tanda `recomputed`.
+     untuk tampilan dengan `recomputed = true`, `decision_version` null, dan
+     `recomputed_with` berisi versi rumus. Kartu Bab 5 memberi catatan pada hasil
+     hitung ulang dan pada keputusan tersimpan versi lama.
 3. **Nilai karangan yang tersisa setelah D10.** `face_detected_pct`, durasi, EAR/MAR,
-   PAD, identitas, dan siklus yang tidak tercatat kini null atau sel kosong. Yang
-   masih ada dan tidak boleh disalin ke kolom baru: `sample_type ?: 'BONA_FIDE'` di
-   CSV Bab 5/Matriks, `ear_blinks`/`mar_mouths` browser `?: 0`, dan kolom
-   `PAI_Species` Matriks CSV yang masih tebakan dari hitungan browser.
+   PAD, identitas, siklus, dan hitungan browser `ear_blinks`/`mar_mouths` yang tidak
+   tercatat kini null atau sel kosong, termasuk di halaman riwayat dan CSV subjek.
+   Yang masih ada dan tidak boleh disalin ke kolom baru: `sample_type ?: 'BONA_FIDE'`
+   di CSV Bab 5/Matriks, `?? 'S01'` sebagai subjek bawaan
+   (`PresensiController::store`, `AttendanceHistoryController`), nilai DEFAULT skema
+   `evaluation_matrices` (`sample_type`, `pad_prediction`, `id_prediction`,
+   `final_decision`), dan kolom `PAI_Species` Matriks CSV yang masih tebakan dari
+   hitungan browser.
 4. **Jarak** dihitung dari rasio lebar wajah dengan model d = a/r + b (residu
    <= 3,0 cm). Sumber utama: mesin (dlib rahang titik 0-16, koefisien
    `engine_a`/`engine_b`) bila kalibrasi aktif punya model mesin. Cadangan: jarak
@@ -138,8 +160,8 @@ bawaan lama. Saring di analisis, jangan sunting berkasnya.
   masih menolak `Read(gallery/**)`, `md5sum` langsung pada `gallery/` ikut ditolak,
   jadi pakai `git status` atau skill `/cek-semua`. Tes memakai `FACENET_GALLERY_PATH`.
 - Hanya boleh ditambah dari pengukuran nyata, tidak boleh dibersihkan, ditulis
-  ulang, atau diisi balik: `Dataset_Eksperimen_Bab5.csv`,
-  `dataset/video_singkat/Matriks_Evaluasi_Bab4.csv`, `logs/*`, dan tabel
+  ulang, atau diisi balik: `Dataset_Eksperimen_Bab5*.csv`,
+  `dataset/video_singkat/Matriks_Evaluasi_Bab4*.csv`, `logs/*`, dan tabel
   `activity_log`, `attendance_records`, `distance_logs`, `lighting_logs`,
   `evaluation_matrices`.
 - Nilai yang tidak diukur tetap kosong/null. Target skenario bukan hasil ukur.

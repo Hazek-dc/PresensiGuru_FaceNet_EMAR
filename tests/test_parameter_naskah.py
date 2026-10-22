@@ -42,6 +42,23 @@ class TestNilaiNaskah:
         assert P.FUSION_THRESHOLD == 0.50
         assert P.LIVENESS_THRESHOLD == 1.0
 
+    def test_versi_keputusan_terikat_konstanta(self):
+        """DECISION_VERSION menandai satu set konstanta keputusan. Bila salah satu
+        berubah, tes ini gagal: naikkan DECISION_VERSION (dan FusionDecision::VERSION,
+        FUSION.version di TS) lalu perbarui snapshot di bawah, agar data versi lama
+        dan baru tidak bercampur di CSV dan ekspor."""
+        snapshot = {
+            "D1b-D2dlib-2026-10-21": dict(
+                FACENET_DISTANCE_THRESHOLD=0.40, EAR_BLINK_THRESHOLD=0.20, MAR_OPEN_THRESHOLD=0.10,
+                ALPHA_DEFAULT=0.60, FUSION_D_REF=1.20, FUSION_THRESHOLD=0.50, LIVENESS_THRESHOLD=1.0,
+                EMAR_W1=0.50, EMAR_W2=0.50, BLINK_CONSEC_FRAMES=2, MOUTH_OPEN_FRAMES=3,
+                MIN_BLINK_CYCLES=1, MIN_MOUTH_CYCLES=1, OBSERVATION_WINDOW_S=8.0,
+            ),
+        }
+        assert P.DECISION_VERSION in snapshot, "DECISION_VERSION baru belum punya snapshot"
+        current = {k: getattr(P, k) for k in snapshot[P.DECISION_VERSION]}
+        assert current == snapshot[P.DECISION_VERSION]
+
     def test_jarak_0_40_setara_kesamaan_0_92(self):
         """Tabel 5.2: 'd <= 0,40 (Skor Kesamaan >= 0,92)'."""
         assert P.cosine_from_distance(0.40) == pytest.approx(0.92)
@@ -186,6 +203,7 @@ class TestKeputusanFusi:
         assert fes.D_REF == P.FUSION_D_REF == 1.20
         assert fes.FINAL_THRESHOLD == P.FUSION_THRESHOLD == 0.50
         assert fes.EMAR_LIVENESS_THRESHOLD == P.LIVENESS_THRESHOLD
+        assert (fes.EMAR_W1, fes.EMAR_W2) == (P.EMAR_W1, P.EMAR_W2)
 
     @pytest.mark.parametrize("d", [0.0, 0.10, 0.19, 0.20, 0.30, 0.40, 0.41, 0.60])
     @pytest.mark.parametrize("blink,mouth", [(0, 0), (1, 0), (0, 1), (1, 1)])

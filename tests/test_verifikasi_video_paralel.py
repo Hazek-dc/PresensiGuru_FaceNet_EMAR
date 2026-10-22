@@ -613,3 +613,31 @@ def test_waktu_mtcnn_dicatat_saat_wajah_tidak_lolos(fes):
     assert module._extract_embedding(np.zeros((8, 8, 3), np.uint8)) is None
     mtcnn_ms, embedding_ms = fes._EXTRACT_TIMING.last
     assert mtcnn_ms >= 0 and embedding_ms is None
+
+
+def test_latensi_embedding_none_bila_mtcnn_gagal_di_semua_kandidat(fes, tmp_path):
+    """MTCNN berjalan tetapi tidak menemukan wajah: InceptionResnetV1 tidak pernah
+    dipanggil, jadi latensi embedding None (bukan 0,0) dan waktu MTCNN tetap terukur."""
+    pytest.importorskip("cv2")
+    video = _graded_video(tmp_path, 20, "tanpa_wajah.avi")
+
+    class StubEmar:
+        def reset_temporal(self):
+            pass
+
+        def measure(self, frame):
+            return None
+
+        def push_measurement(self, m, timestamp=None):
+            return fes.EMARResult()
+
+    system = _stub_system(fes, StubEmar(), [])
+
+    def verify_no_face(frame, claimed_id):
+        fes._EXTRACT_TIMING.last = (2.5, None)
+        return fes.FaceNetResult(claimed_id=claimed_id)
+
+    system.facenet.verify = verify_no_face
+    lat = fes.verify_video_file(system, str(video), "S01")["latency_ms"]
+    assert lat["facenet_embedding"] is None
+    assert lat["mtcnn"] == pytest.approx(2.5 * 9, abs=0.1)

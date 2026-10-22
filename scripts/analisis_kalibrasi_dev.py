@@ -8,6 +8,8 @@ Masukan:
 
 Keluaran di --out (bawaan exports/kalibrasi_dev/):
   presentasi_anonim.csv     satu baris per presentasi, tanpa nama/email/IP/perangkat
+  tabel0_penyebut.csv       jumlah presentasi, FTA identitas, mesin mati, FTA liveness,
+                            dan penyebut tiap tabel
   tabel1_latensi_komponen.csv  waktu per tahap mesin per presentasi (deskriptif)
   tabel2a_ambang_l2.csv     FNMR bona fide dan IAPMR per spesies untuk tiap ambang L2
   tabel2b_ambang_emar.csv   APCER/BPCER/ACER untuk tiap pasangan ambang EAR x MAR
@@ -27,10 +29,17 @@ Aturan yang dipakai (sama dengan sistem, lihat parameter_penelitian.py):
   - Tabel 2b menghitung ulang siklus kedip/mulut dari deret dlib mesin
     (landmark_source engine_dlib) dengan aturan mesin: >= 1 siklus kedip DAN
     >= 1 siklus mulut, satu siklus = aktif paling sedikit BLINK_CONSEC_FRAMES /
-    MOUTH_OPEN_FRAMES frame. Pada ambang 0,20/0,10 hasilnya mengulang keputusan
-    sistem. --frame-source browser_mediapipe membuat tabel pembanding terpisah.
+    MOUTH_OPEN_FRAMES frame. Pada ambang 0,20/0,10 hasilnya mendekati keputusan
+    sistem tetapi tidak dijamin sama: deret dibulatkan 4 desimal (EAR 0,19996
+    menjadi 0,2000) sehingga frame tepat di batas bisa berbeda. t_ms deret mesin
+    = indeks frame / fps video, bukan waktu terukur seperti deret browser.
+    --frame-source browser_mediapipe membuat tabel pembanding terpisah.
   - Presentasi tanpa landmark dlib (Prediksi PAD = UNAVAILABLE) adalah FTA untuk
-    tabel PAD, tetapi tetap masuk Tabel 2a karena jarak L2-nya terukur.
+    tabel PAD (Tabel 2b, 2c, 3), tetapi tetap masuk Tabel 2a karena jarak L2-nya
+    terukur. Penyebut tiap tabel dicatat di tabel0_penyebut.csv.
+  - Kolom l2_batas_* Tabel 2c adalah batas atas analitik. Jarak tepat di batas
+    bisa ditolak karena pembulatan floating point (alpha 0,60 tanpa liveness:
+    d = 0,20 ditolak, d = 0,19 diterima), jadi baca sebagai d < batas.
   - ACER = (APCER spesies terburuk + BPCER) / 2, mengikuti protokol OULU-NPU.
     ACER bukan metrik normatif ISO/IEC 30107-3; laporkan APCER per spesies juga.
 
@@ -340,6 +349,22 @@ def table_emar(trials: Sequence[Dict[str, object]], frames: Dict[str, List[Tuple
     return rows
 
 
+# ---------------------------------------------------------------- Tabel 0
+
+def table_denominators(trials: Sequence[Dict[str, object]]) -> List[List[str]]:
+    """FTA dilaporkan terpisah dari APCER/BPCER, beserta penyebut tiap tabel."""
+    terukur = measured(trials)
+    return [
+        ["kategori", "jumlah"],
+        ["presentasi", str(len(trials))],
+        ["fta_identitas", str(sum(bool(t["fta"]) for t in trials))],
+        ["mesin_tidak_terhubung", str(sum(bool(t["unavailable"]) for t in trials))],
+        ["fta_liveness", str(sum(bool(t["liveness_fta"]) for t in terukur))],
+        ["penyebut_tabel2a", str(len(terukur))],
+        ["penyebut_tabel_pad", str(len(pad_measured(trials)))],
+    ]
+
+
 # ---------------------------------------------------------------- Tabel 2c
 
 def implied_l2(alpha: float, p_live: float = 1.0) -> Optional[float]:
@@ -361,7 +386,7 @@ def s3_accept(l2: float, p_live: float, alpha: float) -> bool:
 
 def table_alpha(trials: Sequence[Dict[str, object]], grid: Sequence[float] = ALPHA_GRID) -> List[List[str]]:
     usable = [t for t in pad_measured(trials) if t["p_live"] is not None]
-    rows = [["alpha", "l2_maks_saat_p_live_1", "l2_maks_saat_p_live_0_5", "l2_maks_tanpa_live",
+    rows = [["alpha", "l2_batas_saat_p_live_1", "l2_batas_saat_p_live_0_5", "l2_batas_tanpa_live",
              "n_bona_fide", "bona_fide_ditolak"]
             + [f"{k}_{s}" for s in ATTACK_LABELS for k in ("n", "serangan_diterima")]]
     for alpha in grid:
@@ -462,6 +487,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     args.out.mkdir(parents=True, exist_ok=True)
 
     write_anonymized(trials, args.out / "presentasi_anonim.csv")
+    write_table(table_denominators(trials), args.out / "tabel0_penyebut.csv")
     write_table(table_latency(trials), args.out / "tabel1_latensi_komponen.csv")
     write_table(table_l2(trials), args.out / "tabel2a_ambang_l2.csv")
     write_table(table_alpha(trials), args.out / "tabel2c_bobot_alpha.csv")
@@ -471,11 +497,10 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         write_table(table_emar(trials, load_frames(args.frames, args.frame_source), source=args.frame_source),
                     args.out / name)
 
-    n_fta = sum(bool(t["fta"]) for t in trials)
-    n_unavailable = sum(bool(t["unavailable"]) for t in trials)
-    n_live_fta = sum(bool(t["liveness_fta"]) for t in measured(trials))
-    print(f"{len(trials)} presentasi: {len(measured(trials))} terukur, {n_fta} FTA, {n_unavailable} mesin tidak "
-          f"terhubung, {n_live_fta} tanpa landmark dlib (FTA liveness).")
+    counts = dict(table_denominators(trials)[1:])
+    print(f"{counts['presentasi']} presentasi: {counts['penyebut_tabel2a']} terukur, {counts['fta_identitas']} FTA, "
+          f"{counts['mesin_tidak_terhubung']} mesin tidak terhubung, {counts['fta_liveness']} tanpa landmark dlib "
+          "(FTA liveness).")
     if args.frames is None:
         print("Tabel 2b dilewati: berikan --frames logs/log_raw_frames_dev.csv.")
     print(f"Hasil di {args.out}")

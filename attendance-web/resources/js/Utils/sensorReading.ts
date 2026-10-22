@@ -191,6 +191,14 @@ export function formatMeasured(value: number | null | undefined, unit: string, d
     return `${value.toFixed(digits)} ${unit}`;
 }
 
+/** Hitungan siklus atau kejadian ("2x"); tidak terukur bila null (D10). */
+export function formatCount(value: number | null | undefined): string {
+    if (value === null || value === undefined || !Number.isFinite(value)) {
+        return NOT_MEASURED_LABEL;
+    }
+    return `${value}x`;
+}
+
 /** Label sumber lux; perkiraan kamera tanpa kalibrasi selalu bertanda estimasi. */
 export const LUX_ESTIMATE_LABEL = 'Perkiraan kamera (belum dikalibrasi)';
 

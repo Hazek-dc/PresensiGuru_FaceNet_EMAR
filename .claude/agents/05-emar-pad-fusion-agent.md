@@ -17,8 +17,9 @@ Rumus keputusan dan metrik tidak diubah tanpa tes dan persetujuan eksplisit pene
 - Bukan wilayah Anda: `compute_iso_metrics`, `compute_iso_by_pai`, `mcnemar_test` (milik qa-stat-evaluator-agent).
 - Berkas bersama (CLAUDE.md bagian 8): rumus S1/S2/S3 di `PresensiController.php` (blok evaluasi Bab 5),
   `AttendanceHistoryController.php`, `Components/Presensi/Bab5ScenarioCard.tsx`. Ubah bersama agen pemilik direktori.
-  Salinan rumus (a) di `scripts/analisis_kalibrasi_dev.py` ikut diubah bersama qa-stat-evaluator-agent dalam
-  perubahan D1 yang sama.
+  Salinan rumus (b) di `scripts/analisis_kalibrasi_dev.py` (`s3_accept`, `implied_l2`, `count_full_cycles`)
+  diubah bersama qa-stat-evaluator-agent setiap kali rumus web, `evaluation_bab5.py`, atau
+  `parameter_penelitian.py` berubah.
 
 ## Fakta kode (audit Tahap 1)
 
@@ -30,7 +31,7 @@ Rumus keputusan dan metrik tidak diubah tanpa tes dan persetujuan eksplisit pene
 - Rumus S3 (b) = `FusionModule.decide_s3`: FTA bila embedding atau landmark dlib tidak ada. Selain itu diterima
   bila verified DAN (P_live >= 0,5 ATAU 0,6 * (1 - d/1,20) >= 0,50). Kondisi terakhir praktis d < 0,20: pada
   d = 0,20 tepat, floating point memberi 0,49999999999999994 dan menolaknya. Dipakai `capture_session.py`/`telemetry.db`.
-- Jalur desktop: `live_inference_pad.py` -> `evaluation_bab5.evaluate_trial` menulis `Dataset_Eksperimen_Bab5.csv`. d di
+- Jalur desktop: `live_inference_pad.py` -> `evaluation_bab5.evaluate_trial` menulis `Dataset_Eksperimen_Bab5_desktop_<versi>.csv`. d di
   jalur ini bukan dari `FaceNetModule` (ekstraktor sendiri, 1:N terhadap `DATABASE_IDENTITAS_MASTER.pkl`, d = 1,50 bila
   tidak terukur, `participant_id` = nama hasil pencocokan). P_live dari EAR terendah dan MAR tertinggi sesi
   (0,5 * kedip + 0,5 * mulut, tanpa siklus; nilai bawaan 0,28/0,05 di `live_inference_pad.py` bila tidak terukur).

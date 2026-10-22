@@ -20,6 +20,11 @@ attendance-web/storage/*.key
 logs/log_raw_frames_dev.csv
 exports/kalibrasi_dev/
 
+# CSV riset berversi (sejak keputusan D1/D2): ID subjek dan nilai biometrik per
+# percobaan. Berkas tanpa akhiran versi sudah terlacak dan dibekukan.
+Dataset_Eksperimen_Bab5_*.csv
+dataset/video_singkat/Matriks_Evaluasi_Bab4_*.csv
+
 # Editors and operating systems
 .idea/
 .vscode/

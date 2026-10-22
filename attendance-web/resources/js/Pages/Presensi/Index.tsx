@@ -90,6 +90,7 @@ import {
     CameraDistanceSource,
     DistanceSource,
     formatLux,
+    formatCount,
     formatMeasured,
     freshReading,
     luxSourceLabel,
@@ -999,13 +1000,15 @@ export default function Presensi({
             `EMAR_Score,${evaluationData.emar_score ?? '-'},Skor Fusi Liveness EMAR`,
             `Urutan_Panduan_Gerakan,${evaluationData.active_challenge || '-'},Urutan Langkah Panduan Browser (telemetri; liveness diputuskan dlib mesin)`,
             `Status_Panduan_Browser,${evaluationData.challenge_status || '-'},Hasil Langkah Panduan di Browser (telemetri; bukan keputusan PAD)`,
-            `Kedipan_Mata_EAR,${evaluationData.ear_blinks},Jumlah Kedipan Mata Terdeteksi (EAR < 0.20)`,
-            `Gerakan_Mulut_MAR,${evaluationData.mar_mouths},Jumlah Gerakan Mulut Terdeteksi (MAR >= 0.10)`,
-            `Kestabilan_Wajah_Pct,${evaluationData.face_detected_pct}%,Persentase Frame Wajah Terlacak Stabil (Min 80.0%)`,
+            `Siklus_Kedip_dlib,${formatCount(evaluationData.blink_cycles)},Siklus Kedip dlib Mesin (dasar keputusan liveness D2)`,
+            `Siklus_Mulut_dlib,${formatCount(evaluationData.mouth_cycles)},Siklus Buka-Tutup Mulut dlib Mesin (dasar keputusan liveness D2)`,
+            `Kedipan_Mata_Browser,${formatCount(evaluationData.ear_blinks)},Hitungan Kedip MediaPipe Browser (telemetri)`,
+            `Gerakan_Mulut_Browser,${formatCount(evaluationData.mar_mouths)},Hitungan Mulut MediaPipe Browser (telemetri)`,
+            `Kestabilan_Wajah_Pct,${formatMeasured(evaluationData.face_detected_pct, '%', 1)},Persentase Frame Wajah Terlacak Stabil (Min 80.0%)`,
             `Jarak_Pengujian_cm,${formatMeasured(evaluationData.distance_cm, 'cm', 1)},Jarak Kamera ke Wajah (${evaluationData.distance_source || 'none'})`,
             `Intensitas_Cahaya_Lux,${formatMeasured(evaluationData.lux_value, 'Lux', 1)},Kondisi Pencahayaan Lingkungan Uji (${evaluationData.lighting?.source_label ?? evaluationData.lux_source ?? 'none'})`,
             ...lightingCsvRows(evaluationData.lighting),
-            `Durasi_Scan_Detik,${evaluationData.scan_duration_s || 8.0} Detik,Jendela Waktu Pemindaian Biometrik`,
+            `Durasi_Scan_Detik,${formatMeasured(evaluationData.scan_duration_s, 'Detik', 2)},Durasi Rekaman Terukur`,
             `Pesan_Evaluasi,"${(evaluationData.message || statusText || '').replace(/"/g, '""')}",Penjelasan Keputusan Engine Biometrik`,
         ].join('\n');
 
@@ -2503,32 +2506,35 @@ export default function Presensi({
                                                 {/* Card 3: Refleks Kedipan Mata Alami */}
                                                 <div className="rounded-2xl border border-outline-variant/30 dark:border-white/10 bg-surface-container-low/70 dark:bg-slate-900/60 p-3 sm:p-3.5 flex flex-col justify-between shadow-xs">
                                                     <div className="flex items-center justify-between text-on-surface-variant dark:text-slate-400 text-[11px]">
-                                                        <span className="font-bold">Refleks Kedipan</span>
+                                                        <span className="font-bold">Siklus Kedip dlib</span>
                                                         <Eye className="h-4 w-4 text-royal-blue dark:text-sky-400" />
                                                     </div>
                                                     <div className="my-1.5">
                                                         <div className="flex items-baseline justify-between">
                                                             <span className="text-lg font-black text-deep-navy dark:text-white">
-                                                                {evaluationData.ear_blinks}x
+                                                                {formatCount(evaluationData.blink_cycles)}
                                                             </span>
                                                             <span
                                                                 className={`rounded-md px-1.5 py-0.5 text-[9px] font-extrabold uppercase ${
-                                                                    evaluationData.ear_blinks >= 1
+                                                                    (evaluationData.blink_cycles ?? 0) >= 1
                                                                         ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300'
                                                                         : 'bg-amber-500/15 text-amber-700 dark:text-amber-300'
                                                                 }`}
                                                             >
-                                                                {evaluationData.ear_blinks >= 1 ? 'Alami ✓' : 'Min 1x'}
+                                                                {evaluationData.blink_cycles == null
+                                                                    ? 'FTA'
+                                                                    : evaluationData.blink_cycles >= 1
+                                                                      ? 'Terdeteksi ✓'
+                                                                      : 'Min 1x'}
                                                             </span>
                                                         </div>
                                                         <span className="text-[10px] text-slate-500 dark:text-slate-400 block mt-0.5">
-                                                            Kedipan fisiologis tervalidasi
+                                                            Siklus mulut dlib: {formatCount(evaluationData.mouth_cycles)}
                                                         </span>
                                                     </div>
                                                     <span className="text-[10px] text-slate-500 dark:text-slate-400 leading-tight">
-                                                        {evaluationData.mar_mouths > 0
-                                                            ? `${evaluationData.mar_mouths}x respons mikromimik terdeteksi.`
-                                                            : 'Respon liveness mata 8 detik normal.'}
+                                                        Hitungan browser (telemetri): {formatCount(evaluationData.ear_blinks)} kedip,{' '}
+                                                        {formatCount(evaluationData.mar_mouths)} mulut.
                                                     </span>
                                                 </div>
 
@@ -2541,16 +2547,22 @@ export default function Presensi({
                                                     <div className="my-1.5">
                                                         <div className="flex items-baseline justify-between">
                                                             <span className="text-lg font-black text-deep-navy dark:text-white">
-                                                                {evaluationData.face_detected_pct}%
+                                                                {formatMeasured(evaluationData.face_detected_pct, '%', 1)}
                                                             </span>
                                                             <span
                                                                 className={`rounded-md px-1.5 py-0.5 text-[9px] font-extrabold uppercase ${
-                                                                    evaluationData.face_detected_pct >= 80
-                                                                        ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300'
-                                                                        : 'bg-rose-500/15 text-rose-700 dark:text-rose-300'
+                                                                    evaluationData.face_detected_pct == null
+                                                                        ? 'bg-slate-500/15 text-slate-600 dark:text-slate-300'
+                                                                        : evaluationData.face_detected_pct >= 80
+                                                                          ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300'
+                                                                          : 'bg-rose-500/15 text-rose-700 dark:text-rose-300'
                                                                 }`}
                                                             >
-                                                                {evaluationData.face_detected_pct >= 80 ? 'Stabil ✓' : 'Goyang'}
+                                                                {evaluationData.face_detected_pct == null
+                                                                    ? 'Tidak terukur'
+                                                                    : evaluationData.face_detected_pct >= 80
+                                                                      ? 'Stabil ✓'
+                                                                      : 'Goyang'}
                                                             </span>
                                                         </div>
                                                         <span className="text-[10px] text-slate-500 dark:text-slate-400 block mt-0.5">
@@ -2667,16 +2679,16 @@ export default function Presensi({
                                                             </div>
                                                             {/* 7. EAR & MAR */}
                                                             <div className="rounded-xl border border-outline-variant/20 dark:border-white/5 bg-white/60 dark:bg-slate-900/60 p-2.5">
-                                                                <span className="text-[9px] text-slate-500 dark:text-slate-400 block">EAR & MAR:</span>
+                                                                <span className="text-[9px] text-slate-500 dark:text-slate-400 block">Siklus dlib:</span>
                                                                 <p className="font-mono font-bold text-deep-navy dark:text-white text-xs mt-0.5 truncate">
-                                                                    {evaluationData.ear_blinks}x kedip • {evaluationData.mar_mouths}x mulut
+                                                                    {formatCount(evaluationData.blink_cycles)} kedip • {formatCount(evaluationData.mouth_cycles)} mulut
                                                                 </p>
                                                             </div>
                                                             {/* 8. Stability & Lingkungan */}
                                                             <div className="rounded-xl border border-outline-variant/20 dark:border-white/5 bg-white/60 dark:bg-slate-900/60 p-2.5">
                                                                 <span className="text-[9px] text-slate-500 dark:text-slate-400 block">Kestabilan & Uji:</span>
                                                                 <p className="font-mono font-bold text-deep-navy dark:text-white text-xs mt-0.5 truncate">
-                                                                    {evaluationData.face_detected_pct}% • {formatMeasured(evaluationData.distance_cm, 'cm')}
+                                                                    {formatMeasured(evaluationData.face_detected_pct, '%', 1)} • {formatMeasured(evaluationData.distance_cm, 'cm')}
                                                                 </p>
                                                             </div>
                                                         </div>

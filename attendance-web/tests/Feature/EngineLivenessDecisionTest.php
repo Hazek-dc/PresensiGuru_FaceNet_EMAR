@@ -180,5 +180,37 @@ it('rekaman lama tanpa evaluation_bab5 dihitung ulang tanpa EAR/MAR karangan', f
         // Tanpa emar_score mesin, liveness tidak terukur: tidak diisi 0,18/0,40.
         ->and($bab5['s2_decision'])->toBeNull()
         ->and($bab5['s3_decision'])->toBeNull()
-        ->and($bab5['ear_val'])->toBeNull();
+        ->and($bab5['ear_val'])->toBeNull()
+        // Tidak pernah diputuskan dengan versi berjalan: tidak boleh dicap versi itu.
+        ->and($bab5['decision_version'])->toBeNull()
+        ->and($bab5['recomputed_with'])->toBe(FusionDecision::VERSION)
+        ->and($bab5['liveness_source'])->toBeNull();
+});
+
+it('hitungan browser yang tidak dikirim tersimpan null, bukan 0', function () {
+    Http::fake(['*' => Http::response(engineReply())]);
+
+    $data = presentTest($this, $this->teacher);
+
+    $meta = AttendanceRecord::latest('id')->first()->metadata;
+    expect($data['evaluation']['ear_blinks'])->toBeNull()
+        ->and($data['evaluation']['mar_mouths'])->toBeNull()
+        ->and($meta['ear_blinks'])->toBeNull()
+        ->and($meta['mar_mouths'])->toBeNull()
+        ->and($meta['evaluation_bab5']['liveness_source'])->toBe('engine_dlib')
+        ->and($meta['evaluation_bab5']['l2_threshold'])->toEqual(0.40);
+});
+
+it('simulasi tanpa siklus menjadi FTA liveness, bukan P_live 0', function () {
+    config(['biometrics.allow_simulated_scores' => true]);
+
+    $data = $this->actingAs($this->teacher)->post(route('api.presensi'), [
+        'subject_id' => 'S07', 'sample_type' => 'BONA_FIDE', 'session_type' => 'TEST',
+        'euclidean_distance' => 0.30,
+    ])->assertOk()->json();
+
+    expect($data['evaluation']['p_live'])->toBeNull()
+        ->and($data['evaluation']['s2_decision'])->toBeNull()
+        ->and($data['evaluation']['s3_decision'])->toBeNull()
+        ->and($data['evaluation']['liveness_source'])->toBeNull();
 });

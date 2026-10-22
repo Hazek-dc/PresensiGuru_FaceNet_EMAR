@@ -24,4 +24,5 @@ Ikuti CLAUDE.md bagian 5 dan 6, lewat `qa-stat-evaluator-agent`.
 5. Tabel 1 latensi (`tabel1_latensi_komponen.csv`) deskriptif per presentasi: median, p90, maks. Jangan menulis klaim
    "< 200 ms per frame": pass EMAR paralel, jadi ms/frame hanya rata-rata teramortisasi. Uji Friedman/Wilcoxon
    18 subjek belum bisa dibuat dari data ini. Jangan menjalankan `analisis_tingkat_subjek.py` (terikat data sintetis).
-6. Jangan menyunting CSV masukan, `Dataset_Eksperimen_Bab5.csv`, atau berkas di `logs/`.
+6. Jangan menyunting CSV masukan, `Dataset_Eksperimen_Bab5*.csv` (termasuk berkas per versi keputusan), atau
+   berkas di `logs/`. FTA dan penyebut tiap tabel ada di `tabel0_penyebut.csv`.

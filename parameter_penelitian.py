@@ -40,11 +40,15 @@ OBSERVATION_WINDOW_S = 8.0          # batas jendela pengamatan
 # (P_live = 0) S3 tetap menerima bila s_embed >= 0,833, yaitu d < 0,20.
 FUSION_D_REF = 1.20
 FUSION_THRESHOLD = 0.50
-# P_live = 0,5 * min(siklus_kedip, 1) + 0,5 * min(siklus_mulut, 1); liveness
+# P_live = EMAR_W1 * min(siklus_kedip, 1) + EMAR_W2 * min(siklus_mulut, 1); liveness
 # (keputusan D2: dlib mesin) lolos bila P_live >= 1,0, yaitu kedua siklus ada.
+EMAR_W1 = 0.50
+EMAR_W2 = 0.50
 LIVENESS_THRESHOLD = 1.0
 # Versi definisi keputusan yang dicatat tiap presentasi web
-# (attendance-web/app/Services/FusionDecision.php::VERSION).
+# (attendance-web/app/Services/FusionDecision.php::VERSION) dan dipakai sebagai
+# akhiran nama CSV riset. Naikkan bila salah satu konstanta keputusan berubah
+# (dikunci tests/test_parameter_naskah.py::test_versi_keputusan_terikat_konstanta).
 DECISION_VERSION = "D1b-D2dlib-2026-10-21"
 
 # "masing-masing wajib tervalidasi minimal satu siklus transisi penuh di dalam

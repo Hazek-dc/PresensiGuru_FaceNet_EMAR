@@ -748,7 +748,7 @@ def run_live_inference(
     jarak: Optional[float] = None,
     lux: Optional[float] = None,
     label_aktual: str = "Bona_Fide",
-    csv_path: str = "Dataset_Eksperimen_Bab5.csv"
+    csv_path: Optional[str] = None
 ):
     print("==================================================================")
     print("SISTEM LIVE INFERENCE PAD — FACENET + EMAR (8.0 DETIK WINDOW)")
@@ -1116,13 +1116,27 @@ def run_live_inference(
                         else:
                             final_reason = f"Identitas Tidak Dikenali (Jarak: {eval_dist:.2f} > {FACE_MATCH_THRESHOLD:.2f})"
 
-                    # Evaluasi Serentak 3 Skenario Bab 5 & Perekaman CSV
-                    eval_ear = float(session_min_ear) if session_min_ear < 100.0 else (float(latest_ear) if latest_ear is not None else 0.28)
-                    eval_mar = float(session_max_mar) if session_max_mar > 0.0 else (float(latest_mar) if latest_mar is not None else 0.05)
+                    # Evaluasi Serentak 3 Skenario Bab 5 & Perekaman CSV.
+                    # Hanya nilai terukur yang dicatat (D10): tanpa jarak FaceNet
+                    # semua keputusan kosong, tanpa EAR/MAR sesi S2/S3 kosong.
+                    # Dulu d = 1,50, EAR 0,28, dan MAR 0,05 ditulis sebagai pengganti.
+                    emar_measured = session_min_ear < 100.0
+                    csv_dist = float(latest_dist) if latest_dist is not None else None
+                    csv_ear = float(session_min_ear) if emar_measured else None
+                    csv_mar = float(session_max_mar) if emar_measured else None
 
                     try:
-                        from evaluation_bab5 import evaluate_trial, log_to_csv, read_live_environment_sensors
-                        s1_res, s2_res, s3_res = evaluate_trial(eval_dist, eval_ear, eval_mar)
+                        from evaluation_bab5 import (
+                            DEFAULT_CSV_PATH, evaluate_trial, log_to_csv, read_live_environment_sensors,
+                        )
+                        csv_path = csv_path or DEFAULT_CSV_PATH
+                        if csv_dist is None:
+                            s1_res = s2_res = s3_res = None
+                        elif csv_ear is None:
+                            s1_res = 1 if csv_dist <= FACENET_DISTANCE_THRESHOLD else 0
+                            s2_res = s3_res = None
+                        else:
+                            s1_res, s2_res, s3_res = evaluate_trial(csv_dist, csv_ear, csv_mar)
 
                         sensor_dist, sensor_lux = read_live_environment_sensors()
                         cur_jarak = jarak if jarak is not None else sensor_dist
@@ -1135,9 +1149,9 @@ def run_live_inference(
                             jarak=cur_jarak,
                             lux=cur_lux,
                             label_aktual=cur_label,
-                            euclidean_dist=eval_dist,
-                            ear=eval_ear,
-                            mar=eval_mar,
+                            euclidean_dist=csv_dist,
+                            ear=csv_ear,
+                            mar=csv_mar,
                             s1=s1_res,
                             s2=s2_res,
                             s3=s3_res,
@@ -1413,7 +1427,8 @@ if __name__ == "__main__":
     parser.add_argument("--label", type=str, default="Bona_Fide",
                         choices=["Bona_Fide", "Print_Attack", "Screen_Attack", "Replay_Video"],
                         help="Label aktual ground truth sampel pengujian (default: Bona_Fide)")
-    parser.add_argument("--csv", type=str, default="Dataset_Eksperimen_Bab5.csv", help="Path file CSV data logger Bab 5")
+    parser.add_argument("--csv", type=str, default=None,
+                        help="Path file CSV Bab 5 (bawaan: evaluation_bab5.DEFAULT_CSV_PATH, berkas versi desktop)")
     args = parser.parse_args()
 
     if args.list_videos:
@@ -1434,4 +1449,4 @@ if __name__ == "__main__":
         lux=args.lux,
         label_aktual=args.label,
         csv_path=args.csv
-    )
+    )

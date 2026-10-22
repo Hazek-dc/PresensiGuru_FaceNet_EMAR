@@ -22,32 +22,41 @@ final class FusionDecision
     /** Versi definisi keputusan yang dicatat di metadata tiap presentasi. */
     public const VERSION = 'D1b-D2dlib-2026-10-21';
 
-    /** @return array{alpha: float, d_ref: float, threshold: float, liveness_threshold: float} */
+    /**
+     * Konstanta dari config('biometrics.fusion'). Tanpa nilai cadangan: salinan angka
+     * kedua bisa menyimpang diam-diam dari parameter_penelitian.py.
+     *
+     * @return array{alpha: float, d_ref: float, threshold: float, liveness_threshold: float, w_blink: float, w_mouth: float}
+     */
     public static function constants(): array
     {
-        $c = config('biometrics.fusion', []);
+        $c = config('biometrics.fusion');
+        $keys = ['alpha', 'd_ref', 'threshold', 'liveness_threshold', 'w_blink', 'w_mouth'];
+        $out = [];
+        foreach ($keys as $key) {
+            if (! is_array($c) || ! is_numeric($c[$key] ?? null)) {
+                throw new \RuntimeException("config biometrics.fusion.{$key} tidak ada");
+            }
+            $out[$key] = (float) $c[$key];
+        }
 
-        return [
-            'alpha' => (float) ($c['alpha'] ?? 0.60),
-            'd_ref' => (float) ($c['d_ref'] ?? 1.20),
-            'threshold' => (float) ($c['threshold'] ?? 0.50),
-            'liveness_threshold' => (float) ($c['liveness_threshold'] ?? 1.0),
-        ];
+        return $out;
     }
 
     /**
-     * P_live dari jumlah siklus dlib: w1 * min(kedip, 1) + w2 * min(mulut, 1),
-     * w1 = w2 = 0,5, dibulatkan 6 desimal seperti EMARModule.liveness_from_sequence.
+     * P_live dari jumlah siklus dlib: w_blink * min(kedip, 1) + w_mouth * min(mulut, 1),
+     * dibulatkan 6 desimal seperti EMARModule.liveness_from_sequence.
      */
     public static function pLiveFromCycles(?int $blinkCycles, ?int $mouthCycles): ?float
     {
         if ($blinkCycles === null || $mouthCycles === null) {
             return null;
         }
+        $k = self::constants();
         $blink = min(max($blinkCycles, 0) / 1, 1.0);
         $mouth = min(max($mouthCycles, 0) / 1, 1.0);
 
-        return round(min(0.5 * $blink + 0.5 * $mouth, 1.0), 6);
+        return round(min($k['w_blink'] * $blink + $k['w_mouth'] * $mouth, 1.0), 6);
     }
 
     /**

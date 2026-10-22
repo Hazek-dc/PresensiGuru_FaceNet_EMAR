@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Controllers\Admin\ModelSettingController;
 use App\Models\AttendanceRecord;
 use App\Models\EvaluationMatrix;
 use App\Models\User;
@@ -253,12 +254,20 @@ class AttendanceHistoryController extends Controller
         }
         $dist = (float) $meta['euclidean_distance'];
         $pLive = is_numeric($meta['emar_score'] ?? null) ? (float) $meta['emar_score'] : null;
-        $fusion = FusionDecision::evaluate($dist, (float) config('biometrics.facenet_threshold', 0.40), $pLive, null);
+        // Ambang yang tercatat saat presensi bila ada, bukan ambang admin hari ini.
+        $l2 = is_numeric($meta['facenet_threshold'] ?? null)
+            ? (float) $meta['facenet_threshold']
+            : (float) ModelSettingController::getActiveSettings()['facenet_threshold'];
+        $fusion = FusionDecision::evaluate($dist, $l2, $pLive, null);
         $round3 = fn ($v) => $v === null ? null : round($v, 3);
 
+        // Rekaman ini tidak pernah diputuskan dengan versi berjalan: decision_version
+        // dan liveness_source tetap null, versi rumus tampilan dicatat terpisah.
         return [
             'recomputed' => true,
-            'decision_version' => FusionDecision::VERSION,
+            'decision_version' => null,
+            'recomputed_with' => FusionDecision::VERSION,
+            'l2_threshold' => $l2,
             'euclidean_distance' => round($dist, 3),
             's1_decision' => $fusion['s1'],
             's2_decision' => $fusion['s2'],
@@ -268,7 +277,7 @@ class AttendanceHistoryController extends Controller
             'p_live' => $round3($fusion['p_live']),
             'ear_val' => is_numeric($meta['ear_val'] ?? null) ? round((float) $meta['ear_val'], 3) : null,
             'mar_val' => is_numeric($meta['mar_val'] ?? null) ? round((float) $meta['mar_val'], 3) : null,
-            'liveness_source' => 'engine_dlib',
+            'liveness_source' => null,
             'liveness_valid' => $fusion['liveness_valid'],
         ];
     }
@@ -457,7 +466,7 @@ class AttendanceHistoryController extends Controller
     {
         $csvPath = (string) config('biometrics.research_csv.matriks');
         if (file_exists($csvPath)) {
-            return response()->download($csvPath, 'Matriks_Evaluasi_Bab4.csv', [
+            return response()->download($csvPath, basename($csvPath), [
                 'Content-Type' => 'text/csv; charset=UTF-8',
             ]);
         }

@@ -167,6 +167,8 @@ from parameter_penelitian import (  # noqa: E402
     BLINK_CONSEC_FRAMES,
     DISTANCE_CM,
     EAR_BLINK_THRESHOLD,
+    EMAR_W1,
+    EMAR_W2,
     FACENET_DISTANCE_THRESHOLD,
     FUSION_D_REF,
     FUSION_THRESHOLD,
@@ -189,8 +191,7 @@ GALLERY_PATH               = Path(os.environ.get("FACENET_GALLERY_PATH") or BASE
 DEVICE                     = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 # ---- Parameter EMAR ----------------------------------------------------------
-EMAR_W1             = 0.50          # Bobot komponen mata pada skor EMAR (w1)
-EMAR_W2             = 0.50          # Bobot komponen mulut pada skor EMAR (w2), w1+w2=1
+# EMAR_W1 dan EMAR_W2 (0,50 dan 0,50, w1 + w2 = 1) diimpor dari parameter_penelitian.py.
 BLINK_REF           = MIN_BLINK_CYCLES   # Siklus kedip untuk evidence mata 1.0
 MOUTH_REF           = MIN_MOUTH_CYCLES   # Siklus buka-tutup mulut untuk evidence mulut 1.0
 
@@ -2676,6 +2677,7 @@ def _verify_video_file(system: "FaceEMARSystem", video_path: str, user_id: str) 
     facenet_ms = 0.0
     mtcnn_ms: Optional[float] = 0.0
     embedding_ms: Optional[float] = 0.0
+    embeddings_run = 0
     candidates_evaluated = 0
     try:
         for idx, frame in candidate_frames:
@@ -2693,6 +2695,7 @@ def _verify_video_file(system: "FaceEMARSystem", video_path: str, user_id: str) 
                 mtcnn_ms = None if mtcnn_ms is None else mtcnn_ms + split[0]
                 if embedding_ms is not None and split[1] is not None:
                     embedding_ms += split[1]
+                    embeddings_run += 1
             if idx == n_frames // 2:
                 mid_res = res_c
             if res_c.embedding is not None and res_c.distance < min_dist:
@@ -2767,8 +2770,10 @@ def _verify_video_file(system: "FaceEMARSystem", video_path: str, user_id: str) 
         "latency_ms": {
             "emar_pass": round(emar_pass_ms, 1),
             "facenet_total": round(facenet_ms, 1),
-            "mtcnn": None if mtcnn_ms is None else round(mtcnn_ms, 1),
-            "facenet_embedding": None if embedding_ms is None else round(embedding_ms, 1),
+            # Tahap yang tidak pernah berjalan (tanpa kandidat, atau MTCNN tidak
+            # menemukan wajah sehingga InceptionResnetV1 tidak dipanggil) = None.
+            "mtcnn": None if mtcnn_ms is None or candidates_evaluated == 0 else round(mtcnn_ms, 1),
+            "facenet_embedding": None if embedding_ms is None or embeddings_run == 0 else round(embedding_ms, 1),
             "total": round((time.perf_counter() - t_start) * 1000, 1),
         },
         "request_id": str(uuid.uuid4()),

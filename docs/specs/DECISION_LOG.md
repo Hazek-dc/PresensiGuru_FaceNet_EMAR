@@ -32,10 +32,16 @@ Log keputusan arsitektur dan teknis (Architectural Decision Records / ADR) proye
 - **Konsekuensi:** presentasi web sebelum keputusan ini memakai sumber PAD lain dan ditandai lewat `evaluation_bab5.decision_version`. Video dihapus setelah verifikasi, jadi presentasi lama tidak bisa dinilai ulang.
 
 ## 7. Nilai tak terukur (D10, 21 Oktober 2026)
-- **Keputusan:** `face_detected_pct` dihitung dari semua frame yang diproses browser, durasi rekaman diukur, dan EAR/MAR, kestabilan, durasi, PAD, serta identitas yang tidak tercatat disimpan null atau sel kosong, bukan 100 %, 8,0 s, 0,18/0,40, BONA_FIDE, atau MATCH.
+- **Keputusan:** `face_detected_pct` dihitung dari semua frame yang diproses browser, durasi rekaman diukur, dan EAR/MAR, kestabilan, durasi, PAD, identitas, serta hitungan browser `ear_blinks`/`mar_mouths` yang tidak tercatat disimpan null atau sel kosong, bukan 100 %, 8,0 s, 0,18/0,40, 0, BONA_FIDE, atau MATCH. Jalur desktop (`live_inference_pad.py`, CLI `evaluation_bab5.py`) juga tidak lagi mengisi d = 1,50, EAR 0,28/0,18, atau MAR 0,05/0,40.
+- **Sisa utang:** `sample_type ?: 'BONA_FIDE'`, subjek bawaan `'S01'`, DEFAULT skema `evaluation_matrices`, dan `PAI_Species` tebakan di Matriks CSV (CLAUDE.md bagian 4 butir 3).
 
 ## 8. Split calibration_dev (D12, 21 Oktober 2026)
 - **Keputusan:** split `calibration_dev` hanya menerima `participant_id = P_DEV_01`. Subjek TEST S01-S18 ditolak (422).
 
 ## 9. Telemetri latensi mesin (21 Oktober 2026)
-- **Keputusan:** `/verify` mengirim `latency_ms` per tahap (pass EMAR, FaceNet total, MTCNN, embedding, total, tunggu antrean), `landmark_frames`, `frames_total`, dan deret EAR/MAR dlib. Tidak ada keputusan yang membacanya. Dekode video dan pass EMAR paralel sehingga tercatat sebagai satu tahap.
+- **Keputusan:** `/verify` mengirim `latency_ms` per tahap (pass EMAR, FaceNet total, MTCNN, embedding, total, tunggu antrean), `landmark_frames`, `frames_total`, dan deret EAR/MAR dlib. Hanya `landmark_frames` yang dibaca keputusan (0 = FTA liveness). Tahap yang tidak berjalan dilaporkan null. Dekode video dan pass EMAR paralel sehingga tercatat sebagai satu tahap.
+
+## 10. CSV riset dipisah per versi keputusan (22 Oktober 2026)
+- **Masalah:** setelah D1/D2, baris baru `Dataset_Eksperimen_Bab5.csv` dan `Matriks_Evaluasi_Bab4.csv` memakai definisi S2/S3, EAR/MAR, dan siklus yang lain dari baris lama, tanpa kolom pembeda. Berkas itu tidak boleh ditulis ulang.
+- **Keputusan:** berkas lama dibekukan. Penulis web dan desktop menulis ke berkas bernama versi (`Dataset_Eksperimen_Bab5_<versi>.csv`, `..._desktop_<versi>.csv`, `Matriks_Evaluasi_Bab4_<versi>.csv`) dengan kolom versi keputusan dan sumber liveness, dan menolak menambah baris ke berkas berheader lain. Berkas berversi diabaikan git. `evaluation_bab5` dan metadata presensi juga menyimpan `l2_threshold` aktif.
+- **Konsekuensi:** skrip yang membaca CSV Bab 5 harus memilih berkas per versi. `DECISION_VERSION` dikunci tes ke nilai konstanta keputusan, jadi mengubah konstanta tanpa menaikkan versi membuat tes gagal.
